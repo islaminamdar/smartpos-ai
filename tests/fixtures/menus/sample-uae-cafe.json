@@ -1,0 +1,8 @@
+{
+  "items": [
+    { "id": "m1", "name": "Karak Tea", "aliases": ["karak", "chai", "chaai", "tea"], "price_aed": 5, "modifiers": [{"name":"sugar","options":["regular","less","no"]}] },
+    { "id": "m2", "name": "Chicken Biryani", "aliases": ["biryani", "biriyani"], "price_aed": 25, "modifiers": [{"name":"spice","options":["mild","medium","spicy"]}] },
+    { "id": "m3", "name": "Cheese Manakish", "aliases": ["cheese manaish", "manaeesh", "manakeesh"], "price_aed": 15 },
+    { "id": "m4", "name": "Mineral Water 500ml", "aliases": ["water", "moya", "maa"], "price_aed": 2 }
+  ]
+}
