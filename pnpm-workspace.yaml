@@ -1,0 +1,8 @@
+packages:
+  - "."
+
+allowBuilds:
+  '@parcel/watcher': true
+  '@sentry/cli': true
+  '@swc/core': true
+  msw: true
