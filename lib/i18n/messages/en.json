@@ -1,0 +1,13 @@
+{
+  "order": {
+    "title": "Voice Order",
+    "tap_to_speak": "Tap and speak the order",
+    "no_order": "No order yet. Tap the mic."
+  },
+  "dashboard": {
+    "today_orders": "Today's orders",
+    "today_revenue": "Today's revenue",
+    "best_sellers": "Best sellers",
+    "ask_anything": "Ask anything about your restaurant"
+  }
+}

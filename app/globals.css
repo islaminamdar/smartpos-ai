@@ -57,3 +57,22 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer base {
+  :root {
+    --brand: 262 83% 58%;
+    --brand-2: 192 91% 36%;
+    --surface: 0 0% 100%;
+    --surface-2: 250 100% 99%;
+  }
+  .dark {
+    --surface: 240 10% 4%;
+    --surface-2: 250 10% 7%;
+  }
+  body {
+    background:
+      radial-gradient(80% 60% at 50% -10%, hsl(var(--brand) / 0.1), transparent 60%),
+      radial-gradient(60% 50% at 100% 0%, hsl(var(--brand-2) / 0.08), transparent 60%),
+      hsl(var(--surface));
+  }
+}

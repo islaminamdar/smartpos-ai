@@ -2,6 +2,8 @@ import { createServiceRole } from '@/lib/db/supabase'
 import { getTenantMenu } from '@/lib/db/queries'
 import { parseOrder } from '@/lib/ai/parseOrder'
 import { sendText } from './client'
+import { checkBudget, BudgetExceededError } from '@/lib/ai/budget'
+import { log } from '@/lib/logger'
 
 export async function handleInbound(input: {
   tenantId: string
@@ -27,7 +29,7 @@ export async function handleInbound(input: {
         external_id: input.from,
         customer_name: input.profileName ?? null,
       },
-      { onConflict: 'tenant_id,channel,external_id' },
+      { onConflict: 'tenant_id,channel,external_id' }
     )
     .select('id, ai_active')
     .single()) as { data: { id: string; ai_active: boolean } | null }
@@ -44,6 +46,17 @@ export async function handleInbound(input: {
   if (!conv.ai_active) return
 
   const menu = await getTenantMenu(input.tenantId)
+
+  try {
+    await checkBudget(input.tenantId)
+  } catch (e) {
+    if (e instanceof BudgetExceededError) {
+      log.warn('[whatsapp] AI budget exceeded — skipping AI reply', { tenantId: input.tenantId })
+      return
+    }
+    throw e
+  }
+
   const parsed = await parseOrder({ text: input.text, menu, locale: 'auto' })
 
   let replyBody: string
@@ -51,7 +64,7 @@ export async function handleInbound(input: {
     replyBody = parsed.clarification_needed
   } else if (parsed.items.length > 0) {
     const subtotal = parsed.items.reduce((s, it) => {
-      const m = menu.find(x => x.id === it.menu_item_id)
+      const m = menu.find((x) => x.id === it.menu_item_id)
       return s + (m ? m.price_aed * it.qty : 0)
     }, 0)
 
@@ -73,8 +86,8 @@ export async function handleInbound(input: {
 
     if (order && parsed.items.length) {
       await admin.from('order_items').insert(
-        parsed.items.map(it => {
-          const m = menu.find(x => x.id === it.menu_item_id)!
+        parsed.items.map((it) => {
+          const m = menu.find((x) => x.id === it.menu_item_id)!
           return {
             order_id: order.id,
             menu_item_id: m.id,
@@ -83,19 +96,18 @@ export async function handleInbound(input: {
             unit_price_aed: m.price_aed,
             modifiers_snapshot: it.modifiers ?? [],
           }
-        }),
+        })
       )
     }
 
     replyBody = `Order received: ${parsed.items
-      .map(it => {
-        const m = menu.find(x => x.id === it.menu_item_id)!
+      .map((it) => {
+        const m = menu.find((x) => x.id === it.menu_item_id)!
         return `${it.qty}× ${m.name}`
       })
       .join(', ')}. Total AED ${subtotal.toFixed(2)}. We'll confirm shortly.`
   } else {
-    replyBody =
-      'Hi! Send the items you would like to order, or ask any menu question.'
+    replyBody = 'Hi! Send the items you would like to order, or ask any menu question.'
   }
 
   await admin.from('messages').insert({

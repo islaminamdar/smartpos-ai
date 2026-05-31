@@ -33,6 +33,12 @@ vi.mock('@/lib/db/supabase', () => ({
           }),
         }
       },
+      select: (_cols?: string) => ({
+        eq: (_col: string, _val: string) => ({
+          gte: async (_col2: string, _val2: string) => ({ data: [] }),
+          single: async () => ({ data: { id: 'o1' } }),
+        }),
+      }),
     }),
   }),
 }))
@@ -48,7 +54,7 @@ describe('parse-order route', () => {
     const res = await POST(req)
     const json = await res.json()
     expect(json.orderId).toBe('o1')
-    expect(inserts.some(i => i.table === 'orders')).toBe(true)
-    expect(inserts.some(i => i.table === 'order_items')).toBe(true)
+    expect(inserts.some((i) => i.table === 'orders')).toBe(true)
+    expect(inserts.some((i) => i.table === 'order_items')).toBe(true)
   })
 })
