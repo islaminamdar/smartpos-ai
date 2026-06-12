@@ -12,4 +12,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
+      - run: pnpm --filter myhealthymeals lint
+      - run: pnpm --filter myhealthymeals build
       - run: pnpm test

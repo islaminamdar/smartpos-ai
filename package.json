@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:meals": "pnpm --filter myhealthymeals dev",
     "build": "next build",
+    "build:meals": "pnpm --filter myhealthymeals build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit && pnpm --filter myhealthymeals exec tsc --noEmit",
