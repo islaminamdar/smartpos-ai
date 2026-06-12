@@ -41,7 +41,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${jakarta.variable} font-sans`}>
+      <body className={`${jakarta.variable} font-jakarta`}>
         <PromoBanner />
         <Header />
         <main className="min-h-screen pb-20 lg:pb-0">{children}</main>

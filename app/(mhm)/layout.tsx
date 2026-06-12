@@ -34,7 +34,7 @@ export const metadata: Metadata = {
 
 export default function MealsLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className={`${jakarta.variable} font-sans`}>
+    <div className={`${jakarta.variable} font-jakarta`}>
       <PromoBanner />
       <Header />
       <main className="min-h-screen bg-white pb-20 text-surface-900 lg:pb-0">{children}</main>
