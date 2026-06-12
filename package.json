@@ -9,6 +9,7 @@
     "build": "next build",
     "build:meals": "pnpm --filter myhealthymeals build",
     "preview": "bash scripts/start-meals.sh",
+    "preview:public": "bash scripts/preview-public.sh",
     "stop:meals": "bash scripts/stop-meals.sh",
     "start": "next start",
     "lint": "next lint",
