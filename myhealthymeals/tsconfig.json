@@ -10,7 +10,6 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "allowArbitraryExtensions": true,
     "jsx": "preserve",
     "incremental": true,
     "plugins": [
@@ -23,5 +22,5 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "myhealthymeals"]
+  "exclude": ["node_modules"]
 }
