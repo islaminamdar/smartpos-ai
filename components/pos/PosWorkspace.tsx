@@ -12,7 +12,6 @@ import {
 } from 'react'
 import Link from 'next/link'
 import {
-  ArrowLeft,
   ArrowRight,
   Check,
   CheckCircle2,
@@ -25,7 +24,6 @@ import {
   ListOrdered,
   Menu,
   Minus,
-  MoreHorizontal,
   Package,
   Plus,
   Printer,

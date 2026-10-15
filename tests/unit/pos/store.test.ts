@@ -26,6 +26,41 @@ beforeAll(async () => {
 afterAll(async () => { await browser?.close(); await new Promise<void>(resolve => server?.close(() => resolve())); });
 
 describe('actual Chromium IndexedDB transaction verification', () => {
+  it('restores unversioned historical VAT unchanged while new receipts use versioned line rounding', async () => {
+    const result = await page.evaluate(async () => {
+      const modulePath = '/local-store.js'; const { createLocalPosStore, scopeKey, inspectTrainingBackup } = await new Function('url', 'return import(url)')(modulePath);
+      const scope = { organisationId: 'rounding-org', branchId: 'branch', deviceId: 'rounding-device', mode: 'training' };
+      let store = await createLocalPosStore(scope);
+      await store.openShift({ cashierName: 'Rounding tester', openingCashFils: 0 });
+      const input = { idempotencyKey: 'historical-order', lines: ['a', 'b'].map(id => ({ id, itemId: 'sweet', name: 'Sweet', unit: 'each', quantity: 1, unitPriceFils: 300 })), tax: { rateBps: 500, inclusive: true, confirmed: false }, tenders: [{ method: 'cash', amountFils: 600 }], serviceType: 'takeaway' };
+      await store.completeSale(input);
+      // Construct a v1 fixture exactly as pre-versioning receipts/outbox stored these amounts.
+      const backup = JSON.parse(await store.exportBackup());
+      const historical = backup.snapshot.sales[0];
+      delete historical.calculationVersion;
+      historical.totals.taxFils = 29; historical.totals.netFils = 571;
+      backup.snapshot.outbox.find((event: { type: string }) => event.type === 'sale.created').payload = structuredClone(historical);
+      const historicalJson = JSON.stringify(historical);
+      inspectTrainingBackup(JSON.stringify(backup));
+      let incorrectVersionRejected = false;
+      const inconsistent = structuredClone(backup); inconsistent.snapshot.sales[0].calculationVersion = 'line-v2';
+      try { inspectTrainingBackup(JSON.stringify(inconsistent)); } catch { incorrectVersionRejected = true; }
+      store.close();
+      await new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open('internext-pos-local-v1', 1);
+        request.onsuccess = () => { const db = request.result; const tx = db.transaction('branch_device_state', 'readwrite'); tx.objectStore('branch_device_state').delete(scopeKey(scope)); tx.oncomplete = () => { db.close(); resolve(); }; tx.onerror = () => reject(tx.error); };
+        request.onerror = () => reject(request.error);
+      });
+      store = await createLocalPosStore(scope);
+      await store.restoreBackup(JSON.stringify(backup));
+      const retry = await store.completeSale(input);
+      const current = await store.completeSale({ ...input, idempotencyKey: 'new-order' });
+      const reexported = JSON.parse(await store.exportBackup());
+      inspectTrainingBackup(JSON.stringify(reexported)); store.close();
+      return { historicalUnchanged: JSON.stringify(reexported.snapshot.sales[0]) === historicalJson, retryUnchanged: JSON.stringify(retry) === historicalJson, incorrectVersionRejected, historicalTax: retry.totals.taxFils, currentTax: current.totals.taxFils, currentVersion: current.calculationVersion, sales: reexported.snapshot.sales.length };
+    });
+    expect(result).toEqual({ historicalUnchanged: true, retryUnchanged: true, incorrectVersionRejected: true, historicalTax: 29, currentTax: 28, currentVersion: 'line-v2', sales: 2 });
+  });
   it('saves atomically, deduplicates retries, caps refunds, closes shifts and survives reopening', async () => {
     const result = await page.evaluate(async () => {
       const modulePath = '/local-store.js'; const { createLocalPosStore, expectedCashFils } = await new Function('url', 'return import(url)')(modulePath);

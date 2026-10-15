@@ -143,7 +143,8 @@ function parseTrainingBackup(text: string): { snapshot: PosSnapshot; exportedAt:
     backupLines(sale.lines);
     if (!sale.lines.length) throw new Error('Backup sale has no order lines.');
     object(sale.totals); object(sale.tax); object(sale.payment);
-    const totals = calculateTotals(sale.lines, sale.totals.discountFils, sale.tax);
+    // Unversioned backups were created with order-wide VAT. Never rewrite paid history.
+    const totals = calculateTotals(sale.lines, sale.totals.discountFils, sale.tax, sale.calculationVersion === undefined ? 'order-v1' : sale.calculationVersion);
     if (stable(totals) !== stable(sale.totals)) throw new Error('Backup sale totals do not match its order lines.');
     if (totals.discountFils > 0) backupString(sale.discountReason, 'discount reason');
     if (!Array.isArray(sale.payment.tenders) || stable(validatePayment(totals.totalFils, sale.payment.tenders)) !== stable(sale.payment)) throw new Error('Backup payment does not reconcile.');
@@ -354,7 +355,7 @@ export async function createLocalPosStore(scope: PosScope): Promise<LocalPosStor
         const payment = validatePayment(totals.totalFils, input.tenders);
         const id = createId();
         const prefix = scope.deviceId.replace(/[^a-zA-Z0-9]/g, '').slice(-8).toUpperCase() || 'DEVICE';
-        const sale: Sale = { holdId: input.holdId, id, idempotencyKey: input.idempotencyKey, receiptNumber: `${scope.mode === 'training' ? 'TRAIN-' : ''}${prefix}-${String(state.sales.length + 1).padStart(6, '0')}`, scope: clone(scope), shiftId: shift.id, createdAt: new Date().toISOString(), lines: clone(input.lines), totals, tax: clone(input.tax), payment, serviceType: input.serviceType, label: input.label, note: input.note, discountReason: input.discountReason, inputFingerprint: fingerprint };
+        const sale: Sale = { calculationVersion: 'line-v2', holdId: input.holdId, id, idempotencyKey: input.idempotencyKey, receiptNumber: `${scope.mode === 'training' ? 'TRAIN-' : ''}${prefix}-${String(state.sales.length + 1).padStart(6, '0')}`, scope: clone(scope), shiftId: shift.id, createdAt: new Date().toISOString(), lines: clone(input.lines), totals, tax: clone(input.tax), payment, serviceType: input.serviceType, label: input.label, note: input.note, discountReason: input.discountReason, inputFingerprint: fingerprint };
         state.sales.push(sale);
         const draft = state.preferences.draft as { cart?: unknown; idempotencyKey?: string } | undefined;
         if (draft && (draft.idempotencyKey === input.idempotencyKey || stable(draft.cart) === stable(input.lines))) delete state.preferences.draft;

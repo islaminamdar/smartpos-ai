@@ -1,4 +1,4 @@
-import type { CartLine, PaymentSummary, TaxConfig, Tender, Totals } from './types';
+import type { CalculationVersion, CartLine, PaymentSummary, TaxConfig, Tender, Totals } from './types';
 
 export function assertMoney(value: number, name = 'Amount'): void {
   if (!Number.isSafeInteger(value) || value < 0) throw new Error(`${name} must be a non-negative whole number of fils.`);
@@ -20,15 +20,37 @@ export function lineTotalFils(line: CartLine): number {
   assertMoney(line.unitPriceFils, 'Unit price');
   return roundedRatio(line.unitPriceFils, line.quantity, line.unit === 'kg' ? 1000 : 1);
 }
-export function calculateTotals(lines: CartLine[], discountFils = 0, tax: TaxConfig = { rateBps: 0, inclusive: true, confirmed: false }): Totals {
+/** Proportional integer-fils discount, largest remainder first; ties use immutable line IDs. */
+export function allocateLineDiscounts(lines: CartLine[], discountFils = 0): Array<{ lineId: string; grossFils: number; discountFils: number }> {
   assertMoney(discountFils, 'Discount');
+  if (new Set(lines.map(line => line.id)).size !== lines.length) throw new Error('Duplicate order line identity.');
+  const amounts = lines.map(line => ({ lineId: line.id, grossFils: lineTotalFils(line), discountFils: 0 }));
+  const subtotal = amounts.reduce((sum, line) => safeAdd(sum, line.grossFils), 0);
+  if (discountFils > subtotal) throw new Error('Discount cannot exceed the order subtotal.');
+  if (!discountFils) return amounts;
+  const denominator = BigInt(subtotal);
+  const remainders = amounts.map((line, index) => {
+    const product = BigInt(line.grossFils) * BigInt(discountFils);
+    line.discountFils = Number(product / denominator);
+    return { index, remainder: product % denominator, lineId: line.lineId };
+  });
+  remainders.sort((a, b) => a.remainder > b.remainder ? -1 : a.remainder < b.remainder ? 1 : a.lineId < b.lineId ? -1 : a.lineId > b.lineId ? 1 : 0);
+  const remaining = discountFils - amounts.reduce((sum, line) => safeAdd(sum, line.discountFils), 0);
+  for (let index = 0; index < remaining; index++) amounts[remainders[index].index].discountFils++;
+  return amounts;
+}
+/** New sales use per-line tax. order-v1 exists only to validate immutable historical receipts. */
+export function calculateTotals(lines: CartLine[], discountFils = 0, tax: TaxConfig = { rateBps: 0, inclusive: true, confirmed: false }, version: CalculationVersion = 'line-v2'): Totals {
+  if (version !== 'line-v2' && version !== 'order-v1') throw new Error('Unsupported calculation version.');
   if (!Number.isSafeInteger(tax.rateBps) || tax.rateBps < 0 || tax.rateBps > 10000) throw new Error('Tax rate is invalid.');
   if (typeof tax.inclusive !== 'boolean' || typeof tax.confirmed !== 'boolean') throw new Error('Tax configuration is invalid.');
-  if (new Set(lines.map(line => line.id)).size !== lines.length) throw new Error('Duplicate order line identity.');
-  const subtotalFils = lines.reduce((sum, line) => safeAdd(sum, lineTotalFils(line)), 0);
-  if (discountFils > subtotalFils) throw new Error('Discount cannot exceed the order subtotal.');
+  const allocated = allocateLineDiscounts(lines, discountFils);
+  const subtotalFils = allocated.reduce((sum, line) => safeAdd(sum, line.grossFils), 0);
   const discounted = subtotalFils - discountFils;
-  const taxFils = tax.inclusive ? roundedRatio(discounted, tax.rateBps, 10000 + tax.rateBps) : roundedRatio(discounted, tax.rateBps, 10000);
+  const divisor = tax.inclusive ? 10000 + tax.rateBps : 10000;
+  const taxFils = version === 'order-v1'
+    ? roundedRatio(discounted, tax.rateBps, divisor)
+    : allocated.reduce((sum, line) => safeAdd(sum, roundedRatio(line.grossFils - line.discountFils, tax.rateBps, divisor)), 0);
   return { subtotalFils, discountFils, netFils: tax.inclusive ? discounted - taxFils : discounted, taxFils, totalFils: tax.inclusive ? discounted : safeAdd(discounted, taxFils) };
 }
 export function validatePayment(totalFils: number, tenders: Tender[]): PaymentSummary {

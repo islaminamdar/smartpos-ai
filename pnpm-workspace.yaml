@@ -6,3 +6,16 @@ allowBuilds:
   '@sentry/cli': true
   '@swc/core': true
   msw: true
+  unrs-resolver: true
+
+overrides:
+  "postcss": "8.5.30"
+  "brace-expansion@^5.0.0": "5.0.12"
+  "fast-uri@^3.0.0": "3.1.8"
+  "nanoid@^3.0.0": "3.3.20"
+  "postcss-selector-parser@^6.0.0": "6.1.4"
+  "postcss-selector-parser@^7.0.0": "7.1.6"
+  "browserslist": "4.28.7"
+  "@opentelemetry/core@^2.0.0": "2.8.0"
+  "baseline-browser-mapping": "2.11.0"
+  "source-map-js": "1.2.2"
