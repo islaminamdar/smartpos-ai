@@ -6,7 +6,7 @@ const root = resolve(new URL('..', import.meta.url).pathname)
 const destination = resolve(process.argv[2] || '')
 if (!process.argv[2] || destination === root || destination.startsWith(root + '/')) throw new Error('Provide a fresh release directory outside the repository.')
 await mkdir(destination, { recursive: false })
-await cp(join(root, '.next/standalone'), destination, { recursive: true, dereference: false })
+await cp(join(root, '.next/standalone'), destination, { recursive: true, dereference: false, verbatimSymlinks: true })
 await cp(join(root, '.next/static'), join(destination, '.next/static'), { recursive: true })
 await cp(join(root, 'public'), join(destination, 'public'), { recursive: true })
 let files = 0
