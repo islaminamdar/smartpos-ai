@@ -1,0 +1,20 @@
+/** Amounts are integer UAE fils. Weighted quantities are integer grams. */
+export type PosScope = { organisationId: string; branchId: string; deviceId: string; mode: 'training' | 'live' };
+export type ServiceType = 'dine_in' | 'takeaway' | 'delivery';
+export type TaxConfig = { rateBps: number; inclusive: boolean; confirmed: boolean };
+export const TRAINING_TAX: TaxConfig = { rateBps: 500, inclusive: true, confirmed: false };
+export type CartLine = { id: string; itemId: string; name: string; unit: 'each' | 'kg'; quantity: number; unitPriceFils: number; note?: string };
+export type Totals = { subtotalFils: number; discountFils: number; netFils: number; taxFils: number; totalFils: number };
+export type Tender = { method: 'cash' | 'card'; amountFils: number };
+export type PaymentSummary = { tenders: Tender[]; tenderedFils: number; changeFils: number; cashRetainedFils: number; cardRecordedFils: number };
+export type HeldOrder = { id: string; createdAt: string; updatedAt: string; label: string; serviceType: ServiceType; lines: CartLine[]; discountFils: number; discountReason?: string; note?: string };
+export type SaleInput = { idempotencyKey: string; lines: CartLine[]; discountFils?: number; discountReason?: string; tax: TaxConfig; tenders: Tender[]; serviceType: ServiceType; label?: string; note?: string; holdId?: string };
+export type Sale = { holdId?: string; id: string; idempotencyKey: string; receiptNumber: string; scope: PosScope; shiftId: string; createdAt: string; lines: CartLine[]; totals: Totals; tax: TaxConfig; payment: PaymentSummary; serviceType: ServiceType; label?: string; note?: string; discountReason?: string; inputFingerprint: string };
+export type Refund = { id: string; idempotencyKey: string; saleId: string; shiftId: string; createdAt: string; amountFils: number; method: 'cash' | 'card'; reason: string };
+export type CashMovement = { id: string; idempotencyKey: string; shiftId: string; createdAt: string; direction: 'in' | 'out'; amountFils: number; reason: string };
+export type Shift = { id: string; openedAt: string; cashierName: string; openingCashFils: number; status: 'open' | 'closed'; closedAt?: string; expectedCashFils?: number; countedCashFils?: number; differenceFils?: number; closingNote?: string };
+export type OutboxEvent = { id: string; scopeKey: string; type: 'sale.created' | 'refund.created' | 'shift.opened' | 'shift.closed' | 'cash.moved'; entityId: string; createdAt: string; payload: unknown; status: 'pending' };
+export type PosSnapshot = { schemaVersion: 1; scope: PosScope; revision: number; sales: Sale[]; refunds: Refund[]; holds: HeldOrder[]; shifts: Shift[]; cashMovements: CashMovement[]; outbox: OutboxEvent[]; preferences: Record<string, unknown>; holdOperations?: Record<string, { holdId: string; fingerprint: string; status: 'held' | 'paid' | 'cancelled' }> };
+export type HoldInput = { id?: string; idempotencyKey?: string; sendToKitchen?: boolean; label: string; serviceType: ServiceType; lines: CartLine[]; discountFils?: number; discountReason?: string; note?: string };
+export type RefundInput = { idempotencyKey: string; saleId: string; amountFils: number; method: 'cash' | 'card'; reason: string };
+export type CashMovementInput = { idempotencyKey: string; direction: 'in' | 'out'; amountFils: number; reason: string };

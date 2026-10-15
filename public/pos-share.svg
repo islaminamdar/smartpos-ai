@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#142d4e"/>
+  <rect x="72" y="72" width="76" height="76" rx="16" fill="#165dcc"/>
+  <g fill="#fff" font-family="Arial,sans-serif">
+    <text x="88" y="125" font-size="50" font-weight="700">in</text>
+    <text x="172" y="125" font-size="44" font-weight="700">Internext POS</text>
+    <text x="72" y="277" font-size="64" font-weight="700">Your restaurant,</text>
+    <text x="72" y="356" font-size="64" font-weight="700">in order.</text>
+    <text x="72" y="463" font-size="32">AED 100 per branch / month</text>
+    <text x="72" y="535" font-size="24" fill="#c7d8ee">Web training preview · Android APK next</text>
+  </g>
+</svg>

@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server'
 import { requireSession } from '@/lib/auth/session'
-import { stripe, PRICE_STARTER_AED_100 } from '@/lib/billing/stripe'
+import { getStripeClient } from '@/lib/billing/stripe'
 import { createServiceRole } from '@/lib/db/supabase'
 
 export async function POST() {
+  const priceId = process.env.STRIPE_PRICE_STARTER?.trim()
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim()
+  if (!process.env.STRIPE_SECRET_KEY?.trim() || !priceId || !appUrl) {
+    return NextResponse.json({ error: 'BILLING_NOT_CONFIGURED' }, { status: 503 })
+  }
+  const stripe = getStripeClient()
+  if (!stripe) return NextResponse.json({ error: 'BILLING_NOT_CONFIGURED' }, { status: 503 })
   const s = await requireSession()
   const admin = createServiceRole()
   const { data: t } = (await admin
@@ -23,9 +30,9 @@ export async function POST() {
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
     customer: customerId,
-    line_items: [{ price: PRICE_STARTER_AED_100, quantity: 1 }],
-    success_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/settings/billing?ok=1`,
-    cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/settings/billing`,
+    line_items: [{ price: priceId, quantity: 1 }],
+    success_url: `${appUrl}/dashboard/settings/billing?ok=1`,
+    cancel_url: `${appUrl}/dashboard/settings/billing`,
   })
   return NextResponse.json({ url: session.url })
 }

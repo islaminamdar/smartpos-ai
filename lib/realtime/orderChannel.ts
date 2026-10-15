@@ -1,4 +1,4 @@
-import { createBrowser } from '@/lib/db/supabase'
+import { createBrowser } from '@/lib/db/browser'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
 export type OrderRow = {

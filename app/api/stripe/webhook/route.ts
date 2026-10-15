@@ -1,13 +1,19 @@
 import { NextResponse } from 'next/server'
-import { stripe } from '@/lib/billing/stripe'
+import { getStripeClient } from '@/lib/billing/stripe'
 import { createServiceRole } from '@/lib/db/supabase'
 
 export async function POST(req: Request) {
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim()
+  if (!webhookSecret || !process.env.STRIPE_SECRET_KEY?.trim()) {
+    return NextResponse.json({ error: 'BILLING_NOT_CONFIGURED' }, { status: 503 })
+  }
+  const stripe = getStripeClient()
+  if (!stripe) return NextResponse.json({ error: 'BILLING_NOT_CONFIGURED' }, { status: 503 })
   const sig = req.headers.get('stripe-signature') ?? ''
   const body = await req.text()
   let event
   try {
-    event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET ?? '')
+    event = stripe.webhooks.constructEvent(body, sig, webhookSecret)
   } catch (e: any) {
     return new Response(`Webhook Error: ${e.message}`, { status: 400 })
   }

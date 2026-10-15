@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { createBrowser } from '@/lib/db/supabase'
+import { createBrowser } from '@/lib/db/browser'
 import { subscribeOrders, type OrderRow } from '@/lib/realtime/orderChannel'
 import { TicketCard } from './TicketCard'
 

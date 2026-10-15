@@ -1,5 +1,7 @@
 # Restaurant POS: Android first, Windows next
 
+> Superseded architecture and customer assumptions: see [accepted web-first delivery](2026-10-16-web-pos-delivery.md). The user confirmed the first customer, per-branch pricing and deferred hardware selection after this initial proposal. Preserve the remaining feature catalogue as planned scope.
+
 Prepared 2026-10-16. Status: researched product and implementation plan; no new POS application, APK, production deployment, or manager distribution completed.
 
 ## Product decision

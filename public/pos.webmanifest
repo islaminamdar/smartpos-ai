@@ -1,0 +1,14 @@
+{
+  "id": "/pos",
+  "name": "Internext POS",
+  "short_name": "Internext POS",
+  "description": "Restaurant point of sale. Training preview with local order storage.",
+  "start_url": "/pos",
+  "scope": "/pos",
+  "display": "standalone",
+  "background_color": "#f4f7fb",
+  "theme_color": "#142d4e",
+  "icons": [
+    { "src": "/pos-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/check-pos-build.mjs && node scripts/prepare-pos-worker.mjs && next build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "format": "prettier --write .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "check:pos": "node scripts/check-pos-build.mjs"
   },
   "lint-staged": {
     "*.{ts,tsx}": [

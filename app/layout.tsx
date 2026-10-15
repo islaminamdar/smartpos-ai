@@ -1,18 +1,31 @@
 import './globals.css'
-import { Inter } from 'next/font/google'
 import type { Metadata } from 'next'
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-sans' })
-
 export const metadata: Metadata = {
-  title: 'SmartPOS.ai',
-  description: 'AI-powered point-of-sale for UAE restaurants',
+  metadataBase: new URL('https://pos.internext.info'),
+  title: 'Internext POS · Your restaurant, in order',
+  description:
+    'Restaurant POS for ordering, shifts and branches. AED 100 per branch per month, all features included.',
+  icons: { icon: '/pos-icon.svg' },
+  openGraph: {
+    title: 'Internext POS · Your restaurant, in order',
+    description: 'Explore the restaurant POS training preview. AED 100 per branch per month.',
+    type: 'website',
+    images: [
+      {
+        url: '/pos-share.png',
+        width: 1200,
+        height: 630,
+        alt: 'Internext POS — restaurant workspace',
+      },
+    ],
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans antialiased`}>{children}</body>
+      <body className="font-sans antialiased">{children}</body>
     </html>
   )
 }

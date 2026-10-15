@@ -39,6 +39,7 @@ export async function POST(req: Request) {
   let detectedLocale = body.locale
 
   if (body.kind === 'audio') {
+    if (!process.env.OPENAI_API_KEY?.trim()) return NextResponse.json({ error: 'TRANSCRIPTION_NOT_CONFIGURED' }, { status: 503 })
     const bin = Buffer.from(body.audioBase64, 'base64')
     const blob = new Blob([bin], { type: body.mime })
     const t = await transcribe(blob, body.locale)
