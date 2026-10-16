@@ -1,66 +1,76 @@
-# POS server foundation — 16 October 2026
+# POS online pilot server — 16 October 2026
 
-This is an **unprovisioned development foundation**, not an enabled live service. Existing legacy product tables and routes are unchanged. Training data must never be silently promoted into customer accounts.
+The current server supports an authenticated **online pilot** at `/counter`: branch profiles/catalogue, browser device enrollment, shifts, cash movements, paid invoices, full credit notes, immutable receipts and recovery of uncertain requests. `/pos` remains a separate local training workspace. Training data is never promoted into a customer account.
 
-## Private operator provisioning
+This document describes implemented contracts, not deployment verification. Enable live financial writes only after the real backend, account, device, receipt and browser checks pass. Offline live selling remains disabled.
 
-Only perform these steps against a reviewed staging database first. Production setup/deployment requires the user's approval. Never commit credentials, real staff accounts, receipts or private subscription records.
+## Configuration and provisioning
 
-1. Supply the existing application's `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` environment values. The new routes use the existing cookie-based SSR helper and validate the session with `auth.getUser()`. They do not use service-role credentials.
-2. Review/apply `supabase/migrations/20261016000100_pos_platform.sql` and then `20261016000200_pos_operations.sql` through the project's database migration process. The isolated `pos_*` domain does not automatically migrate legacy tenants.
-3. In an administrator-only database session, provision an organization, branch, and authorized `pos_staff` memberships using existing `auth.users` UUIDs. The first intended customer is **Abdul Gafoor Suleman Usman Mithaiwala Restaurant LLC**, **Bur Dubai**. No real customer or staff rows are seeded by the migration.
-4. Create each cashier device with its own UUID. Open each shift through the authenticated `shift.open` command; it belongs to the signed-in cashier and registered device. A unique index allows only one open shift per device. Device and staff provisioning still require an administrator session; no production onboarding UI has been connected.
-5. Import only approved menu entries into branch-scoped `pos_products`, assigning server UUIDs and integer fils. Price is **VAT inclusive** when a nonzero `tax_rate_bps` is configured; 500 means 5%. Default tax is zero until the merchant's tax setup is confirmed. `kg` quantities use thousandths of a kilogram; `piece` and `pack` quantities must be whole numbers. Browser training IDs/prices are not authoritative.
-6. Create one `pos_subscriptions` row per branch: AED 100 (10,000 fils) monthly, all features, unlimited staff/devices, manual collection. `paid_through` and collection status are maintained through the authenticated `subscription.update` command. Separately provision platform operators in `pos_platform_admins` using an administrator database session; merchant owner/manager membership does not confer subscription-editing rights. **Subscription enforcement is not implemented**. Recording already-collected offline payments is intentionally independent of current subscription status so financial history is never discarded.
-7. Verify authenticated bootstrap and paid-sale sync on staging with two different organizations, two branch-scoped cashiers and two devices. Test real Supabase auth/RLS and concurrent requests before enabling any live client. Offline shifts must be fully reconciled before an operator closes their corresponding server shift; late new sales against a closed shift are rejected and must stay pending.
+Keep `SUPABASE_INTERNAL_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` and `POS_PUBLIC_ORIGIN` in private server configuration. The counter uses same-origin APIs and receives no Supabase key or session token in response bodies. The internal backend gateway must remain inaccessible from public networks; disable public GoTrue signup.
 
-## Integration contract
+`POS_ONLINE_PILOT=true` permits the counter and exact POS API allowlist. `POS_LIVE_SALES_ENABLED=true` separately permits financial submissions. A branch also requires a confirmed merchant profile and `pos_branch_receipt_config.live_enabled=true`. Every legacy application page, provider API and Server Action remains denied regardless of release flags. No provider integration is enabled by this pilot.
 
-`GET /api/pos/bootstrap` returns `{status:'ready',userId,branches,catalogue,devices,shifts}`. Rows use database snake_case; UUID identifiers bind the server's authoritative catalogue and device/shift records. Responses are private/no-store. Missing environment, schema or accessible branch returns HTTP 503 with `setup_required`; unauthenticated calls return HTTP 401. A ready bootstrap does not establish that a device or open shift has been provisioned; consumers must check those lists.
+Apply migrations in order:
 
-`POST /api/pos/sync` accepts only the strict shape in `contracts.ts`. It calls `pos_record_paid_order` using the authenticated user's database role. It never accepts a caller-supplied organization or actor ID. `expectedTotalFils` is compared with server calculations; it is not trusted. Payments record the amount applied to a sale, not tendered cash before change. Card entries are manual records, not a card processor acknowledgement.
+1. `20261016000100_pos_platform.sql`: organization, branch, staff, products, sales and baseline RLS.
+2. `20261016000200_pos_operations.sql`: shifts, cash/refund records, audit and restricted manual subscription administration.
+3. `20261016000300_pos_live_documents.sql`: versioned merchant profiles, server invoice/credit numbering and immutable fiscal snapshots.
+4. `20261016000400_pos_online_access.sql`: login throttling, per-actor device binding and bound financial RPCs.
+5. `20261016000500_pos_request_recovery.sql`: atomic committed-result lookup and cancellation tombstones.
+6. `20261016000600_pos_cash_out_balance.sql`: prevents cash-outs from making the drawer balance negative.
 
-The UUID order key is idempotent: retrying the same canonical JSON payload as the same user returns the existing receipt result. A changed payload for that UUID conflicts. Pricing is checked against the current catalogue, and stale offline prices are rejected for reconciliation; **historical price-version reconciliation is not implemented**. It is unsafe to edit the original paid local receipt to make a stale price match.
+Privately provision the organization, branch, `auth.users` account, active `pos_staff` membership, confirmed merchant profile and approved `pos_products`. Migrations contain no real staff credentials or customer seed records. The first intended customer is Abdul Gafoor Suleman Usman Mithaiwala Restaurant LLC, Bur Dubai. Confirm business details and tax setup through the operator workflow rather than public source files.
 
-Transactions validate membership, branch, active device, cashier-owned open shift, catalogue, quantities, inclusive tax rounding, exact payment total and order total before inserting the order, snapshot lines, payments and audit event together. Errors preserve pending status. Database diagnostics are not sent to clients.
+Products use integer fils and VAT-inclusive unit prices; 500 basis points means 5%. Kilogram quantities use thousandths of a kilogram, while pieces and packs require whole quantities. Unpriced items must remain unavailable. The profile is immutable: update merchant details by creating a new version and selecting it for subsequent documents.
 
-## Current limits
+Provision one manual subscription record per branch at AED100 monthly, unlimited staff/devices. Platform subscription administration remains separate from merchant roles. **Automatic billing and subscription enforcement are not implemented**, and the counter API does not expose subscription changes.
 
-- This API is not automatically connected to the browser training outbox. Cloud synchronization and live onboarding remain disabled until configured and verified.
-- The paid-sale sync contract supports completed positive paid orders only. Discounts, modifiers, credit, voids and table transfers are not implemented. Separate operational commands now support server shifts, cash movements and financial refund records, but the training outbox is not connected to them.
-- No automatic subscription charging, payment processor, printer driver, shared table locking, production receipt numbering or remote device enrollment has been implemented here.
-- Server RLS currently isolates organizations and branch scopes. It does not implement fine-grained owner/manager/cashier report permissions within an authorized branch.
-- The bootstrap list queries rely on the database's configured row-return limit. Catalogue pagination is required before large catalogues exceed that limit.
+## Authentication and device authority
 
-## Verification
+Login requires an active POS membership and an atomic database-backed limit before password authentication. Tokens use HttpOnly, SameSite Strict cookies with Secure enabled in production. Verification and refresh occur on the server; logout revokes the refresh session. The service-role key is used for login throttling and session revocation, not for bypassing financial transaction authorization.
 
-`npx vitest run tests/unit/pos/server.test.ts tests/unit/pos/commands.test.ts` exercises input validation, authentication, missing configuration, same-origin mutation checks, conflict handling and required acknowledgements. An isolated PostgreSQL test is included at `tests/integration/pos-schema.mjs`; its header gives the optional disposable dependency installation/run commands. That test executes the real SQL migration and checks RLS, tenant/branch/device boundaries, line rounding, atomic failure, idempotent retries, privilege denial and closed-shift handling. Embedded PostgreSQL verification is not proof of deployment or a substitute for staging Supabase concurrency/session tests.
+Device cookies contain random opaque tokens and are scoped by authenticated actor. The database stores only their hashes. Switching accounts cannot overwrite the original actor's device credential. Enrollment creates a distinct device; an existing actor binding cannot silently change device or branch. The financial RPCs enforce user, membership, active device and binding themselves, in addition to HTTP checks. Each cashier owns an independent shift, with one open shift per device.
 
+All browser mutations require a same-origin `Origin` header. Responses containing account or financial data are private/no-store. Missing setup returns503, unauthenticated access401 and invalid authority403; database diagnostics are not exposed.
 
-## Operational command API
+## Current HTTP contracts
 
-`POST /api/pos/commands` accepts `{command:{id,branchId,type,...}}`, with fresh UUID `id` per intended action and the same UUID/payload for retries. All money values are integer fils. The exact strict schema is in `commands.ts`.
+The source of truth is `live-contracts.ts`; immutable profile/document validation is in `documents.ts`.
 
-| Type | Extra fields | Authorization |
-| --- | --- | --- |
-| `shift.open` | `deviceId, shiftId, openingCashFils` | Active branch staff; one open shift per registered device |
-| `shift.close` | `deviceId, shiftId, countedCashFils` | The shift's signed-in owner |
-| `cash.move` | `deviceId, shiftId, amountFils, reason` | Manager/owner; their own open shift; signed amount |
-| `refund.create` | `deviceId, shiftId, orderId, method, amountFils, reason` | Manager/owner; their own open shift; original sale in same branch |
-| `subscription.update` | `status, paidThrough, reason` | Separately provisioned active platform administrator |
+| Endpoint | Contract |
+| --- | --- |
+| `POST /api/pos/session` | `{email,password}` → `{status:'authenticated',userId}` |
+| `GET /api/pos/session` | Verify/refresh the current session |
+| `DELETE /api/pos/session` | Revoke refresh session and clear auth cookies |
+| `GET /api/pos/bootstrap` | Validated camelCase `LiveBootstrap`: profiles, catalogue, branch roles/`canSell`, bound device, open shifts and expected cash |
+| `POST /api/pos/devices` | `{branchId,name}` → `{status:'enrolled',device}` and HttpOnly binding cookie |
+| `POST /api/pos/sync` | `{order:LiveOrder}` → `{status:'synced',orderId,totalFils,taxFils,replayed,receipt}` |
+| `POST /api/pos/commands` | `{command:LiveCommand}` → matching `{status:'applied',commandId,replayed,...}` |
+| `GET /api/pos/receipts` | Required `branchId`; optional `orderId` or stable `cursor`; up to100 immutable snapshots with `nextCursor` |
+| `POST /api/pos/recovery` | `{kind:'sale'|'command',request:exactOriginalInnerObject}` → original committed acknowledgement or `{status:'cancelled',requestId,kind,replayed}` |
 
-Successful commands return `status:'applied'`, `commandId` and `replayed`. Shift close also returns expected cash, counted cash and the difference. Every accepted command is recorded with its actor, original payload, result and audit event in the same database transaction. Current permissions are intentionally strict: a manager cannot close another cashier's shift or authorize a refund while operating that cashier's server shift.
+Financial commands are `shift.open`, `shift.close`, `cash.move` and `refund.full`. Cash movements and full returns require manager/owner authority and that actor's own open shift. A manager cannot close another cashier's shift. Close results contain expected cash, counted cash and their difference.
 
-Refunds lock the original order and cap the sum of refunds **per original tender** across all devices. Thus cash refunded cannot exceed that order's cash payment and card refunded cannot exceed its card payment. Drawer reconciliation includes cash refunds in the shift actually paying them out. A refund is a financial record only: card/other refunds do not call a payment processor; no cash is physically dispensed. Item-level return allocation, VAT credit-note generation, inventory restocking and external refund settlement remain pending. Do not use this foundation as a compliant production returns workflow before those requirements are resolved.
+Live orders require the active profile ID, buyer metadata or null, cash tendered, authoritative catalogue references and expected prices/taxes/totals. The server recomputes amounts. Payments record amounts applied to the sale; cash change is separate. Card entries are manual records, not payment-processor acknowledgements.
 
-Close a server shift only after its local offline queue is fully synchronized. The server cannot know that a disconnected device still holds unsent sales. Newly arriving sales after server closure will remain pending for operator reconciliation; accepted receipts are never silently discarded.
+Invoice and credit numbers are assigned transactionally on the server. The receipt stores merchant, item, tax, total and payment snapshots, so later profile/menu changes cannot rewrite an issued document. The pilot supports full invoice reversal only. A full credit note reverses original line/tax/tender amounts; cash refunds require sufficient drawer cash. It does not initiate external card refunds or physically dispense cash.
 
-`tests/integration/pos-operations.mjs` executes both migrations in disposable PostgreSQL and verifies shift ownership, independent devices, idempotency, per-tender cross-device refund limits, manager/cashier/platform-admin separation, manual subscription changes and drawer reconciliation. Tests validate sequential database behavior and locking logic, not simultaneous multi-backend production concurrency; staging concurrency tests remain required.
+## Uncertain results and cancellation
 
-## Legacy integration release gate
+Persist a fresh UUID and frozen request **before** dispatch. Retry the same ID and exact payload until a matching validated acknowledgement arrives; changed payloads conflict. Never manufacture a success receipt from local basket data.
 
-The unrelated legacy WhatsApp webhook is disabled by default for GET and POST. It returns 404 before database lookup, AI work or outbound messaging unless `ENABLE_LEGACY_WHATSAPP_WEBHOOK=true` is explicitly configured. Even when enabled, POST requires `META_APP_SECRET` and a valid `x-hub-signature-256` HMAC over the request body; GET requires a configured verification token. No integration has been enabled by this work.
+The recovery RPC takes the same transaction lock as the financial operation. If already committed, it returns that operation's canonical acknowledgement. Otherwise it writes an immutable cancellation tombstone, which prevents a delayed original from committing. It never deletes financial history. Recovery remains available while the global financial-write flag is paused. Cancellation does not return physical money: the operator must reconcile any amount already collected.
 
-Do not enable this legacy integration for production until inbound message-ID deduplication/replay protection and transactional processing have been implemented and tested. Signature verification authenticates a delivery but does not make webhook retries idempotent. The new POS frontend does not call this integration. Existing AI API routes call `requireSession()` before their AI/database work; no anonymous AI API bypass was found in this narrow review.
+The browser journal permits one pending financial request per actor across tabs. An uncertain response, failed local acknowledgement, expired session or network outage must preserve that request. Offline browser training remains independent and cannot submit to these live APIs.
 
-The separate legacy Stripe client is initialized only when a request has configured credentials. Importing billing routes during a production build requires no Stripe key. Missing checkout key/price/app URL or missing webhook key/secret returns HTTP 503 `BILLING_NOT_CONFIGURED` before authentication/database/provider work. This does not enable automatic collection for the new manual POS subscriptions; no placeholder key is supplied.
+## Verification and limits
+
+Targeted unit tests cover cookie/session behavior, login limits, origin checks, branch/device authority, input validation, response acknowledgement, per-actor binding and release gates. Disposable database tests execute the actual migrations: `pos-schema.mjs`, `pos-operations.mjs`, `pos-documents.mjs`, `pos-online-access.mjs` `pos-recovery.mjs` and `pos-cash-out.mjs` under `tests/integration`. Their headers describe the disposable runtime invocation.
+
+Local checks do not establish production configuration, real Supabase session behavior or concurrent multi-backend transaction safety. Verify those on the actual isolated backend before activation, including two tenants, staff roles, devices, concurrent retries and cancellation races.
+
+Remaining limits include offline live reconciliation, partial/item returns, discounts/modifiers, stock restocking, shared-table coordination, external card settlement, printer hardware delivery, automatic subscription enforcement and fine-grained report permissions within a branch. Receipt reprinting uses immutable records but does not confirm physical printer delivery.
+
+## Foundation compatibility
+
+The original schemas in `contracts.ts` and `commands.ts`, and baseline RPCs from migrations001/002, are retained for historical tests and internal compatibility. They are **not the current counter HTTP contracts**. Profile-enabled branches reject the older financial paths; private foundation/unbound functions are not executable by authenticated clients. Legacy Stripe, WhatsApp, AI and printer routes remain outside the hosted allowlist and must not be enabled through this pilot.

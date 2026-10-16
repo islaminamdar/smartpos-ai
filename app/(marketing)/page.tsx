@@ -62,8 +62,8 @@ export default function Landing() {
         <nav aria-label="Main navigation">
           <a href="#features">Features</a>
           <a href="#pricing">Pricing</a>
-          <Link href="/pos" className="ip-header-link">
-            Open workspace <ArrowUpRight size={17} aria-hidden="true" />
+          <Link href="/counter" className="ip-header-link">
+            Staff sign in <ArrowUpRight size={17} aria-hidden="true" />
           </Link>
         </nav>
       </header>

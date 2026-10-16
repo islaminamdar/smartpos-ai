@@ -1,36 +1,36 @@
 import { readBoundedBody } from '@/lib/pos/server/body'
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticatedPosClient } from '@/lib/pos/server/client'
-import { syncOrderSchema } from '@/lib/pos/server/contracts'
+import { liveOrderSchema } from '@/lib/pos/server/live-contracts'
+import { fiscalDocumentSchema } from '@/lib/pos/server/documents'
+import { requirePilot, requireOrigin, requireDevice } from '@/lib/pos/server/live-access'
 import { posFailure, privateHeaders } from '@/lib/pos/server/http'
 
 export const dynamic = 'force-dynamic'
 export async function POST(request: NextRequest) {
   try {
-    const origin = request.headers.get('origin')
-    if (origin && origin !== new URL(request.url).origin) {
-      return NextResponse.json({ code: 'origin_rejected' }, { status: 403, headers: privateHeaders })
-    }
-    const { client } = await authenticatedPosClient()
+    requirePilot(true); requireOrigin(request)
+    const { client, user } = await authenticatedPosClient()
     const body = await readBoundedBody(request, 100_000)
     let raw: unknown
     try { raw = JSON.parse(body) } catch {
       return NextResponse.json({ code: 'invalid_json' }, { status: 400, headers: privateHeaders })
     }
-    const parsed = syncOrderSchema.safeParse(raw)
+    const parsed = liveOrderSchema.safeParse(raw)
     if (!parsed.success) {
       return NextResponse.json({ code: 'invalid_order', fields: parsed.error.issues.map(issue => issue.path.join('.')) }, { status: 422, headers: privateHeaders })
     }
-    const { data, error } = await client.rpc('pos_record_paid_order', { p_order: parsed.data.order })
+    const binding = await requireDevice(client, parsed.data.order.branchId, parsed.data.order.deviceId, user.id)
+    const { data, error } = await client.rpc('pos_record_live_order', { p_order: parsed.data.order, p_binding: binding })
     if (error) {
-      const conflictCodes = ['POS_PRICE_CHANGED', 'POS_TOTAL_MISMATCH', 'POS_PAYMENT_MISMATCH', 'POS_IDEMPOTENCY_CONFLICT', 'POS_SHIFT_CLOSED']
+      const conflictCodes = ['POS_PRICE_CHANGED', 'POS_TOTAL_MISMATCH', 'POS_PAYMENT_MISMATCH', 'POS_IDEMPOTENCY_CONFLICT', 'POS_REQUEST_CANCELLED', 'POS_SHIFT_CLOSED', 'POS_PROFILE_CHANGED', 'POS_LIVE_CONTRACT_REQUIRED', 'POS_LEGACY_RECEIPT_UNAVAILABLE']
       const authorizationCodes = ['POS_ACCESS_DENIED', 'POS_DEVICE_INVALID', 'POS_SHIFT_INVALID']
-      const validationCodes = ['POS_INVALID_ORDER', 'POS_PRODUCT_UNAVAILABLE']
+      const validationCodes = ['POS_INVALID_ORDER', 'POS_PRODUCT_UNAVAILABLE', 'POS_FULL_INVOICE_REQUIRED', 'POS_INVALID_CUSTOMER', 'POS_INSUFFICIENT_CASH']
       const code = [...conflictCodes, ...authorizationCodes, ...validationCodes].find(item => error.message.includes(item))
       const status = code ? conflictCodes.includes(code) ? 409 : authorizationCodes.includes(code) ? 403 : 422 : 503
       return NextResponse.json({ status: 'pending', code: code ?? 'storage_unavailable' }, { status, headers: privateHeaders })
     }
-    if (!data || data.status !== 'synced') throw new Error('Invalid synchronization acknowledgement')
+    if (!data || data.status !== 'synced' || data.orderId !== parsed.data.order.id || !fiscalDocumentSchema.safeParse(data.receipt).success) throw new Error('Invalid synchronization acknowledgement')
     return NextResponse.json(data, { headers: privateHeaders })
   } catch (error) { return posFailure(error) }
 }

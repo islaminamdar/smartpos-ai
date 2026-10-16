@@ -12,7 +12,7 @@ pnpm build
 pnpm start --port 3045 --hostname 127.0.0.1
 ```
 
-Open `http://127.0.0.1:3045/` for the website and `/pos` for the counter. Development mode is `pnpm dev --port 3045`; offline installation is intentionally enabled only in production builds. Do not run development and production builds concurrently in the same checkout.
+Open `http://127.0.0.1:3045/` for the website and `/pos` for the separate training counter. The authenticated online pilot is `/counter`, enabled only with private server configuration described below. Development mode is `pnpm dev --port 3045`; offline installation is intentionally enabled only in production builds. Do not run development and production builds concurrently in the same checkout.
 
 The public counter is a **training workspace**. It stores orders on this browser/device and cannot activate real selling. Its 5% inclusive tax is a training fixture, not confirmed business tax configuration. Card payments are manually recorded, never charged. Browser print produces a training receipt, not a production tax invoice.
 
@@ -37,13 +37,17 @@ The catalogue comes from the local Noon archive captured **2026-08-20**, not a f
 
 `data/pos/mithaiwala-catalogue.json` records source capture time, source item IDs and original image SHA-256 hashes. Published WebP derivatives retain item-code filenames. Source archive: `Mithaiwala-Noon-Images-Backup-2026-08-20/06-REPORTS-AND-MENU-EXPORT/active-menu.json` and `05-EXISTING-NOON-IMAGE-LIBRARY` in the parent workspace. The archive stays outside this repository.
 
-Thirty entries have zero source base prices; the UI requires a positive reviewed price rather than silently selling them free. All imported prices and units need counter review before live activation. A named fixed pack is not automatically treated as a per-kilogram product.
+Thirty entries have zero source base prices; the UI requires a positive reviewed price rather than silently selling them free. The owner approved archived prices as the opening live prices on 16 October 2026; the 30 unpriced entries remain unavailable. Archived sale units are preserved. A named fixed pack is not automatically treated as a per-kilogram product.
 
-## Server foundation and remaining work
+## Authenticated online pilot
 
-Two `pos_*` SQL migrations and authenticated APIs implement organization/branch isolation, device-scoped shifts, idempotent order ingestion, operational commands, method-capped refunds and platform-admin manual subscription records. See [server contracts and limitations](lib/pos/server/README.md).
+The `/counter` workspace supports staff login, device enrollment, cashier-owned shifts, approved branch menu, cash/card-recorded/split payments, immutable numbered invoices, full credit notes, receipt history, cash movements and shift reconciliation. Six isolated `pos_*` migrations provide tenant boundaries, authoritative money calculations, device binding, idempotency and durable request cancellation. See [server setup and contracts](lib/pos/server/README.md).
 
-They are **not deployed**, and the training client is **not connected to live synchronization**. Remaining release work includes staff login/enrollment, production menu approval, versioned offline pricing, queue reconciliation, branch-wide reporting, shared table ownership, authorized kitchen amendments, production receipts/credit notes, subscription enforcement and backup operations. Independent devices can store separate training records; shared offline coordination is not implemented.
+The pilot requires an internet connection. A browser journal retains each submitted request until the server returns its matching confirmation or cancellation; retrying does not create a second bill. Training records are never imported as live sales. Card entries and credit notes do not execute bank-terminal payments or refunds.
+
+Private configuration and deployment are operator-managed. `POS_ONLINE_PILOT=true` opens the staff routes, `POS_LIVE_SALES_ENABLED=true` enables financial requests, and each branch must separately have an approved profile and `live_enabled=true`. Legacy application routes stay blocked in every mode. Credentials, actual staff records, bills and deployment evidence stay outside Git. The prepared artifact's release metadata describes runtime gating rather than claiming that its deployment has been activated.
+
+Remaining work includes durable native Android offline sales, versioned offline pricing, shared table ownership, kitchen coordination, branch-wide analytics, partial returns, live menu administration and subscription enforcement. In this pilot the menu is provisioned by the operator; unpriced items cannot be sold. Fixed-weight archive packs remain piece units until a per-kilogram price is explicitly confirmed.
 
 Later product scope includes inventory/recipes/wastage, purchasing/transfers, customer loyalty, delivery integrations, bilingual operations and customer ordering. All features stay under the agreed per-branch plan, but the website must not describe these as already available.
 
@@ -59,4 +63,4 @@ pnpm build
 
 Real IndexedDB tests run in disposable Chromium through the core test harness. Disposable PostgreSQL migration tests are in `tests/integration/`; their headers describe isolated execution. Neither is proof of physical printer, Android, cloud or live multi-device operation.
 
-Preview desktop and mobile before release. Production deployment requires explicit owner approval; APK distribution requires a signed, tested package. See [current delivery status](docs/plans/2026-10-16-web-pos-delivery.md).
+Preview desktop and mobile before release. Production deployment requires explicit owner approval; APK distribution requires a signed, tested package. See [online pilot verification](docs/plans/2026-10-16-online-pilot.md); the earlier web delivery document describes the training milestone.

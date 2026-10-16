@@ -10,6 +10,7 @@ const compat = new FlatCompat({
 })
 
 const eslintConfig = [
+  { ignores: ['.next/**', 'node_modules/**'] },
   ...compat.extends('next/core-web-vitals', 'next/typescript'),
   {
     // Existing legacy integrations predate the POS. Keep their loose typing
