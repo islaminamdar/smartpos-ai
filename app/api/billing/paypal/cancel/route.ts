@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   try {
     requireOrigin(request)
     const body = cancelSchema.parse(JSON.parse(await readBoundedBody(request, 2048)))
-    return NextResponse.json(await reconcileBranch(body.branchId, true), {
+    return NextResponse.json(await reconcileBranch(body.branchId, true, body.subscriptionId), {
       headers: privateHeaders,
     })
   } catch (error) {

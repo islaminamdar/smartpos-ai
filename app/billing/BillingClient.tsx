@@ -112,6 +112,9 @@ export default function BillingClient() {
       active = false
     }
   }, [branch, actor])
+  useEffect(() => {
+    setCancelAgree(false)
+  }, [state?.subscription?.id])
   async function action(kind: 'checkout' | 'reconcile' | 'cancel') {
     setBusy(true)
     setMessage('Checking with PayPal…')
@@ -127,7 +130,11 @@ export default function BillingClient() {
         kind === 'checkout'
           ? { branchId: branch, requestId, acceptRecurring: true }
           : kind === 'cancel'
-            ? { branchId: branch, confirmCancellation: true }
+            ? {
+                branchId: branch,
+                subscriptionId: state?.subscription?.id,
+                confirmCancellation: true,
+              }
             : { branchId: branch }
       const result = await api('/api/billing/paypal/' + kind, body)
       const fresh = stateSchema.parse(await api('/api/billing/paypal/status?branchId=' + branch))

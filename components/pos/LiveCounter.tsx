@@ -2009,9 +2009,8 @@ export default function LiveCounter() {
                 <h2>Current live pilot</h2>
                 <p>
                   Online sales, recorded cash/card payments, weighted items, invoice reprints, shift
-                  closing, offers, full refunds and shared preparation tracking for paid orders.
-                  Shared tables, unpaid kitchen orders, partial refunds and offline live sales are
-                  still being prepared.
+                  closing, offers, full refunds, shared tables and kitchen dispatch before or after
+                  payment. Partial refunds and offline live sales are still being prepared.
                 </p>
                 <Link href="/pos">Open separate training workspace</Link>
               </section>

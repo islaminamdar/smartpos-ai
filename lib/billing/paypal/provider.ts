@@ -117,10 +117,29 @@ export class PayPalProvider {
   }
   async transactions(id: string, start: string, end: string) {
     providerId.parse(id)
-    const data = (await this.request(
-      `/v1/billing/subscriptions/${id}/transactions?${new URLSearchParams({ start_time: start, end_time: end })}`
-    )) as { transactions?: unknown[] }
-    if (!Array.isArray(data.transactions)) throw new PayPalError('paypal_transactions_unconfirmed')
+    const parsed = z
+      .object({
+        transactions: z.array(z.unknown()).max(1000),
+        total_items: z.number().int().nonnegative().optional(),
+        total_pages: z.number().int().nonnegative().optional(),
+        links: z.array(z.object({ rel: z.string(), href: z.string() })).optional(),
+      })
+      .safeParse(
+        await this.request(
+          `/v1/billing/subscriptions/${id}/transactions?${new URLSearchParams({ start_time: start, end_time: end })}`
+        )
+      )
+    if (!parsed.success) throw new PayPalError('paypal_transactions_unconfirmed')
+    const data = parsed.data
+    // A checkpoint may advance only for a complete time window. Do not follow
+    // provider-supplied URLs or silently accept an explicitly partial response.
+    if (
+      (data.total_items !== undefined && data.total_items !== data.transactions.length) ||
+      (data.total_pages !== undefined &&
+        (data.total_pages > 1 || (data.total_pages === 0 && data.transactions.length > 0))) ||
+      data.links?.some((link) => link.rel.toLowerCase() === 'next')
+    )
+      throw new PayPalError('paypal_transactions_unconfirmed')
     return data.transactions.map((raw) => {
       const tx = transactionSchema.parse(raw)
       return {

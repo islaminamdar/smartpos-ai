@@ -1,0 +1,80 @@
+# Native offline counter: cashier flow
+
+16 October 2026 · UI/UX Specialist · model runtime-selected/not exposed
+
+Design proposal for real Android sales. This document is not evidence that an APK, offline permission, native persistence or fiscal receipt allocation has shipped. No runtime or production changes accompany it.
+
+## Current baseline and direction
+
+`LiveCounter` currently blocks financial writes offline and shows “Offline · sales paused”. Its uncertain online request is retained, but blocks subsequent payments. `PosWorkspace` is explicitly training: `local-store.ts` rejects live writes and `sync.ts` never uploads training events. Retain this separation; neither a cached page nor changing a training badge creates a live offline counter.
+
+Keep the established white, navy and blue counter, its real menu photographs and its running receipt. Use text plus colour: navy `#17324d` for content, blue `#175cd3` for action, neutral `#f4f7fb` for workspace, amber `#fff7e6` for pending work and dark red `#8f2d28` for a blocking fault. Retain the existing system/Arial typography. The distinctive element is a compact device-status strip immediately above the menu and ticket, with a visible count of locally saved sales; do not turn offline selling into a separate training-looking dashboard.
+
+Multiple enrolled counters may independently sell new orders during the same outage. Shared tables, shared unpaid orders and remote kitchen state require coordination; do not silently create a replacement walk-in sale for an existing shared order. The earlier Android plan's single-primary-device policy is superseded as a design target by the user's confirmed multiple-cashier requirement. Exclusive ownership or local-network coordination is a separate contract, not an assumed capability.
+
+## Status and entry
+
+Connection, permission, local persistence and synchronization are separate facts. The counter becomes “Offline ready” only after native storage, a valid device/staff permission, usable catalogue/tax/merchant snapshot and the required shift/receipt allocation have all been verified. Missing photographs may use named placeholders; missing product/pricing/tax data must block readiness. Display full dates/times in Dubai time, never only a relative age.
+
+| Situation | Staff-facing status and action |
+| --- | --- |
+| First installation, no verified setup | “Connect to set up this counter.” Online sign-in → confirm restaurant/branch/device → prepare offline access. No local-only bypass. |
+| Preparation in progress | “Preparing offline access…” with separate checks for account, menu, storage and receipt availability. Retry the failed step; do not show ready from download progress alone. |
+| Ready and reachable | “Online · Offline ready until [time]” plus “All saved sales synced” or “N sales waiting to sync”. Tap opens device status. |
+| Internet lost, valid permission | “Offline · You can keep selling” / “N sales saved on this device”. Continue into the same menu and checkout. |
+| Permission approaching expiry | “Connect before [date/time] to keep selling offline.” Non-modal warning while still valid. |
+| Expired, uncertain clock, missing allocation or unreadable storage | “New sales paused” with the specific reason and recovery action. Saved receipts and recovery remain available; never erase the queue. |
+| Network available but API unreachable | “Server unavailable · Selling offline” only if still eligible. Do not report synced from Wi-Fi or `navigator.onLine`. |
+| Browser version without native durability | Keep “Offline · sales paused” and explain “Use the prepared Android app for offline counter sales.” |
+
+The device-status screen shows branch/device/cashier, last successful sync, menu saved time, access-valid-until time, pending sale count and value, oldest pending sale, remaining authorized invoice numbers, and storage health. A native local unlock may resume only an already enrolled staff identity. Unknown staff and changed branches require online authorization. The first implementation must use the architecture's actual bounded permission duration rather than invent a grace period in the UI. Authority is specific to staff, device, branch and shift; the catalogue and merchant profile are immutable signed snapshots, and each device receives a disjoint official invoice range.
+
+## Checkout and receipt
+
+1. Add available products from the authorized snapshot, with piece/pack/kg and current local price visible. While offline show “Menu saved [date/time]”. A cached stock value is “Last known”; do not promise branch-wide availability. Price changes arriving online affect new baskets only after review, never rewrite committed receipts.
+2. Review order and choose Cash, Card recorded or Cash + card, according to the granted offline tender scope. Before prompting collection, persist a checkout intent and reserve its identity so a restart can recover an interrupted collection. Disable duplicate activation during this local operation. If storage fails, say “Payment not recorded. Do not collect payment yet.”
+3. Cash: enter received amount and show change. Card: “Complete payment on the separate terminal, then record its successful result here. This app does not charge the card.” Confirm terminal success and record its allowed reference; never collect PAN/CVV. An uncertain terminal result must be checked on the terminal before continuing.
+4. The final button is “Record payment · AED …”. Commit sale, immutable prices/tax, tender, local receipt identity and synchronization work atomically. Only after durable commit show “Sale saved on this device” and “Waiting to sync”. Allow the next independent sale; a normal unsynced queue is not the existing single-uncertain-request lock.
+5. The success panel shows receipt reference, total, payment recorded, cash/change, sync state and separate kitchen/print state. Actions: “View receipt”, “Print receipt” when a verified local printer route exists, and “New order”. Print failure does not invite another payment. Reprints say COPY and keep the original identity.
+
+The accepted protocol issues a real immutable fiscal document locally using its device's preauthorized official invoice range. Show that official invoice number immediately after durable commit; keep the same number and financial contents after sync. The operational status is “Saved on this device · awaiting sync”, not “Provisional bill” or “Training”. Range exhaustion blocks the next collection with “Connect to prepare more invoice numbers”; previously issued invoices remain readable. Protocol acceptance is not a substitute for fiscal configuration review or actual device durability tests, and this design makes no tax-law determination.
+
+Kitchen status is independent: “Not sent to the shared kitchen while offline”. An explicitly verified local printer can have its own delivery state; otherwise staff use a documented manual handover. A saved local sale must not cause old preparation to repeat when connectivity returns. The initial native scope supports new standalone sales; shared source orders, refunds and offers are online-only. Explain their disabled actions without silently removing an already selected offer or converting an existing shared bill into a new sale. Those cases require reconnection; future offline ownership/offer quotas must be explicitly granted.
+
+## Reconnect, restart and recovery
+
+| Event | Required visible result |
+| --- | --- |
+| Reconnect | “Syncing N saved sales…”; process exact durable identities. Continue permitted new sales without rebuilding old requests. |
+| Canonical server acknowledgement | Mark only the acknowledged sale “Synced [time]”. Preserve its local reference and receipt relationship. Lost acknowledgements resend the same identity. |
+| Catalogue changed | Preserve the accepted offline snapshot for already committed sales. Refresh the next-sale catalogue. If the server cannot accept a saved sale, route it to “Needs manager review”; never recalculate a payment already collected. |
+| Revoked staff/device or rejected sale | Stop new sales as required, retain immutable local evidence, show reason and a manager recovery path. “Payment is already recorded on this device. Do not collect it again.” Re-authentication must not reassign its original staff/device identity. |
+| Transient sync failure | Keep count, value and last confirmed time visible; automatic bounded retry and “Retry sync” are safe. Failure is not cancellation. |
+| Restart after committed sale | Local unlock → verify retained authority/clock evidence → restore shift and all pending sales → show most recent saved receipt and queue count. Never reopen committed receipt as an unpaid basket. A normal restart is not itself a reason to require internet; a clock anomaly or unverifiable authority blocks new collection while preserving receipts. |
+| Restart during collection, before commit | “Payment needs checking” for the reserved intent. Staff check cash/terminal outcome, then resume that same sale or record that no payment was taken. Do not silently discard or generate a new payment identity. |
+| Storage fault | Block new collection, preserve readable records, offer recovery diagnostics. Do not recommend clearing app data or reinstalling. |
+| Device replacement or lost device | Manager recovery handles preserved encrypted records and original identities. Show that unsynced records exist only on the original device unless a verified export exists. A new device cannot claim they were recovered. |
+
+Use a dedicated “Saved sales” list with filters Waiting to sync, Needs review and Synced. Each row shows reference, time, amount, cashier/device, tender and status. Opening a problem reveals the original immutable receipt and exact next action. There is no bulk “discard failed sales” or automatic retry of an external card charge. Local lock is available with pending sales; account removal, branch reassignment and destructive reset must not orphan them.
+
+Shift totals show “This counter, including N unsynced sales”. Branch reports say “Incomplete — counters have unsynced sales” when known, and “Last confirmed [time]” when remote completeness is unavailable. Shift close/offline reopen depend on the granted shift scope; show “Close saved on this device” only if closure is itself durable and accepted for later reconciliation. Otherwise record a local closing count and require connection to finalize.
+
+## Responsive acceptance and remaining contract
+
+At 1280px keep menu and ticket side by side; the status strip spans both. At 375/320px use a compact status strip and full-width review/payment panel, not a narrow modal. Keep the next action at least 48px high, reserve safe-area/footer space, wrap long restaurant names and references, and keep sync warnings above rather than over the payment controls. A recovery screen must remain usable without menu images or a remote request. Announce completion once; do not announce every background retry. Preserve focus when connectivity changes and never dismiss a payment confirmation because a refresh arrived.
+
+Release acceptance must demonstrate two devices selling different new orders through one outage; forced stop/reboot at each intent/commit/ack boundary; stale/expired permissions and clock changes; stale catalogue; storage failure before collection; external-card ambiguity; receipt reprint; partial sync failure; and offline launch after restart. Verify 320/375/1280 widths, keyboard and 200% zoom. Native durability, receipt numbering, authentication and actual printer behaviour require device evidence; browser fixtures cannot establish them.
+
+Architecture aligned with the Offline Systems Specialist on 16 October 2026: signed bounded actor/device/branch/shift authority; signed catalogue/profile; disjoint official invoice ranges; durable intent before collection; atomic local invoice, counter and outbox; independent simultaneous-device sales; shared tabs/refunds/offers initially online-only; server time anchor plus elapsed-time and persisted wall-clock/reboot evidence, with anomalies blocking new collection. This is not a claim of tamper-proof trusted time. Expiry never deletes a committed bill.
+
+Remaining implementation details: root-configured permission duration, exact native local-unlock mechanism, offline shift-close scope, supported split-tender scope, and manager recovery transport after revocation. These determine precise labels/actions, not whether training records can be used as real sales. The complete offline checkout flow above is still a design contract; the implemented storage-foundation screens are described below.
+
+## Storage-foundation screen implementation
+
+The first app slice now implements device setup/status and local receipt summaries in `apps/android-pos/src`. It calls only the native identity, status and receipt-list reads. It has no financial write, enrollment, printing or receipt-detail action. Readiness remains explicitly paused because the native authority is not configured. The external web-counter link opens separately and does not enroll this installation. Browser previews show native data as unavailable, never zero.
+
+Status reads do not overlap. A failed refresh retains the last checked snapshot with a stale-data warning and retry action. Receipt summaries show the native document number, amount, issue time and pending/server-acknowledged state; truncated history is explicit. Unknown bridge fields or malformed receipt values fail closed. Device identity is tucked into a support disclosure; no private key is displayed.
+
+Verification on 16 October 2026: 16 bridge-contract tests and 4 screen-interaction tests passed, including unavailable state, retained history after failure, retry recovery and no overlapping reads. App TypeScript, scoped ESLint and Vite build passed. Scoped Semgrep ran 210 rules over 5 source files with zero findings. Browser review covered genuine non-native state at 1280/375px and synthetic native responses at 1280/375/320px. Document widths were 1265/360/305px respectively with no horizontal overflow or visible controls below 44px. Phone history and desktop setup were visually reviewed; failed native reads retained receipts and recovered through Retry check. These tests establish screen behaviour only; they do not establish real Android persistence, enrollment, fiscal issuance, synchronization or printer operation.
+
+The release owner independently reviewed the genuine unavailable-browser screen and synthetic native setup/history screens on mobile. The temporary fixture was removed from the app, the review tab was closed and viewport restored; only a private evidence copy remains. Production build output contains the ordinary app entry and assets, without fixture data. Real Android execution is verified separately by the native implementation owner.

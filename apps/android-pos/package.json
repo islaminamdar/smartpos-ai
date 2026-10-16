@@ -1,0 +1,19 @@
+{
+  "name": "@internext/android-pos",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 3050",
+    "build": "vite build",
+    "sync": "cap sync android",
+    "android": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/core": "8.5.3",
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
+  },
+  "devDependencies": {"@capacitor/cli": "8.5.3", "@vitejs/plugin-react": "6.0.2", "vite": "8.0.8", "typescript": "6.0.3"}
+}

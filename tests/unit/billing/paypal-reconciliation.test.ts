@@ -83,6 +83,52 @@ beforeEach(() => {
   mocks.verifyWebhook.mockResolvedValue(undefined)
 })
 describe('existing mapped subscription survives commercial plan changes', () => {
+  it('does not advance payment checkpoints when the provider result is incomplete', async () => {
+    mocks.transactions.mockRejectedValue(new PayPalError('paypal_transactions_unconfirmed'))
+    await expect(reconcileBranch(row.branch_id)).rejects.toThrow('paypal_transactions_unconfirmed')
+    expect(mocks.rpc.mock.calls.some(([name]) => name === 'pos_paypal_apply')).toBe(false)
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'pos_paypal_release',
+      expect.objectContaining({ p_id: row.id })
+    )
+  })
+
+  it.each([undefined, '10000000-0000-4000-8000-000000000099'])(
+    'rejects missing or stale cancellation identity after leasing and before provider calls: %s',
+    async (expectedId) => {
+      await expect(reconcileBranch(row.branch_id, true, expectedId)).rejects.toThrow(
+        'paypal_subscription_changed'
+      )
+      expect(mocks.rpc).toHaveBeenCalledWith(
+        'pos_paypal_reserve',
+        expect.objectContaining({ p_id: row.id })
+      )
+      expect(mocks.rpc).toHaveBeenCalledWith(
+        'pos_paypal_release',
+        expect.objectContaining({ p_id: row.id })
+      )
+      expect(mocks.get).not.toHaveBeenCalled()
+      expect(mocks.cancel).not.toHaveBeenCalled()
+      expect(mocks.rpc.mock.calls.some(([name]) => name === 'pos_paypal_apply')).toBe(false)
+    }
+  )
+  it('checks the leased canonical identity rather than only the earlier branch lookup', async () => {
+    mocks.rpc.mockImplementation(async (name: string) => ({
+      error: null,
+      data:
+        name === 'pos_paypal_can_manage'
+          ? true
+          : name === 'pos_paypal_reserve'
+            ? { ...row, id: '10000000-0000-4000-8000-000000000099' }
+            : null,
+    }))
+    await expect(reconcileBranch(row.branch_id, true, row.id)).rejects.toThrow(
+      'paypal_subscription_changed'
+    )
+    expect(mocks.get).not.toHaveBeenCalled()
+    expect(mocks.cancel).not.toHaveBeenCalled()
+  })
+
   it('reconciles canonical cancellation while marking plan review required', async () => {
     await reconcileBranch(row.branch_id)
     expect(mocks.get).toHaveBeenCalledWith(row.provider_id, row.id, row.plan_id)
@@ -126,7 +172,7 @@ describe('existing mapped subscription survives commercial plan changes', () => 
         custom_id: row.id,
         status: 'CANCELLED',
       })
-    await reconcileBranch(row.branch_id, true)
+    await reconcileBranch(row.branch_id, true, row.id)
     expect(mocks.cancel).toHaveBeenCalledWith(row.provider_id)
     expect(mocks.get).toHaveBeenCalledTimes(2)
     expect(

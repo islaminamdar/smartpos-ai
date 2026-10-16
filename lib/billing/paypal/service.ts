@@ -156,7 +156,11 @@ export async function startCheckout(branchId: string, requestId: string) {
     await rpc('pos_paypal_release', { p_id: row.id, p_lease: lease }).catch(() => undefined)
   }
 }
-export async function reconcileBranch(branchId: string, cancel = false) {
+export async function reconcileBranch(
+  branchId: string,
+  cancel = false,
+  expectedSubscriptionId?: string
+) {
   const { user } = await billingActor(branchId)
   const config = paypalConfig(),
     provider = new PayPalProvider(config),
@@ -173,7 +177,12 @@ export async function reconcileBranch(branchId: string, cancel = false) {
     })
   )
   try {
-    let subscription = await provider.get(existing.provider_id, row.id, row.plan_id)
+    // Consent is for one exact agreement, checked after acquiring its fenced lease.
+    // Never retarget a stale cancellation request to a replacement subscription.
+    if (cancel && row.id !== expectedSubscriptionId)
+      throw new PayPalError('paypal_subscription_changed', 409)
+    if (!row.provider_id) throw new PayPalError('checkout_confirmation_pending', 409)
+    let subscription = await provider.get(row.provider_id, row.id, row.plan_id)
     if (cancel && !['CANCELLED', 'EXPIRED'].includes(subscription.status)) {
       await provider.cancel(subscription.id)
       subscription = await provider.get(subscription.id, row.id, row.plan_id)

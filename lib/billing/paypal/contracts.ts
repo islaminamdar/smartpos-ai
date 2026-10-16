@@ -4,7 +4,9 @@ export const branchSchema = z.object({ branchId: z.string().uuid() }).strict()
 export const checkoutSchema = branchSchema
   .extend({ requestId: z.string().uuid(), acceptRecurring: z.literal(true) })
   .strict()
-export const cancelSchema = branchSchema.extend({ confirmCancellation: z.literal(true) }).strict()
+export const cancelSchema = branchSchema
+  .extend({ subscriptionId: z.string().uuid(), confirmCancellation: z.literal(true) })
+  .strict()
 export const providerId = z.string().regex(/^I-[A-Z0-9]{6,30}$/)
 export const subscriptionStatus = z.enum([
   'APPROVAL_PENDING',
