@@ -2,6 +2,7 @@
 // Only Auth token verification and Supabase transport are test adapters. Native code
 // owns its genuine SQLite/Keystore issuance. Never accepts a live database or host.
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
+import { z } from 'zod'
 import { verifyNativeNetworkBoundaries } from './native-network-boundaries'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { createServer, type Server } from 'node:https'
@@ -40,7 +41,7 @@ import { GET as access } from '@/app/api/pos/native/access/route'
 import { canonicalJson, encodeBase64Url } from '@/lib/pos/offline/canonical'
 import { verifySignedEnvelope } from '@/lib/pos/offline/authority'
 import { offlineIssuanceSchema } from '@/lib/pos/offline/contracts'
-import { offlineAckSchema } from '@/lib/pos/offline/server-contracts'
+import { offlineAckSchema, offlineSealSchema } from '@/lib/pos/offline/server-contracts'
 import { importOfflinePublicKey } from '@/lib/pos/offline/server-keys'
 
 interface Db {
@@ -92,6 +93,7 @@ let control: Db | undefined,
   server: Server | undefined
 let ownedDatabase = false
 const historicalRevocation = process.env.NATIVE_NETWORK_HISTORICAL_REVOCATION === 'true'
+const restartCommissioning = process.env.NATIVE_NETWORK_RESTART === 'true'
 let historicalPhase: 'initial' | 'revoked' | 'restored' | 'failed' = 'initial'
 let changingHistoricalState = false
 const tlsProtocols = new Set<string>()
@@ -118,6 +120,9 @@ interface Report {
   shifts?: unknown[]
   requests?: typeof requests
   historicalRevocation?: boolean
+  restartCommissioning?: boolean
+  restartCheckpoints?: RestartCheckpoint[]
+  restartProtectedFingerprint?: Record<string, unknown>
   historicalPhase?: string
   tlsProtocols?: string[]
   historicalCookieFreeChecks?: number
@@ -154,6 +159,7 @@ const report: Report = {
   runId,
   productionTouched: false,
   historicalRevocation,
+  restartCommissioning,
   status: 'pending',
   limits: [
     'Synthetic Auth tokens; no GoTrue login/refresh/password transport',
@@ -171,6 +177,151 @@ const scalar = async (sql: string, args: unknown[] = []) => {
     return Object.values((await client.query(sql, args)).rows[0])[0]
   } finally {
     client.release()
+  }
+}
+const checkpointUuid = z
+  .string()
+  .uuid()
+  .regex(/^[a-f0-9-]{36}$/)
+const checkpointHash = z.string().regex(/^[a-f0-9]{64}$/)
+const safeCount = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
+const restartCheckpointSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    runId: checkpointUuid,
+    phase: z.enum(['seed_offline', 'after_force_stop', 'after_reboot']),
+    bootCount: safeCount,
+    elapsedRealtimeMs: safeCount,
+    pid: safeCount.min(1),
+    devices: z
+      .array(
+        z
+          .object({
+            deviceId: checkpointUuid,
+            installationId: checkpointUuid,
+            deviceKeySha256: checkpointHash,
+            authorityId: checkpointUuid,
+            authoritySha256: checkpointHash,
+            sealSha256: checkpointHash,
+            immutableDigest: checkpointHash,
+            receipts: z
+              .array(
+                z
+                  .object({
+                    issuanceId: checkpointUuid,
+                    documentId: checkpointUuid,
+                    documentNumber: z.string().min(1).max(120),
+                    payloadSha256: checkpointHash,
+                    authorityId: checkpointUuid,
+                    deviceSequence: safeCount.min(1),
+                  })
+                  .strict()
+              )
+              .length(2),
+            receiptCount: z.literal(2),
+            outboxCount: z.literal(2),
+            acknowledgementCount: z.literal(0),
+            sealConfirmationCount: z.literal(0),
+          })
+          .strict()
+      )
+      .length(2),
+  })
+  .strict()
+type RestartCheckpoint = z.infer<typeof restartCheckpointSchema>
+const restartCheckpoints: RestartCheckpoint[] = []
+let restartCheckpointBusy = false
+let restartCheckpointFailed = false
+async function restartCheckpoint(input: unknown) {
+  if (restartCheckpointBusy || restartCheckpointFailed) throw new Error('Checkpoint unavailable')
+  restartCheckpointBusy = true
+  try {
+    const evidence = restartCheckpointSchema.parse(input)
+    expect(evidence.runId).toBe(runId)
+    expect(evidence.phase).toBe(
+      ['seed_offline', 'after_force_stop', 'after_reboot'][restartCheckpoints.length]
+    )
+    evidence.devices.sort((a, b) => a.deviceId.localeCompare(b.deviceId))
+    for (const device of evidence.devices)
+      device.receipts.sort((a, b) => a.deviceSequence - b.deviceSequence)
+    expect(evidence.devices.map((d) => d.deviceId)).toEqual(devices.map((d) => d.deviceId).sort())
+    for (const field of ['installationId', 'deviceKeySha256', 'authorityId'] as const)
+      expect(new Set(evidence.devices.map((d) => d[field])).size).toBe(2)
+    const receipts = evidence.devices.flatMap((d) => d.receipts)
+    for (const field of ['issuanceId', 'documentId', 'documentNumber', 'payloadSha256'] as const)
+      expect(new Set(receipts.map((r) => r[field])).size).toBe(4)
+    for (const device of evidence.devices) {
+      expect(device.receipts.map((r) => r.deviceSequence)).toEqual([1, 2])
+      expect(device.receipts.every((r) => r.authorityId === device.authorityId)).toBe(true)
+      const binding = await scalar(
+        `select jsonb_build_object('authorityId',g.id,'deviceKeySha256',e.device_key_sha256,'authoritySha256',b.authority_sha256)
+        from public.pos_offline_authorities g join public.pos_offline_key_epochs e on e.id=g.key_epoch
+        join public.pos_offline_signed_bundles b on b.authority_id=g.id where g.device_id=$1`,
+        [device.deviceId]
+      )
+      expect(binding).toEqual({
+        authorityId: device.authorityId,
+        deviceKeySha256: device.deviceKeySha256,
+        authoritySha256: device.authoritySha256,
+      })
+    }
+    for (const table of ['pos_offline_receipts', 'pos_documents', 'pos_orders', 'pos_payments'])
+      expect(await scalar(`select count(*)::int from public.${table}`)).toBe(0)
+    expect(await scalar('select count(*)::int from public.pos_offline_key_epochs')).toBe(2)
+    expect(await scalar('select count(*)::int from public.pos_offline_authorities')).toBe(2)
+    expect(
+      await scalar(
+        'select count(*)::int from public.pos_offline_authorities where sealed_at is not null'
+      )
+    ).toBe(0)
+    const protectedTables = [
+      'pos_offline_key_epochs',
+      'pos_offline_authorities',
+      'pos_offline_signed_bundles',
+      'pos_offline_receipts',
+      'pos_documents',
+      'pos_orders',
+      'pos_order_lines',
+      'pos_payments',
+      'pos_shifts',
+      'pos_devices',
+      'pos_staff',
+      'pos_products',
+    ]
+    const fingerprint = Object.fromEntries(
+      await Promise.all(
+        protectedTables.map(async (table) => [
+          table,
+          await scalar(
+            `select md5(coalesce(string_agg(row_to_json(t)::text,E'\\n' order by row_to_json(t)::text),'')) from public.${table} t`
+          ),
+        ])
+      )
+    )
+    const previous = restartCheckpoints.at(-1)
+    if (previous) {
+      expect(evidence.devices).toEqual(restartCheckpoints[0].devices)
+      expect(fingerprint).toEqual(report.restartProtectedFingerprint)
+      expect(evidence.pid).not.toBe(previous.pid)
+      if (evidence.phase === 'after_force_stop') {
+        expect(evidence.bootCount).toBe(previous.bootCount)
+        expect(evidence.elapsedRealtimeMs).toBeGreaterThan(previous.elapsedRealtimeMs)
+      } else {
+        expect(evidence.bootCount).toBeGreaterThan(previous.bootCount)
+      }
+    } else report.restartProtectedFingerprint = fingerprint
+    restartCheckpoints.push(evidence)
+    report.restartCheckpoints = restartCheckpoints
+    report.checks.push(
+      `Restart checkpoint ${evidence.phase}: original four offline receipts and local seals retained; server financial rows remain zero`
+    )
+    await save()
+  } catch (error) {
+    // Do not continue a commissioning run after ambiguous or invalid evidence.
+    restartCheckpointFailed = true
+    throw error
+  } finally {
+    restartCheckpointBusy = false
   }
 }
 function identity() {
@@ -435,6 +586,8 @@ async function historicalState(target: 'revoked' | 'restored') {
 }
 
 beforeAll(async () => {
+  if (restartCommissioning && historicalRevocation)
+    throw new Error('Commissioning variants must be separate')
   const socket = process.env.OFFLINE_TEST_PG_SOCKET,
     entry = process.env.OFFLINE_TEST_PG_ENTRY
   bootPath = resolve(process.env.NATIVE_NETWORK_BOOT_PATH ?? '')
@@ -608,6 +761,31 @@ beforeAll(async () => {
         chunks.push(b)
       }
       const body = Buffer.concat(chunks)
+      if (path === '/__test/checkpoint') {
+        if (!restartCommissioning || req.method !== 'POST') {
+          res.writeHead(404).end()
+          return
+        }
+        if (body.length > 16384) {
+          res.writeHead(413).end()
+          return
+        }
+        const input = JSON.parse(body.toString('utf8'))
+        if (
+          !input ||
+          Object.keys(input).sort().join(',') !== 'evidence,runId,token' ||
+          input.runId !== runId ||
+          typeof input.token !== 'string' ||
+          !/^[a-f0-9]{64}$/.test(input.token) ||
+          !timingSafeEqual(Buffer.from(input.token), Buffer.from(completionToken))
+        ) {
+          res.writeHead(403).end()
+          return
+        }
+        await restartCheckpoint(input.evidence)
+        res.writeHead(200, { 'content-type': 'application/json' }).end('{"status":"applied"}')
+        return
+      }
       if (path === '/__test/historical-revoke' || path === '/__test/historical-restore') {
         if (!historicalRevocation || req.method !== 'POST') {
           res.writeHead(404).end()
@@ -633,6 +811,13 @@ beforeAll(async () => {
         return
       }
       if (path === '/__test/complete' && req.method === 'POST') {
+        if (
+          restartCommissioning &&
+          (restartCheckpoints.length !== 3 || restartCheckpointFailed || restartCheckpointBusy)
+        ) {
+          res.writeHead(409).end()
+          return
+        }
         const token = req.headers['x-test-token']
         if (
           typeof token !== 'string' ||
@@ -661,6 +846,16 @@ beforeAll(async () => {
         return
       }
       const historical = path === '/api/pos/offline/import' || path === '/api/pos/offline/seal'
+      if (
+        restartCommissioning &&
+        req.method === 'POST' &&
+        (restartCheckpointFailed ||
+          restartCheckpointBusy ||
+          (restartCheckpoints.length < 3 && (historical || restartCheckpoints.length > 0)))
+      ) {
+        res.writeHead(409).end()
+        return
+      }
       if (historical) expect(req.headers.cookie).toBeUndefined()
       const response = await route(
         path,
@@ -735,6 +930,7 @@ beforeAll(async () => {
         branchId,
         productId,
         devices,
+        ...(restartCommissioning ? { restartCommissioning: true } : {}),
         ...(historicalRevocation
           ? { historicalRevocation: true, testControlToken: completionToken }
           : {}),
@@ -772,185 +968,220 @@ afterAll(async () => {
   if (reportPath) await save()
 }, 30000)
 
-it('commissions two real Android ledgers through isolated HTTPS and verifies durable SQL custody', async () => {
-  const probe = Buffer.from(
-    JSON.stringify({ challenge: 'a'.repeat(64), branchId, deviceId: devices[0].deviceId })
-  )
-  expect((await route('/api/pos/native/preparation', 'POST', probe, null)).status).toBe(401)
-  expect(
-    (
-      await route(
-        '/api/pos/native/preparation',
-        'POST',
-        probe,
-        `pos-access=${devices[0].accessToken}`
-      )
-    ).status
-  ).toBe(403)
-  expect(
-    (await route('/api/pos/native/preparation', 'POST', probe, cookie(devices[1]))).status
-  ).toBe(403)
-  expect(
-    (
-      await route(
-        '/api/pos/native/preparation',
-        'POST',
-        probe,
-        cookie(devices[0]),
-        'https://foreign.example'
-      )
-    ).status
-  ).toBe(403)
-  expect(
-    (await route('/api/pos/native/preparation', 'POST', probe, cookie(devices[0]))).status
-  ).toBe(200)
-  report.checks.push(
-    'Missing authentication/binding, foreign device and foreign origin denied through production handlers and SQL'
-  )
-  const timeout = Number(process.env.NATIVE_NETWORK_TIMEOUT_MS ?? 600000)
-  if (!Number.isInteger(timeout) || timeout < 1000 || timeout > 600000)
-    throw new Error('Invalid commissioning timeout')
-  let timer: ReturnType<typeof setTimeout> | undefined
-  let ids: string[]
-  try {
-    ids = await Promise.race([
-      completed,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error('Android completion not received')), timeout)
-      }),
-    ])
-  } finally {
-    clearTimeout(timer)
-  }
-  const db = await pool!.connect()
-  try {
-    const receipts = (
-      await db.query<ReceiptRow>(
-        'select * from public.pos_offline_receipts order by key_epoch,device_sequence'
-      )
-    ).rows
-    expect(receipts).toHaveLength(6)
-    expect(receipts.map((r) => r.issuance_id).sort()).toEqual(ids!.sort())
-    const epochs = (await db.query<EpochRow>('select * from public.pos_offline_key_epochs')).rows
-    expect(epochs).toHaveLength(2)
-    expect(new Set(epochs.map((e) => e.device_key_sha256)).size).toBe(2)
-    const authorities = (
-      await db.query<AuthorityRow>('select * from public.pos_offline_authorities')
-    ).rows
-    expect(authorities).toHaveLength(4)
-    expect(authorities.every((a) => a.sealed_at !== null)).toBe(true)
-    for (let i = 0; i < authorities.length; i++)
-      for (let j = i + 1; j < authorities.length; j++) {
-        const a = authorities[i].authority.invoiceRange,
-          b = authorities[j].authority.invoiceRange
-        expect(a.prefix !== b.prefix || a.last < b.first || b.last < a.first).toBe(true)
-      }
-    for (const epoch of epochs) {
-      expect(Number(epoch.last_sequence)).toBe(3)
-      const own = receipts.filter((r) => r.key_epoch === epoch.id)
-      expect(own.map((r) => Number(r.device_sequence))).toEqual([1, 2, 3])
-      let previous: string | null = null
-      const key = await importOfflinePublicKey(epoch.public_key_spki)
-      for (const receipt of own) {
-        const verified = await verifySignedEnvelope(receipt.envelope, offlineIssuanceSchema, {
-          [epoch.device_key_sha256]: key,
-        })
-        expect(verified.payloadSha256).toBe(receipt.payload_sha256)
-        expect(verified.payload.previousEventSha256).toBe(previous)
-        previous = receipt.payload_sha256
-        expect(verified.payload.document.totals).toEqual({
-          grossFils: 1000,
-          netFils: 952,
-          taxFils: 48,
-        })
-        expect(verified.payload.document.lines).toHaveLength(1)
-        expect(verified.payload.document.lines[0]).toMatchObject({
-          productId,
-          quantityMilli: 1000,
-          unitPriceFils: 1000,
-          grossFils: 1000,
-          netFils: 952,
-          taxFils: 48,
-        })
-        expect(
-          (
-            await db.query('select snapshot from public.pos_documents where id=$1', [
-              receipt.document_id,
-            ])
-          ).rows[0].snapshot
-        ).toEqual(verified.payload.document)
-        const ack = await verifySignedEnvelope(receipt.acknowledgement, offlineAckSchema, {
-          'synthetic-network-server': serverKey.publicKey,
-        })
-        expect(ack.payload.payloadSha256).toBe(receipt.payload_sha256)
-        expect(ack.payload.issuanceId).toBe(receipt.issuance_id)
-      }
-      expect(epoch.last_event_sha256).toBe(previous)
-    }
-    expect(await scalar('select count(*)::int from public.pos_orders')).toBe(6)
-    expect(await scalar('select count(*)::int from public.pos_documents')).toBe(6)
-    expect(
-      await scalar('select count(distinct document_number)::int from public.pos_documents')
-    ).toBe(6)
-    expect(await scalar('select sum(total_fils)::int from public.pos_orders')).toBe(6000)
-    expect(
-      await scalar("select sum(amount_fils)::int from public.pos_payments where method='cash'")
-    ).toBe(6000)
-    expect(await scalar('select count(*)::int from public.pos_payments')).toBe(6)
-    expect(await scalar('select count(*)::int from public.pos_offline_exceptions')).toBe(0)
-    const shifts = (
-      await db.query<ShiftRow>(
-        'select id,status,counted_cash_fils,expected_cash_fils,cash_difference_fils from public.pos_shifts'
-      )
-    ).rows
-    expect(shifts).toHaveLength(2)
-    for (const shift of shifts) {
-      expect(shift.status).toBe('closed')
-      expect(Number(shift.counted_cash_fils)).toBe(13000)
-      expect(Number(shift.expected_cash_fils)).toBe(13000)
-      expect(Number(shift.cash_difference_fils)).toBe(0)
-    }
-    expect(
-      requests.filter((r) => r.path === '/api/pos/offline/import' && r.status === 200).length
-    ).toBeGreaterThan(6)
-    const grouped = new Map<string, Set<string>>()
-    for (const r of requests.filter(
-      (r) => r.path === '/api/pos/offline/import' && r.status === 200
-    )) {
-      const hashes = grouped.get(r.requestSha256) ?? new Set()
-      hashes.add(r.responseSha256)
-      grouped.set(r.requestSha256, hashes)
-    }
-    expect(grouped.size).toBe(6)
-    for (const values of grouped.values()) expect(values.size).toBe(1)
-    if (historicalRevocation) {
-      expect(historicalPhase).toBe('restored')
-      expect(
-        await scalar('select revision::int from public.pos_products where id=$1', [productId])
-      ).toBe(3)
-    }
-    report.historicalPhase = historicalPhase
-    report.tlsProtocols = [...tlsProtocols]
-    expect(historicalCookieFreeChecks).toBeGreaterThanOrEqual(10)
-    report.historicalCookieFreeChecks = historicalCookieFreeChecks
-    report.status = 'passed'
-    report.checks.push(
-      'Six exact native signed receipts and ACKs, two distinct key epochs, four disjoint sealed authorities',
-      'Per-device chain 1..3 across continuation, no reused number, duplicate imports retain the same financial payload and signed ACK; replay flag may differ',
-      'Six immutable invoices/orders/cash rows total6000; both counted drawers13000 with zero difference; no exceptions'
+it(
+  'commissions two real Android ledgers through isolated HTTPS and verifies durable SQL custody',
+  async () => {
+    const probe = Buffer.from(
+      JSON.stringify({ challenge: 'a'.repeat(64), branchId, deviceId: devices[0].deviceId })
     )
-    report.receipts = receipts.map((r) => ({
-      id: r.issuance_id,
-      documentId: r.document_id,
-      number: r.document_number,
-      payloadSha256: r.payload_sha256,
-      keyEpoch: r.key_epoch,
-      sequence: r.device_sequence,
-    }))
-    report.shifts = shifts
-    report.requests = requests
-    await save()
-  } finally {
-    db.release()
-  }
-}, 620000)
+    expect((await route('/api/pos/native/preparation', 'POST', probe, null)).status).toBe(401)
+    expect(
+      (
+        await route(
+          '/api/pos/native/preparation',
+          'POST',
+          probe,
+          `pos-access=${devices[0].accessToken}`
+        )
+      ).status
+    ).toBe(403)
+    expect(
+      (await route('/api/pos/native/preparation', 'POST', probe, cookie(devices[1]))).status
+    ).toBe(403)
+    expect(
+      (
+        await route(
+          '/api/pos/native/preparation',
+          'POST',
+          probe,
+          cookie(devices[0]),
+          'https://foreign.example'
+        )
+      ).status
+    ).toBe(403)
+    expect(
+      (await route('/api/pos/native/preparation', 'POST', probe, cookie(devices[0]))).status
+    ).toBe(200)
+    report.checks.push(
+      'Missing authentication/binding, foreign device and foreign origin denied through production handlers and SQL'
+    )
+    const timeout = Number(process.env.NATIVE_NETWORK_TIMEOUT_MS ?? 600000)
+    if (
+      !Number.isInteger(timeout) ||
+      timeout < 1000 ||
+      timeout > (restartCommissioning ? 1200000 : 600000)
+    )
+      throw new Error('Invalid commissioning timeout')
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let ids: string[]
+    try {
+      ids = await Promise.race([
+        completed,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('Android completion not received')), timeout)
+        }),
+      ])
+    } finally {
+      clearTimeout(timer)
+    }
+    const db = await pool!.connect()
+    try {
+      const receipts = (
+        await db.query<ReceiptRow>(
+          'select * from public.pos_offline_receipts order by key_epoch,device_sequence'
+        )
+      ).rows
+      expect(receipts).toHaveLength(6)
+      if (restartCommissioning) {
+        expect(restartCheckpointFailed).toBe(false)
+        expect(restartCheckpoints).toHaveLength(3)
+        for (const device of restartCheckpoints[0].devices) {
+          const row = (
+            await db.query<{ seal_evidence: unknown; public_key_spki: string }>(
+              'select g.seal_evidence,e.public_key_spki from public.pos_offline_authorities g join public.pos_offline_key_epochs e on e.id=g.key_epoch where g.id=$1',
+              [device.authorityId]
+            )
+          ).rows[0]
+          const verified = await verifySignedEnvelope(row.seal_evidence, offlineSealSchema, {
+            [device.deviceKeySha256]: await importOfflinePublicKey(row.public_key_spki),
+          })
+          expect(verified.payloadSha256).toBe(device.sealSha256)
+        }
+        for (const original of restartCheckpoints[0].devices.flatMap((d) => d.receipts)) {
+          expect(receipts.find((r) => r.issuance_id === original.issuanceId)).toMatchObject({
+            document_id: original.documentId,
+            document_number: original.documentNumber,
+            payload_sha256: original.payloadSha256,
+            authority_id: original.authorityId,
+          })
+        }
+        report.checks.push(
+          'Final six server receipts contain all four pre-force-stop originals with unchanged document IDs, numbers, payload hashes and authorities'
+        )
+      }
+      expect(receipts.map((r) => r.issuance_id).sort()).toEqual(ids!.sort())
+      const epochs = (await db.query<EpochRow>('select * from public.pos_offline_key_epochs')).rows
+      expect(epochs).toHaveLength(2)
+      expect(new Set(epochs.map((e) => e.device_key_sha256)).size).toBe(2)
+      const authorities = (
+        await db.query<AuthorityRow>('select * from public.pos_offline_authorities')
+      ).rows
+      expect(authorities).toHaveLength(4)
+      expect(authorities.every((a) => a.sealed_at !== null)).toBe(true)
+      for (let i = 0; i < authorities.length; i++)
+        for (let j = i + 1; j < authorities.length; j++) {
+          const a = authorities[i].authority.invoiceRange,
+            b = authorities[j].authority.invoiceRange
+          expect(a.prefix !== b.prefix || a.last < b.first || b.last < a.first).toBe(true)
+        }
+      for (const epoch of epochs) {
+        expect(Number(epoch.last_sequence)).toBe(3)
+        const own = receipts.filter((r) => r.key_epoch === epoch.id)
+        expect(own.map((r) => Number(r.device_sequence))).toEqual([1, 2, 3])
+        let previous: string | null = null
+        const key = await importOfflinePublicKey(epoch.public_key_spki)
+        for (const receipt of own) {
+          const verified = await verifySignedEnvelope(receipt.envelope, offlineIssuanceSchema, {
+            [epoch.device_key_sha256]: key,
+          })
+          expect(verified.payloadSha256).toBe(receipt.payload_sha256)
+          expect(verified.payload.previousEventSha256).toBe(previous)
+          previous = receipt.payload_sha256
+          expect(verified.payload.document.totals).toEqual({
+            grossFils: 1000,
+            netFils: 952,
+            taxFils: 48,
+          })
+          expect(verified.payload.document.lines).toHaveLength(1)
+          expect(verified.payload.document.lines[0]).toMatchObject({
+            productId,
+            quantityMilli: 1000,
+            unitPriceFils: 1000,
+            grossFils: 1000,
+            netFils: 952,
+            taxFils: 48,
+          })
+          expect(
+            (
+              await db.query('select snapshot from public.pos_documents where id=$1', [
+                receipt.document_id,
+              ])
+            ).rows[0].snapshot
+          ).toEqual(verified.payload.document)
+          const ack = await verifySignedEnvelope(receipt.acknowledgement, offlineAckSchema, {
+            'synthetic-network-server': serverKey.publicKey,
+          })
+          expect(ack.payload.payloadSha256).toBe(receipt.payload_sha256)
+          expect(ack.payload.issuanceId).toBe(receipt.issuance_id)
+        }
+        expect(epoch.last_event_sha256).toBe(previous)
+      }
+      expect(await scalar('select count(*)::int from public.pos_orders')).toBe(6)
+      expect(await scalar('select count(*)::int from public.pos_documents')).toBe(6)
+      expect(
+        await scalar('select count(distinct document_number)::int from public.pos_documents')
+      ).toBe(6)
+      expect(await scalar('select sum(total_fils)::int from public.pos_orders')).toBe(6000)
+      expect(
+        await scalar("select sum(amount_fils)::int from public.pos_payments where method='cash'")
+      ).toBe(6000)
+      expect(await scalar('select count(*)::int from public.pos_payments')).toBe(6)
+      expect(await scalar('select count(*)::int from public.pos_offline_exceptions')).toBe(0)
+      const shifts = (
+        await db.query<ShiftRow>(
+          'select id,status,counted_cash_fils,expected_cash_fils,cash_difference_fils from public.pos_shifts'
+        )
+      ).rows
+      expect(shifts).toHaveLength(2)
+      for (const shift of shifts) {
+        expect(shift.status).toBe('closed')
+        expect(Number(shift.counted_cash_fils)).toBe(13000)
+        expect(Number(shift.expected_cash_fils)).toBe(13000)
+        expect(Number(shift.cash_difference_fils)).toBe(0)
+      }
+      expect(
+        requests.filter((r) => r.path === '/api/pos/offline/import' && r.status === 200).length
+      ).toBeGreaterThan(6)
+      const grouped = new Map<string, Set<string>>()
+      for (const r of requests.filter(
+        (r) => r.path === '/api/pos/offline/import' && r.status === 200
+      )) {
+        const hashes = grouped.get(r.requestSha256) ?? new Set()
+        hashes.add(r.responseSha256)
+        grouped.set(r.requestSha256, hashes)
+      }
+      expect(grouped.size).toBe(6)
+      for (const values of grouped.values()) expect(values.size).toBe(1)
+      if (historicalRevocation) {
+        expect(historicalPhase).toBe('restored')
+        expect(
+          await scalar('select revision::int from public.pos_products where id=$1', [productId])
+        ).toBe(3)
+      }
+      report.historicalPhase = historicalPhase
+      report.tlsProtocols = [...tlsProtocols]
+      expect(historicalCookieFreeChecks).toBeGreaterThanOrEqual(10)
+      report.historicalCookieFreeChecks = historicalCookieFreeChecks
+      report.status = 'passed'
+      report.checks.push(
+        'Six exact native signed receipts and ACKs, two distinct key epochs, four disjoint sealed authorities',
+        'Per-device chain 1..3 across continuation, no reused number, duplicate imports retain the same financial payload and signed ACK; replay flag may differ',
+        'Six immutable invoices/orders/cash rows total6000; both counted drawers13000 with zero difference; no exceptions'
+      )
+      report.receipts = receipts.map((r) => ({
+        id: r.issuance_id,
+        documentId: r.document_id,
+        number: r.document_number,
+        payloadSha256: r.payload_sha256,
+        keyEpoch: r.key_epoch,
+        sequence: r.device_sequence,
+      }))
+      report.shifts = shifts
+      report.requests = requests
+      await save()
+    } finally {
+      db.release()
+    }
+  },
+  restartCommissioning ? 1220000 : 620000
+)

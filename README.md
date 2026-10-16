@@ -63,4 +63,6 @@ pnpm build
 
 Real IndexedDB tests run in disposable Chromium through the core test harness. Disposable PostgreSQL migration tests are in `tests/integration/`; their headers describe isolated execution. Neither is proof of physical printer, Android, cloud or live multi-device operation.
 
+The isolated [native/server commissioning](docs/operations/native-network-commissioning.md) now also verifies four queued bills across an actual Android app force-stop and emulator reboot with network access disconnected, followed by HTTPS reconciliation, duplicate prevention, continuation and drawer closing. This uses two independent storage/key namespaces on one emulator. Production Android issuance remains disabled; physical POS/printer acceptance and a signed customer APK remain pending.
+
 Preview desktop and mobile before release. Production deployment requires explicit owner approval; APK distribution requires a signed, tested package. See [online pilot verification](docs/plans/2026-10-16-online-pilot.md); the earlier web delivery document describes the training milestone.

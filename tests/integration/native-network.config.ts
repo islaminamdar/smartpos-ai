@@ -7,7 +7,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/integration/native-network-service.test.ts'],
-    testTimeout: 660_000,
+    testTimeout: process.env.NATIVE_NETWORK_RESTART === 'true' ? 1_260_000 : 660_000,
     hookTimeout: 60_000,
     maxWorkers: 1,
   },
