@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { syncOrderSchema } from './contracts'
 import { merchantProfileSchema, receiptCustomerSchema } from './documents'
 import { offerSelectionSchema } from './offers'
+import { returnRequestShape, returnRequestSchema } from './returns'
 
 export const liveOrderSchema = z
   .object({
@@ -78,31 +79,48 @@ const device = { id: uuid, branchId: uuid, deviceId: uuid, shiftId: uuid }
 const fils = z.number().int().min(0).max(100_000_000)
 export const liveCommandSchema = z
   .object({
-    command: z.discriminatedUnion('type', [
-      z.object({ ...device, type: z.literal('shift.open'), openingCashFils: fils }).strict(),
-      z.object({ ...device, type: z.literal('shift.close'), countedCashFils: fils }).strict(),
-      z
-        .object({
-          ...device,
-          type: z.literal('cash.move'),
-          amountFils: z
-            .number()
-            .int()
-            .min(-100_000_000)
-            .max(100_000_000)
-            .refine((n) => n !== 0),
-          reason: z.string().trim().min(1).max(240),
-        })
-        .strict(),
-      z
-        .object({
-          ...device,
-          type: z.literal('refund.full'),
-          orderId: uuid,
-          reason: z.string().trim().min(1).max(240),
-        })
-        .strict(),
-    ]),
+    command: z
+      .discriminatedUnion('type', [
+        z
+          .object({
+            ...returnRequestShape,
+            id: uuid.refine((value) => value === value.toLowerCase()),
+            type: z.literal('refund.items'),
+            quoteHash: z.string().regex(/^[a-f0-9]{64}$/),
+          })
+          .strict(),
+        z.object({ ...device, type: z.literal('shift.open'), openingCashFils: fils }).strict(),
+        z.object({ ...device, type: z.literal('shift.close'), countedCashFils: fils }).strict(),
+        z
+          .object({
+            ...device,
+            type: z.literal('cash.move'),
+            amountFils: z
+              .number()
+              .int()
+              .min(-100_000_000)
+              .max(100_000_000)
+              .refine((n) => n !== 0),
+            reason: z.string().trim().min(1).max(240),
+          })
+          .strict(),
+        z
+          .object({
+            ...device,
+            type: z.literal('refund.full'),
+            orderId: uuid,
+            reason: z.string().trim().min(1).max(240),
+          })
+          .strict(),
+      ])
+      .superRefine((command, ctx) => {
+        if (command.type !== 'refund.items') return
+        const request = Object.fromEntries(
+          Object.entries(command).filter(([key]) => !['id', 'type', 'quoteHash'].includes(key))
+        )
+        if (!returnRequestSchema.safeParse(request).success)
+          ctx.addIssue({ code: 'custom', message: 'Invalid return selections.' })
+      }),
   })
   .strict()
 export const liveDeviceSchema = z.object({ id: uuid, branchId: uuid, name: z.string() })

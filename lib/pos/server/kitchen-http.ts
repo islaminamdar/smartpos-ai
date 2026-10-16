@@ -19,6 +19,7 @@ export function kitchenResult(command: KitchenCommand, data: unknown) {
 }
 export function kitchenRpcError(message: string): never {
   const codes: Record<string, [string, number]> = {
+    POS_KITCHEN_RETURN_PENDING: ['kitchen_return_acknowledgement_required', 409],
     POS_ACCESS_DENIED: ['kitchen_forbidden', 403],
     POS_DEVICE_INVALID: ['kitchen_forbidden', 403],
     POS_MANAGER_REQUIRED: ['kitchen_forbidden', 403],

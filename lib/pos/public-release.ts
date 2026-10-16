@@ -8,11 +8,23 @@ export function publicReleaseAccess(
   if (path === '/api/pos/health') return read ? 'allow' : 'not_found'
   // Current authenticated manager reads have their own server-side feature gate and
   // permissions. The candidate decision writer is intentionally NOT exposed yet.
-  if (path === '/api/pos/manager/offline-payments' || path === '/api/pos/manager/offline-payments/case')
+  if (
+    path === '/api/pos/manager/offline-payments' ||
+    path === '/api/pos/manager/offline-payments/case'
+  )
     return read ? 'allow' : 'not_found'
   // Previously issued device evidence must remain recoverable when new selling is paused.
-  if (path === '/api/pos/offline/import' || path === '/api/pos/offline/seal' || path === '/api/pos/offline/bundle-recovery' ||
-    path === '/api/pos/offline/payment-freeze' || path === '/api/pos/offline/payment-resolution' || path === '/api/pos/native/shift-close' || path === '/api/pos/native/pin-recovery' || path === '/api/pos/native/clock-recovery' || path === '/api/pos/inventory/recovery')
+  if (
+    path === '/api/pos/offline/import' ||
+    path === '/api/pos/offline/seal' ||
+    path === '/api/pos/offline/bundle-recovery' ||
+    path === '/api/pos/offline/payment-freeze' ||
+    path === '/api/pos/offline/payment-resolution' ||
+    path === '/api/pos/native/shift-close' ||
+    path === '/api/pos/native/pin-recovery' ||
+    path === '/api/pos/native/clock-recovery' ||
+    path === '/api/pos/inventory/recovery'
+  )
     return method === 'POST' ? 'allow' : 'not_found'
   if (onlinePilot) {
     if (
@@ -59,6 +71,8 @@ export function publicReleaseAccess(
       '/api/pos/offers/quote': ['POST'],
       '/api/pos/bootstrap': ['GET'],
       '/api/pos/receipts': ['GET'],
+      '/api/pos/returns': ['GET', 'POST'],
+      '/api/pos/kitchen-returns': ['GET', 'POST'],
       '/api/pos/reports': ['GET'],
       '/api/pos/operations': ['GET'],
       '/api/pos/recovery': ['POST'],

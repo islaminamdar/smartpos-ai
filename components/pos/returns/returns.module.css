@@ -1,0 +1,251 @@
+.panel {
+  margin-top: 24px;
+  padding: 22px;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  background: #f7fafc;
+  color: #142d4e;
+  min-width: 0;
+}
+.panel * {
+  box-sizing: border-box;
+}
+.panel h2,
+.panel h3 {
+  margin: 0 0 8px;
+  line-height: 1.3;
+}
+.panel p,
+.panel small {
+  line-height: 1.55;
+}
+.panel small {
+  display: block;
+}
+.panel button,
+.panel input,
+.panel textarea {
+  font: inherit;
+  min-height: 48px;
+  max-width: 100%;
+  border-radius: 8px;
+}
+.panel button {
+  padding: 11px 15px;
+  border: 1px solid #9baec2;
+  background: #fff;
+  color: #173451;
+  cursor: pointer;
+  white-space: normal;
+}
+.panel button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.panel button:focus-visible,
+.panel input:focus-visible,
+.panel textarea:focus-visible,
+.panel h3:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 3px;
+}
+.panel .primary {
+  background: #1858a4;
+  border-color: #1858a4;
+  color: #fff;
+  font-weight: 700;
+}
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.header > div {
+  flex: 1 1 240px;
+}
+.header p {
+  margin: 0;
+}
+.note {
+  color: #40576f;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 18px 0;
+}
+.lines {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+  margin: 16px 0;
+}
+.line {
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  padding: 16px;
+  border-radius: 10px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.select,
+.confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+}
+.panel input[type='checkbox'] {
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+  flex: 0 0 22px;
+  margin: 2px 0;
+  accent-color: #1858a4;
+}
+.select {
+  min-height: 48px;
+  align-items: center;
+}
+.quantities {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 16px 0;
+}
+.quantities dt {
+  font-size: 12px;
+  color: #52667a;
+}
+.quantities dd {
+  margin: 3px 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+.line > label:not(.select),
+.reason {
+  display: grid;
+  gap: 8px;
+  font-weight: 600;
+}
+.line input:not([type='checkbox']),
+.reason textarea {
+  width: 100%;
+  padding: 11px;
+  border: 1px solid #91a4b8;
+  background: white;
+  color: #142d4e;
+}
+.line input[aria-invalid='true'] {
+  border-color: #a12020;
+}
+.line label small {
+  font-weight: 400;
+  color: #52667a;
+}
+.reason {
+  margin: 20px 0;
+}
+.reason textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+.balance {
+  display: grid;
+  gap: 5px;
+  padding: 16px;
+  border-radius: 10px;
+  background: #e9f1f9;
+  overflow-wrap: anywhere;
+}
+.balance strong {
+  font-size: 24px;
+}
+.preview {
+  border-top: 2px solid #b8cbe0;
+  margin-top: 24px;
+  padding-top: 24px;
+}
+.amounts {
+  display: grid;
+  gap: 9px;
+}
+.amounts > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+}
+.amounts dt {
+  min-width: 0;
+}
+.amounts dd {
+  flex-shrink: 0;
+  margin: 0;
+  font-weight: 700;
+}
+.confirm {
+  margin: 20px 0;
+  padding: 14px;
+  border: 1px solid #8aa6c4;
+  border-radius: 8px;
+  background: white;
+  line-height: 1.5;
+}
+.error,
+.warning {
+  border-left: 4px solid #a76b16;
+  padding: 12px;
+  background: #fff5df;
+  color: #5b3b0e;
+  overflow-wrap: anywhere;
+}
+.error {
+  border-color: #a12020;
+  background: #fff0f0;
+  color: #811c1c;
+}
+@media (max-width: 600px) {
+  .panel {
+    padding: 14px;
+  }
+  .amounts > div {
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+  .actions > button {
+    flex: 1 1 170px;
+  }
+  .panel .primary {
+    width: 100%;
+  }
+  .line {
+    padding: 12px;
+  }
+}
+@media (max-width: 360px) {
+  .panel {
+    padding: 10px;
+  }
+  .quantities {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+  .quantities > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .quantities dd {
+    margin: 0;
+  }
+}
+@media print {
+  .panel {
+    display: none;
+  }
+}

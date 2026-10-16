@@ -20,6 +20,9 @@ import {
   type PendingOnlineRequest,
 } from '@/lib/pos/online-journal'
 import FiscalReceipt from './FiscalReceipt'
+import PartialReturnPanel from './returns/PartialReturnPanel'
+import KitchenReturnNotices from './KitchenReturnNotices'
+import { returnCreditMatchesCommand } from '@/lib/pos/server/returns'
 import OfflinePaymentReviews from './offline-payments/OfflinePaymentReviews'
 import {
   readPendingPaymentReviews,
@@ -95,6 +98,10 @@ const humanError = (error: unknown) => {
       return 'Too many attempts. Please wait a few minutes before trying again.'
     if (error.code === 'POS_KITCHEN_DISPATCH_REQUIRED')
       return 'Send the saved changes to the kitchen before payment. Resolve this saved payment request first and reconcile any money collected.'
+    if (error.code === 'POS_RETURN_STALE')
+      return 'This invoice changed after the preview. Resolve this saved request before checking remaining items and confirming a new return.'
+    if (error.code === 'POS_RETURN_QUANTITY' || error.code === 'POS_RETURN_UNAVAILABLE')
+      return 'The original quantities or return history could not be verified. Resolve the saved request; do not return money without a confirmed credit note.'
     if (error.code.includes('PRICE') || error.code.includes('PROFILE'))
       return 'The menu or business details changed. This request needs review before you take another payment.'
     if (error.code.includes('OFFER'))
@@ -141,6 +148,8 @@ export default function LiveCounter({
   const [busy, setBusy] = useState(false)
   const locked = useRef(false)
   const actorScope = useRef('')
+  const actorGeneration = useRef(0)
+  const accessShift = useRef('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [online, setOnline] = useState(true)
@@ -159,6 +168,7 @@ export default function LiveCounter({
   const [tabKitchenJournalReady, setTabKitchenJournalReady] = useState(false)
   const [tabKitchenBusy, setTabKitchenBusy] = useState(false)
   const [kitchenPending, setKitchenPending] = useState(false)
+  const [kitchenReturnRevision, setKitchenReturnRevision] = useState(0)
   const [kitchenJournalReady, setKitchenJournalReady] = useState(false)
   const [openOrderPending, setOpenOrderPending] = useState(false)
   const [openOrderJournalReady, setOpenOrderJournalReady] = useState(false)
@@ -197,8 +207,6 @@ export default function LiveCounter({
   const [documents, setDocuments] = useState<FiscalDocument[]>([])
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [selected, setSelected] = useState<FiscalDocument | null>(null)
-  const [refundReason, setRefundReason] = useState('')
-  const [refundConfirmed, setRefundConfirmed] = useState(false)
   const orderRef = useRef<HTMLElement>(null)
   const branch = boot?.branches.find((item) => item.id === branchId)
   const shift = boot?.shifts.find(
@@ -210,9 +218,11 @@ export default function LiveCounter({
   const manager = branch?.role === 'manager' || branch?.role === 'owner'
   const operationsAccess =
     boot?.branches.some((item) => item.role === 'manager' || item.role === 'owner') ?? false
-  const selectedCredited =
-    selected?.kind === 'tax_invoice' &&
-    documents.some((item) => item.kind === 'tax_credit_note' && item.orderId === selected.orderId)
+  const pendingCommand =
+    pending?.endpoint === '/api/pos/commands' ? liveCommandSchema.safeParse(pending.body) : null
+  const pendingReturn =
+    pendingCommand?.success &&
+    ['refund.full', 'refund.items'].includes(pendingCommand.data.command.type)
   const products = boot?.catalogue.filter((item) => item.branchId === branchId) ?? []
   const visibleProducts = products.filter(
     (item) =>
@@ -478,6 +488,11 @@ export default function LiveCounter({
     const next = liveBootstrapSchema.parse(await api('/api/pos/bootstrap'))
     const journal = await readPendingRequest(next.userId)
     const scope = `${next.userId}:${next.device?.id ?? ''}:${next.device?.branchId ?? ''}`
+    const nextShift =
+      next.shifts.find((item) => item.deviceId === next.device?.id && item.openedBy === next.userId)
+        ?.id ?? ''
+    if (actorScope.current !== scope || accessShift.current !== nextShift) actorGeneration.current++
+    accessShift.current = nextShift
     if (actorScope.current !== scope) {
       setDocuments([])
       setNextCursor(null)
@@ -492,8 +507,6 @@ export default function LiveCounter({
       setBuyerName('')
       setBuyerAddress('')
       setBuyerTrn('')
-      setRefundReason('')
-      setRefundConfirmed(false)
       setSearch('')
       setCategory('All')
       setView('sell')
@@ -583,12 +596,14 @@ export default function LiveCounter({
       request.branchId !== boot.device.branchId
     )
       throw new Error('Sign in on the original enrolled counter to recover this request.')
+    const context = { scope: actorScope.current, generation: actorGeneration.current }
     const result = await api(request.endpoint, 'POST', request.body)
-    await confirmRequest(request, result)
+    await confirmRequest(request, result, context)
   }
   async function recover(request: PendingOnlineRequest) {
     if (!boot || request.actorId !== boot.userId)
       throw new Error('Use the original account and browser to resolve this request.')
+    const context = { scope: actorScope.current, generation: actorGeneration.current }
     const kind = request.endpoint === '/api/pos/sync' ? 'sale' : 'command'
     const original =
       kind === 'sale'
@@ -609,6 +624,8 @@ export default function LiveCounter({
       )
         throw new Error('Cancellation did not match the saved request.')
       await acknowledgePendingRequest(request.actorId, request.id)
+      if (context.scope !== actorScope.current || context.generation !== actorGeneration.current)
+        return
       setPending(null)
       setBasket([])
       setSourceTab(null)
@@ -619,14 +636,22 @@ export default function LiveCounter({
       setCardInput('')
       setSelected(null)
       setNotice(
-        'The server confirmed this request was not recorded and has permanently cancelled it. Reconcile any money already collected before starting another sale.'
+        kind === 'command' &&
+          'type' in original &&
+          ['refund.full', 'refund.items'].includes(original.type)
+          ? 'The server confirmed this return was not recorded and has permanently cancelled it. Check any money already returned before starting another return.'
+          : 'The server confirmed this request was not recorded and has permanently cancelled it. Reconcile any money already collected before starting another sale.'
       )
       await refresh()
       return
     }
-    await confirmRequest(request, result)
+    await confirmRequest(request, result, context)
   }
-  async function confirmRequest(request: PendingOnlineRequest, result: unknown) {
+  async function confirmRequest(
+    request: PendingOnlineRequest,
+    result: unknown,
+    context: { scope: string; generation: number }
+  ) {
     if (!result || typeof result !== 'object')
       throw new Error('The server response could not be verified. Retry the saved request.')
     let receipt: FiscalDocument | null = null
@@ -660,6 +685,13 @@ export default function LiveCounter({
         (!receipt || receipt.kind !== 'tax_credit_note' || receipt.orderId !== input.orderId)
       )
         throw new Error('The credit note did not match the saved refund request.')
+      if (
+        input.type === 'refund.items' &&
+        !returnCreditMatchesCommand(input, receipt, request.actorId)
+      )
+        throw new Error(
+          'The item return did not match its exact saved preview. Keep this request for recovery.'
+        )
     }
     if (
       receipt &&
@@ -671,6 +703,10 @@ export default function LiveCounter({
         'Document identity did not match this counter. Keep the saved request for review.'
       )
     await acknowledgePendingRequest(request.actorId, request.id)
+    // The immutable original journal may be acknowledged after a scope change, but
+    // its receipt and success state must never replace the current actor's UI.
+    if (context.scope !== actorScope.current || context.generation !== actorGeneration.current)
+      return
     setPending(null)
     if (request.endpoint === '/api/pos/sync') {
       setBasket([])
@@ -692,8 +728,6 @@ export default function LiveCounter({
     if (receipt) {
       setSelected(receipt)
       setView('receipts')
-      setRefundReason('')
-      setRefundConfirmed(false)
     }
     if ('cashDifferenceFils' in result && typeof result.cashDifferenceFils === 'number')
       setNotice(`Shift closed. Cash difference: ${currency(result.cashDifferenceFils)}.`)
@@ -1088,8 +1122,9 @@ export default function LiveCounter({
           <section className="lc-warning" aria-label="Pending request">
             <strong>A request needs confirmation</strong>
             <p>
-              Do not take this payment again. Retry checks the same saved request and cannot issue a
-              second invoice for it.
+              {pendingReturn
+                ? 'Do not return money without the confirmed credit note. Retry checks the exact saved return and cannot create a second credit for it.'
+                : 'Do not take this payment again. Retry checks the same saved request and cannot issue a second invoice for it.'}
             </p>
             <small>Reference: {pending.id}</small>
             <button disabled={busy || !online} onClick={() => void run(() => dispatch(pending))}>
@@ -1099,8 +1134,10 @@ export default function LiveCounter({
               <summary>Resolve a rejected request</summary>
               <p>
                 This checks the server first. If already recorded, its confirmation is restored.
-                Otherwise the request is permanently cancelled. Reconcile any payment already
-                collected before starting another sale.
+                Otherwise the request is permanently cancelled.{' '}
+                {pendingReturn
+                  ? 'Check any money already returned before starting another return.'
+                  : 'Reconcile any payment already collected before starting another sale.'}
               </p>
               <button disabled={busy || !online} onClick={() => void run(() => recover(pending))}>
                 Resolve or cancel unsaved request
@@ -1453,8 +1490,18 @@ export default function LiveCounter({
               />
             )}
             {view === 'kitchen' && branch && (
+              <KitchenReturnNotices
+                key={`${boot.userId}:${branchId}:${boot.device.id}`}
+                actorId={boot.userId}
+                branchId={branchId}
+                deviceId={boot.device.id}
+                disabled={busy || !!pending || !online || tabKitchenBusy || openOrderBusy}
+                onAcknowledged={() => setKitchenReturnRevision((value) => value + 1)}
+              />
+            )}
+            {view === 'kitchen' && branch && (
               <TabKitchenBoard
-                key={`${boot.userId}:${branchId}`}
+                key={`${boot.userId}:${branchId}:${kitchenReturnRevision}`}
                 actorId={boot.userId}
                 branchId={branchId}
                 branchName={branch.name}
@@ -1470,6 +1517,7 @@ export default function LiveCounter({
             )}
             {view === 'kitchen' && branch && (
               <KitchenBoard
+                key={`${boot.userId}:${branchId}:${kitchenReturnRevision}`}
                 actorId={boot.userId}
                 branchId={branchId}
                 branchName={branch.name}
@@ -1986,8 +2034,6 @@ export default function LiveCounter({
                         aria-pressed={selected?.id === document.id}
                         onClick={() => {
                           setSelected(document)
-                          setRefundReason('')
-                          setRefundConfirmed(false)
                         }}
                       >
                         <strong>{document.documentNumber}</strong>
@@ -2019,64 +2065,33 @@ export default function LiveCounter({
                         Choose the printer or Save as PDF in the browser dialog. Printer delivery is
                         not confirmed by this app.
                       </p>
-                      {selectedCredited && (
-                        <p className="lc-warning">
-                          This invoice already has a full credit note. Do not return the money
-                          again.
-                        </p>
-                      )}
                       {selected.kind === 'tax_credit_note' && (
                         <p className="lc-warning">
                           Return the amounts shown only once for this credit note. Card refunds must
                           be completed on your payment terminal; this app does not process them.
                         </p>
                       )}
-                      {selected.kind === 'tax_invoice' && manager && !selectedCredited && (
-                        <details>
-                          <summary>Full return &amp; credit note</summary>
-                          <p>
-                            This reverses the entire invoice. Wait for the credit note before
-                            returning money. Partial refunds are not available in this pilot.
-                          </p>
-                          <label>
-                            Reason
-                            <input
-                              value={refundReason}
-                              maxLength={240}
-                              onChange={(event) => setRefundReason(event.target.value)}
-                            />
-                          </label>
-                          <label className="lc-check">
-                            <input
-                              type="checkbox"
-                              checked={refundConfirmed}
-                              onChange={(event) => setRefundConfirmed(event.target.checked)}
-                            />
-                            I confirm the full order is being returned.
-                          </label>
-                          <button
-                            disabled={
-                              !mayWrite || !shift || !refundReason.trim() || !refundConfirmed
-                            }
-                            onClick={() =>
-                              void run(async () => {
-                                if (!boot.device || !shift)
-                                  throw new Error('Open your shift first.')
-                                await command({
-                                  id: crypto.randomUUID(),
-                                  type: 'refund.full',
-                                  branchId,
-                                  deviceId: boot.device.id,
-                                  shiftId: shift.id,
-                                  orderId: selected.orderId,
-                                  reason: refundReason.trim(),
-                                })
+                      {selected.kind === 'tax_invoice' && manager && boot.device && (
+                        <PartialReturnPanel
+                          key={`${boot.userId}:${branchId}:${boot.device.id}:${shift?.id ?? ''}:${selected.id}`}
+                          invoice={selected}
+                          actorId={boot.userId}
+                          deviceId={boot.device.id}
+                          shiftId={shift?.id ?? null}
+                          online={online}
+                          mayWrite={mayWrite && branch?.canRefund === true}
+                          pending={!!pending}
+                          onCommit={(request, quoteHash) =>
+                            run(async () => {
+                              await command({
+                                id: crypto.randomUUID(),
+                                type: 'refund.items',
+                                ...request,
+                                quoteHash,
                               })
-                            }
-                          >
-                            Issue full credit note
-                          </button>
-                        </details>
+                            })
+                          }
+                        />
                       )}
                     </div>
                   </div>
@@ -2266,8 +2281,8 @@ export default function LiveCounter({
                 <h2>Current live pilot</h2>
                 <p>
                   Online sales, recorded cash/card payments, weighted items, invoice reprints, shift
-                  closing, offers, full refunds, shared tables and kitchen dispatch before or after
-                  payment. Partial refunds and offline live sales are still being prepared.
+                  closing, offers, item and weight returns, shared tables and kitchen dispatch
+                  before or after payment. Offline live sales are still being prepared.
                 </p>
                 <Link href="/pos">Open separate training workspace</Link>
               </section>

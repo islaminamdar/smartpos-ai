@@ -201,9 +201,11 @@ function usePending({ actorId, branchId, disabled, onPendingChange }: Scope) {
         )
       } else {
         setError(
-          cause instanceof KitchenError && /conflict|revision/.test(cause.code)
-            ? 'Another operator may have changed this ticket. Check the saved change below before trying a new action.'
-            : 'The kitchen change is not confirmed. Keep this request and check it below; do not repeat the action as a new change.'
+          cause instanceof KitchenError && cause.code === 'kitchen_return_acknowledgement_required'
+            ? 'Check and acknowledge the return notice before changing preparation. Keep this saved change for recovery.'
+            : cause instanceof KitchenError && /conflict|revision/.test(cause.code)
+              ? 'Another operator may have changed this ticket. Check the saved change below before trying a new action.'
+              : 'The kitchen change is not confirmed. Keep this request and check it below; do not repeat the action as a new change.'
         )
       }
       return false

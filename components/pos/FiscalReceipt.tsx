@@ -5,6 +5,13 @@ import type { FiscalDocument } from '@/lib/pos/server/documents'
 
 export default function FiscalReceipt({ document: bill }: { document: FiscalDocument }) {
   const credit = bill.kind === 'tax_credit_note'
+  const itemReturn = bill.schemaVersion === 3
+  const offer =
+    bill.schemaVersion === 2
+      ? bill.appliedOffer
+      : bill.schemaVersion === 3
+        ? bill.originalOffer
+        : null
   const date = (value: string) =>
     new Date(value).toLocaleString('en-GB', { timeZone: 'Asia/Dubai', hour12: false })
   return (
@@ -47,13 +54,13 @@ export default function FiscalReceipt({ document: bill }: { document: FiscalDocu
           </p>
         </section>
       )}
-      {bill.schemaVersion === 2 && (
+      {offer && (
         <section className="lc-receipt-offer">
           <strong>
-            {credit ? 'Original offer' : 'Offer'}: {bill.appliedOffer.offerName}
+            {credit ? 'Original offer' : 'Offer'}: {offer.offerName}
           </strong>
-          {bill.appliedOffer.benefit.kind === 'percentage' && (
-            <span> · {bill.appliedOffer.benefit.basisPoints / 100}%</span>
+          {offer.benefit.kind === 'percentage' && (
+            <span> · {offer.benefit.basisPoints / 100}%</span>
           )}
           <p>Discounts are included in the line amounts below.</p>
         </section>
@@ -61,7 +68,9 @@ export default function FiscalReceipt({ document: bill }: { document: FiscalDocu
       <table>
         <thead>
           <tr>
-            <th>Item / Qty × price incl. VAT</th>
+            <th>
+              {itemReturn ? 'Returned item / original allocation' : 'Item / Qty × price incl. VAT'}
+            </th>
             <th>AED</th>
           </tr>
         </thead>
@@ -72,16 +81,31 @@ export default function FiscalReceipt({ document: bill }: { document: FiscalDocu
                 {line.name}
                 <small>
                   {line.quantityMilli / 1000}
-                  {line.unit === 'kg' ? ' kg' : ` ${line.unit}`} × {formatFils(line.unitPriceFils)}
+                  {line.unit === 'kg' ? ' kg' : ` ${line.unit}`}
+                  {'originalLineNumber' in line ? (
+                    <>
+                      {' '}
+                      · Original line {line.originalLineNumber}
+                      <br />
+                      Originally returned {line.returnedBeforeQuantityMilli / 1000} → now{' '}
+                      {line.returnedAfterQuantityMilli / 1000} {line.unit}
+                      <br />
+                      Original unit price: {formatFils(line.unitPriceFils)}
+                    </>
+                  ) : (
+                    <> × {formatFils(line.unitPriceFils)}</>
+                  )}
                   <br />
                   {'discountFils' in line && line.discountFils > 0 && (
                     <>
-                      Before offer: {formatFils(line.beforeDiscountFils)} · Discount: −
+                      {itemReturn ? 'Allocated before discount' : 'Before offer'}:{' '}
+                      {formatFils(line.beforeDiscountFils)} · Discount: −
                       {formatFils(line.discountFils)}
                       <br />
                     </>
                   )}
-                  VAT {line.taxRateBps / 100}%: {formatFils(line.taxFils)}
+                  VAT {line.taxRateBps / 100}%{itemReturn ? ' allocated' : ''}:{' '}
+                  {formatFils(line.taxFils)}
                   <br />
                   Line excluding VAT: {formatFils(line.netFils)}
                 </small>
@@ -91,15 +115,33 @@ export default function FiscalReceipt({ document: bill }: { document: FiscalDocu
           ))}
         </tbody>
       </table>
+      {itemReturn && (
+        <p>
+          Return amounts allocate the original billed net amount, VAT and discount. Rounding follows
+          cumulative returned quantities; this is not a new price calculation.
+        </p>
+      )}
       <dl>
-        {bill.schemaVersion === 2 && (
+        {(bill.schemaVersion === 2 || bill.schemaVersion === 3) && (
           <>
             <div>
-              <dt>{credit ? 'Original amount before offer' : 'Before offer, incl. VAT'}</dt>
+              <dt>
+                {itemReturn
+                  ? 'Returned amount before original discount'
+                  : credit
+                    ? 'Original amount before offer'
+                    : 'Before offer, incl. VAT'}
+              </dt>
               <dd>{formatFils(bill.totals.beforeDiscountFils)}</dd>
             </div>
             <div>
-              <dt>{credit ? 'Original offer discount' : 'Offer discount'}</dt>
+              <dt>
+                {itemReturn
+                  ? 'Original discount allocated to return'
+                  : credit
+                    ? 'Original offer discount'
+                    : 'Offer discount'}
+              </dt>
               <dd>−{formatFils(bill.totals.discountFils)}</dd>
             </div>
           </>
@@ -117,13 +159,60 @@ export default function FiscalReceipt({ document: bill }: { document: FiscalDocu
           <dd>{formatFils(bill.totals.grossFils)}</dd>
         </div>
       </dl>
-      {credit && <p>Invoice total after full credit: AED 0.00</p>}
+      {bill.schemaVersion === 3 ? (
+        <section aria-label="Invoice adjustment history">
+          <h4>Invoice balance for this adjustment</h4>
+          <dl>
+            <div>
+              <dt>Before this credit, excluding VAT</dt>
+              <dd>{formatFils(bill.previousAdjustedTotals.netFils)}</dd>
+            </div>
+            <div>
+              <dt>VAT before this credit</dt>
+              <dd>{formatFils(bill.previousAdjustedTotals.taxFils)}</dd>
+            </div>
+            <div>
+              <dt>Total before this credit</dt>
+              <dd>{formatFils(bill.previousAdjustedTotals.grossFils)}</dd>
+            </div>
+            <div>
+              <dt>Remaining excluding VAT</dt>
+              <dd>{formatFils(bill.adjustedTotals.netFils)}</dd>
+            </div>
+            <div>
+              <dt>Remaining VAT</dt>
+              <dd>{formatFils(bill.adjustedTotals.taxFils)}</dd>
+            </div>
+            <div>
+              <dt>Remaining invoice total</dt>
+              <dd>{formatFils(bill.adjustedTotals.grossFils)}</dd>
+            </div>
+          </dl>
+          <p>
+            {bill.fullyReturned
+              ? 'All original quantities have been returned.'
+              : 'Other original quantities remain available for return.'}
+          </p>
+          {bill.totals.grossFils === 0 && (
+            <p>
+              <strong>No refund due. Returned quantities recorded; no cash or card refund.</strong>
+            </p>
+          )}
+        </section>
+      ) : (
+        credit && <p>Invoice total after full credit: AED 0.00</p>
+      )}
       <dl>
         {bill.payments.map((payment) => (
           <div key={payment.method}>
             <dt>
-              {payment.method === 'cash' ? 'Cash' : 'Card recorded'}
-              {credit ? ' refund recorded' : ''}
+              {credit
+                ? payment.method === 'cash'
+                  ? 'Cash refund recorded'
+                  : 'Card refund to arrange'
+                : payment.method === 'cash'
+                  ? 'Cash'
+                  : 'Card recorded'}
             </dt>
             <dd>{formatFils(payment.amountFils)}</dd>
           </div>

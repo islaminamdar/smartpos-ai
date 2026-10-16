@@ -4,6 +4,7 @@ import { requirePilot, requireOrigin, recoveryBinding } from '@/lib/pos/server/l
 import { readBoundedBody } from '@/lib/pos/server/body'
 import { liveRecoverySchema } from '@/lib/pos/server/live-contracts'
 import { fiscalDocumentSchema } from '@/lib/pos/server/documents'
+import { returnCreditMatchesCommand, returnRequestSchema } from '@/lib/pos/server/returns'
 import { invoiceMatchesSale, settlementMatchesSale } from '@/lib/pos/server/sale-ack'
 import { posFailure, privateHeaders } from '@/lib/pos/server/http'
 export const dynamic = 'force-dynamic'
@@ -14,6 +15,15 @@ export async function POST(request: Request) {
     const { client, user } = await authenticatedPosClient()
     const parsed = liveRecoverySchema.safeParse(JSON.parse(await readBoundedBody(request, 100_000)))
     if (!parsed.success) throw new PosServerError('invalid_recovery_request', 422)
+    if (parsed.data.kind === 'command' && parsed.data.request.type === 'refund.items') {
+      const input = Object.fromEntries(
+        Object.entries(parsed.data.request).filter(
+          ([key]) => !['id', 'type', 'quoteHash'].includes(key)
+        )
+      )
+      if (!returnRequestSchema.safeParse(input).success)
+        throw new PosServerError('invalid_recovery_request', 422)
+    }
     const payload = parsed.data.request
     const binding = await recoveryBinding(user.id)
     const args = {
@@ -65,6 +75,8 @@ export async function POST(request: Request) {
       parsed.data.kind === 'command' &&
       data?.status === 'applied' &&
       data.commandId === payload.id &&
+      (parsed.data.request.type !== 'refund.items' ||
+        returnCreditMatchesCommand(parsed.data.request, data.creditNote, user.id)) &&
       (parsed.data.request.type !== 'refund.full' ||
         (credit.success &&
           credit.data.kind === 'tax_credit_note' &&

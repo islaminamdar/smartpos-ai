@@ -99,3 +99,15 @@ The sent-order board keeps separate queued, preparing, ready and served quantiti
 Payment retains the same dispatched ticket and preparation progress. An order paid without prior dispatch appears in the separate paid-order section. Table names and notes are included in dispatched kitchen details; existing fiscal receipts are unchanged. Physical kitchen printing, courses and station routing remain pending.
 
 If confirmation is lost, keep browser data and use the saved change's recovery controls. The checkbox permits permanent cancellation only if the server proves that particular change was not saved. It does not void an existing order, cancel an issued bill or return money.
+
+## Item and weight returns — prepared for the next release
+
+This flow is a tested candidate and is not yet available in live release `8bd118c`.
+
+1. Sign in as a manager on an enrolled counter and open your own shift. In **Receipts**, choose the original invoice, then **Return items**.
+2. Check the sold, already returned and remaining quantities for each original line. Select only the items being returned. Pieces and packs use whole quantities; weights use kilograms with up to three decimal places (0.125 means 125 grams).
+3. Enter a reason and choose **Review return**. Check the quantities, original discount/VAT allocation, cash to return, card refund to arrange and remaining invoice balance. A free item can produce a zero-value credit with no money due.
+4. Confirm the exact selection and choose **Issue credit note** once. Wait for the saved credit note before returning money. If the outcome is uncertain, recover the saved request; do not create another return or give money twice.
+5. Print the credit if needed. Arrange any card refund on the payment terminal and check affected preparation with kitchen staff. The kitchen must acknowledge its return notice before continuing that order. Stock is not restored automatically; record actual waste or stock adjustments separately.
+
+If another counter changes the invoice or the preview becomes stale, check remaining items and review again. The original invoice and earlier credits remain in the history.
