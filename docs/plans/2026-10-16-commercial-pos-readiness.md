@@ -1,5 +1,9 @@
 # Commercial POS scope and release evidence
 
+## Stock baseline candidate
+
+SQL027 adds a manager stock catalogue, explicit opening count, receiving, waste, reasoned adjustments, low-stock visibility and immutable history. Durable browser requests, exact revision checks and historical lookup/cancellation cover interrupted and competing writes. See the [inventory contract](../contracts/20261016-inventory.md) and [manager guide](../operations/manager-stock-guide.md). This supersedes the matrix's earlier entirely planned inventory status for this bounded baseline only. Recipes, automatic ingredient deductions, purchase orders, supplier accounts, costing, expiry batches and transfers are still pending. SQL017–027 remain unapplied live, and this work does not alter the pilot's price or activate PayPal.
+
 Updated 2026-10-16. See the [checkpoint launch readiness audit](2026-10-16-launch-readiness.md) for live `5573dcc` versus candidate `0a78059` and the full remaining scope. This document distinguishes the live online pilot from the expanded commercial product. A reachable website, a successful build, or a passing unit test is not evidence that every planned feature is delivered.
 
 ## Commercial decisions

@@ -12,7 +12,7 @@ export function publicReleaseAccess(
     return read ? 'allow' : 'not_found'
   // Previously issued device evidence must remain recoverable when new selling is paused.
   if (path === '/api/pos/offline/import' || path === '/api/pos/offline/seal' || path === '/api/pos/offline/bundle-recovery' ||
-    path === '/api/pos/offline/payment-freeze' || path === '/api/pos/offline/payment-resolution' || path === '/api/pos/native/shift-close' || path === '/api/pos/native/pin-recovery')
+    path === '/api/pos/offline/payment-freeze' || path === '/api/pos/offline/payment-resolution' || path === '/api/pos/native/shift-close' || path === '/api/pos/native/pin-recovery' || path === '/api/pos/inventory/recovery')
     return method === 'POST' ? 'allow' : 'not_found'
   if (onlinePilot) {
     if (
@@ -41,6 +41,8 @@ export function publicReleaseAccess(
       '/api/pos/session': ['GET', 'POST', 'DELETE'],
       '/api/pos/catalogue': ['GET', 'POST'],
       '/api/pos/catalogue/photo': ['POST'],
+      '/api/pos/inventory': ['GET', 'POST'],
+      '/api/pos/inventory/history': ['GET'],
       '/api/pos/offers': ['GET', 'POST'],
       '/api/pos/kitchen': ['GET', 'POST'],
       '/api/pos/kitchen/recovery': ['POST'],

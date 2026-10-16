@@ -34,6 +34,8 @@ import OfferPicker from './offers/OfferPicker'
 import StaffManager from './staff/StaffManager'
 import AccountSettings from './staff/AccountSettings'
 import PendingAccessRecovery from './staff/PendingAccessRecovery'
+import StockManager from './inventory/StockManager'
+import PendingStockRecovery from './inventory/PendingStockRecovery'
 import KitchenBoard, { KitchenPendingRecovery } from './kitchen/KitchenBoard'
 import TabKitchenBoard, { TabKitchenPendingRecovery } from './tab-kitchen/TabKitchenBoard'
 import TabKitchenDispatch from './tab-kitchen/TabKitchenDispatch'
@@ -73,6 +75,7 @@ type View =
   | 'open-orders'
   | 'payment-review'
   | 'operations'
+  | 'stock'
 class ApiError extends Error {
   constructor(
     public status: number,
@@ -160,6 +163,7 @@ export default function LiveCounter({
   const [openOrderPending, setOpenOrderPending] = useState(false)
   const [openOrderJournalReady, setOpenOrderJournalReady] = useState(false)
   const [openOrderBusy, setOpenOrderBusy] = useState(false)
+  const [stockBusy, setStockBusy] = useState(false)
   const [kitchenPaymentReadiness, setKitchenPaymentReadiness] = useState<{
     key: string
     ready: boolean
@@ -970,6 +974,7 @@ export default function LiveCounter({
           <h1>Counter setup</h1>
           <p role="alert">{error || 'The account service is not ready yet.'}</p>
           <PendingAccessRecovery />
+          <PendingStockRecovery disabled={busy || !online} />
           <KitchenPendingRecovery disabled={busy || !online} />
           <TabKitchenPendingRecovery disabled={busy || !online} />
           <OpenOrderPendingRecovery disabled={busy || !online} />
@@ -1002,6 +1007,7 @@ export default function LiveCounter({
         <button
           disabled={
             busy ||
+            stockBusy ||
             !!pending ||
             reviewHeld ||
             tabKitchenBusy ||
@@ -1051,6 +1057,12 @@ export default function LiveCounter({
         </button>
       </header>
       <div className="lc-status lc-noprint">
+        <PendingStockRecovery
+          actorId={boot.userId}
+          excludeBranchId={view === 'stock' && manager && boot.device ? branchId : undefined}
+          excludeDeviceId={view === 'stock' && manager && boot.device ? boot.device.id : undefined}
+          disabled={busy || !online || stockBusy}
+        />
         {(!boot.capabilities.onlineSales || !branch?.canSell) && (
           <p className="lc-warning">
             Your account is ready. Live counter activation is still pending; no real sale can be
@@ -1337,6 +1349,7 @@ export default function LiveCounter({
                 ...(manager
                   ? [
                       'menu',
+                      'stock',
                       'offers',
                       'reports',
                       'staff',
@@ -1350,7 +1363,7 @@ export default function LiveCounter({
               <button
                 key={item}
                 aria-current={view === item ? 'page' : undefined}
-                disabled={openOrderBusy || reviewBusy}
+                disabled={openOrderBusy || reviewBusy || stockBusy}
                 onClick={() => setView(item)}
               >
                 {
@@ -1362,6 +1375,7 @@ export default function LiveCounter({
                     shift: 'Shift',
                     branch: 'Branch',
                     menu: 'Menu',
+                    stock: 'Stock',
                     offers: 'Offers',
                     reports: 'Reports',
                     staff: 'Staff',
@@ -1375,6 +1389,29 @@ export default function LiveCounter({
             <span>{boot.device.name}</span>
           </nav>
           <main className="lc-main">
+            {view === 'stock' && manager && branch && (
+              <StockManager
+                actorId={boot.userId}
+                branchId={branchId}
+                branchName={branch.name}
+                deviceId={boot.device.id}
+                disabled={
+                  busy ||
+                  !!pending ||
+                  !online ||
+                  reviewHeld ||
+                  openOrderBusy ||
+                  openOrderPending ||
+                  tabKitchenBusy ||
+                  tabKitchenPending ||
+                  !tabKitchenJournalReady ||
+                  kitchenPending ||
+                  !kitchenJournalReady ||
+                  !openOrderJournalReady
+                }
+                onBusyChange={setStockBusy}
+              />
+            )}
             {view === 'operations' && operationsAccess && (
               <BranchOperations
                 actorId={boot.userId}

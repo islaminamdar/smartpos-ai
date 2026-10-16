@@ -1,5 +1,11 @@
 # Launch readiness and manager payment review
 
+## Candidate stock baseline — 2026-10-16
+
+SQL027 and the manager **Stock** view add branch stock items, explicit opening counts, receiving, waste, adjustments, low-stock visibility and immutable movement history. New items remain uncounted until a physical count; unknown quantities never become zero implicitly. Exact item revisions prevent competing edits, durable original requests prevent duplicate movements after lost replies, and authenticated historical lookup/cancellation remains available without current selling authority. Browser mutation requests also bind the intended actor to the authenticated request so an account change in another tab cannot apply an old form under a different staff member.
+
+See the [inventory contract](../contracts/20261016-inventory.md) and [candidate manager guide](../operations/manager-stock-guide.md). This is a recorded-stock baseline, not recipe consumption, automatic sales deductions, procurement, costing, expiry tracking or transfers. Production remains the online pilot at SQL001–016; SQL017–027 are unapplied. Full platform security, physical device/printer acceptance, offline activation and PayPal commissioning remain outstanding. Candidate tests use synthetic stock, never the restaurant's actual ledger.
+
 ## Candidate daily operations update — 2026-10-16
 
 The candidate now includes a usable manager/owner **Operations** view, including access before counter registration and a read-only selector for authorized branches. SQL024 supplies one current snapshot of today's issued sales/credits/tenders, all open shifts and unpaid orders, recent drawer differences, kitchen work and recorded offline custody. Complete totals are separate from the 20-row display limits; missing legacy cash amounts remain unknown. Staff revocation and branch permissions are enforced in the database. See [the exact scope](../contracts/20261016-branch-operations.md) and [manager guide](../operations/manager-daily-overview.md).
