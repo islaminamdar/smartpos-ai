@@ -6,7 +6,7 @@
     <text x="172" y="125" font-size="44" font-weight="700">Internext POS</text>
     <text x="72" y="277" font-size="64" font-weight="700">Your restaurant,</text>
     <text x="72" y="356" font-size="64" font-weight="700">in order.</text>
-    <text x="72" y="463" font-size="32">AED 100 per branch / month</text>
-    <text x="72" y="535" font-size="24" fill="#c7d8ee">Web training preview · Android APK next</text>
+    <text x="72" y="463" font-size="32">US$100 per branch / month</text>
+    <text x="72" y="535" font-size="24" fill="#c7d8ee">Online counter pilot · Android offline and PayPal billing in development</text>
   </g>
 </svg>

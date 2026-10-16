@@ -1,110 +1,44 @@
-# WhatsApp Cloud API — Tenant Setup Guide
+# WhatsApp Cloud API — Legacy Integration Reference
 
-This guide walks you (or the restaurant owner) through connecting Meta WhatsApp Cloud API to a SmartPOS.ai tenant.
+**WhatsApp ordering is not available in the current hosted POS release.** Both hosted release modes block the legacy onboarding, tenant WhatsApp configuration and webhook routes. The webhook is also disabled by default. This document describes the existing legacy code; it is not an activation or production-readiness checklist.
 
----
+## What the existing Connect button does
 
-## Prerequisites
+The legacy onboarding component has a **Connect** button, not **Save & Test**. It submits a Phone Number ID and access token to `/api/tenant/whatsapp`, which attempts to store them on the signed-in tenant. It does not validate the credentials with Meta or send a test message.
 
-- A Meta Business account
-- A Facebook developer account linked to that business
-- A phone number that can receive SMS/voice calls (for verification)
-- Your SmartPOS.ai tenant dashboard access (Owner role)
+The component advances without checking the HTTP response status, and the endpoint does not check the database update error. Reaching the next onboarding step or receiving an `ok` response therefore does not establish that credentials were saved, that WhatsApp is connected, or that a message was delivered. Its automatic-reply promise must not be used as evidence of availability.
 
----
+## Configuration consumed by the code
 
-## Step 1 — Create a Meta Business Account
-
-1. Go to [business.facebook.com](https://business.facebook.com).
-2. Click **Create account** and follow the prompts.
-3. Complete Business Verification if Meta prompts you (required for production send-limits).
-
----
-
-## Step 2 — Create a Meta Developer App with WhatsApp
-
-1. Go to [developers.facebook.com](https://developers.facebook.com) and log in.
-2. Click **My Apps → Create App**.
-3. Select **Business** as the app type, then click **Next**.
-4. Enter an app name (e.g. `SmartPOS-YourRestaurant`), choose the business account from Step 1, then click **Create app**.
-5. From the app dashboard, scroll to **Add products to your app** and click **Set up** next to **WhatsApp**.
-
----
-
-## Step 3 — Get the Test Phone Number ID and Temporary Access Token (Demo only)
-
-> Use this for sandbox testing only. Tokens expire in 24 hours.
-
-1. In the left sidebar choose **WhatsApp → API Setup**.
-2. Under **Send and receive messages**, note:
-   - **Phone Number ID** — copy this value (format: `1234567890123456`)
-   - **Temporary access token** — click the copy icon next to "Temporary access token"
-3. Paste both values into `.env.local`:
-   ```
-   META_WHATSAPP_PHONE_NUMBER_ID=<Phone Number ID>
-   META_WHATSAPP_TOKEN=<Temporary access token>
-   ```
-
----
-
-## Step 4 — Go Live: Add the Restaurant's Real Number
-
-1. In **WhatsApp → API Setup**, click **Add phone number**.
-2. Enter the restaurant's WhatsApp-eligible number and complete the OTP verification.
-3. Create a **System User** with admin rights in your Business Manager:
-   - Business Settings → Users → System Users → Add → Admin
-4. Assign the WhatsApp app to the System User with **full control**.
-5. Click **Generate New Token** on the System User, select your app, grant `whatsapp_business_messaging` and `whatsapp_business_management` permissions, then copy the token.
-6. Replace the temporary token with this permanent token in your env / Supabase secrets:
-   ```
-   META_WHATSAPP_TOKEN=<permanent System User token>
-   META_WHATSAPP_PHONE_NUMBER_ID=<production Phone Number ID>
-   ```
-
----
-
-## Step 5 — Configure the Webhook
-
-1. In **WhatsApp → Configuration**, find the **Webhook** section and click **Edit**.
-2. Set **Callback URL** to:
-   ```
-   https://<your-domain>/api/whatsapp/webhook
-   ```
-3. Set **Verify token** to the same value as `META_WEBHOOK_VERIFY_TOKEN` in your environment (choose any secret string, e.g. `smartpos_verify_2026`).
-4. Click **Verify and Save** — Meta will send a GET request; the SmartPOS.ai webhook handler will echo the challenge.
-
----
-
-## Step 6 — Subscribe to Messages Events
-
-1. After the webhook is verified, still in **WhatsApp → Configuration**, click **Manage** next to **Webhook fields**.
-2. Subscribe to the **messages** field.
-3. Click **Done**.
-
----
-
-## Step 7 — Connect in SmartPOS.ai
-
-1. Log in as the restaurant **Owner**.
-2. Go to **Onboarding → Connect WhatsApp** (or Settings → Integrations → WhatsApp).
-3. Enter:
-   - **Phone Number ID** — from Step 3 or Step 4
-   - **Access Token** — your permanent System User token
-4. Click **Save & Test**. The app sends a test message to the registered number to confirm connectivity.
-
----
-
-## Environment Variables Reference
-
-| Variable | Where to find it |
+| Setting | Purpose and current behavior |
 |---|---|
-| `META_WHATSAPP_PHONE_NUMBER_ID` | WhatsApp → API Setup → Phone Number ID |
-| `META_WHATSAPP_TOKEN` | System User token (Step 4) |
-| `META_WEBHOOK_VERIFY_TOKEN` | Your own secret — set it first, then paste into Meta dashboard |
+| Tenant `whatsapp_phone_number_id` | The webhook uses this stored value to match incoming messages to a tenant. The outbound sender also uses the tenant's stored value. |
+| Tenant `whatsapp_access_token` | The outbound sender reads this tenant credential from the database. Keep real tokens out of documentation, source control and public assets. |
+| `ENABLE_LEGACY_WHATSAPP_WEBHOOK` | The webhook handlers return 404 unless this server environment variable is exactly `true`. This setting alone does not open the routes blocked by the hosted release allowlist. |
+| `META_WEBHOOK_VERIFY_TOKEN` | A separately chosen server secret used for the GET subscription challenge. An enabled handler returns 503 when it is absent. A matching `hub.verify_token` and `hub.mode=subscribe` are required. |
+| `META_APP_SECRET` | Server secret used to authenticate incoming POST requests. An enabled handler returns 503 when it is absent. |
 
----
+Setting `META_WHATSAPP_PHONE_NUMBER_ID` or `META_WHATSAPP_TOKEN` alone does not configure this tenant flow: the current inbound handler and outbound sender consume the database fields listed above.
 
-## Reference
+## Webhook authentication
 
-- Meta WhatsApp Cloud API docs: https://developers.facebook.com/docs/whatsapp/cloud-api
-- System Users guide: https://developers.facebook.com/docs/marketing-api/system-users
+The legacy callback path is `/api/whatsapp/webhook`. GET verification and POST authentication serve different purposes: passing the subscription challenge does not authenticate later messages.
+
+For POST requests, the handler requires an `x-hub-signature-256` header in the form `sha256=` followed by 64 lowercase hexadecimal characters. It computes HMAC-SHA256 over the raw request body using `META_APP_SECRET` and compares signatures with a timing-safe comparison before parsing or processing the payload. Missing, malformed or incorrect signatures return 403. The handler also limits the body to 1,000,000 bytes.
+
+Do not disable these checks to make a test request succeed. A future activation needs a separately reviewed release change, appropriate tenant credentials, and controlled end-to-end verification of configuration persistence, signed inbound messages and outbound delivery. None of those outcomes is established by clicking **Connect**.
+
+## Sources and provider reference
+
+This document reflects the repository behavior in:
+
+- `lib/pos/public-release.ts` — hosted route allowlist.
+- `components/onboarding/WhatsAppLinkStep.tsx` — legacy Connect interface.
+- `app/api/tenant/whatsapp/route.ts` — tenant credential update.
+- `app/api/whatsapp/webhook/route.ts` — default-off gate, GET verification and POST HMAC validation.
+- `lib/whatsapp/handler.ts` and `lib/whatsapp/client.ts` — tenant configuration and outbound request.
+
+Before any future activation, check Meta's current requirements and grant only the permissions needed for the intended workflow. Provider setup screens, token lifetimes and production eligibility have not been verified as part of this repository documentation update.
+
+- [Meta WhatsApp Cloud API documentation](https://developers.facebook.com/docs/whatsapp/cloud-api)
+- [Meta System Users documentation](https://developers.facebook.com/docs/marketing-api/system-users)
