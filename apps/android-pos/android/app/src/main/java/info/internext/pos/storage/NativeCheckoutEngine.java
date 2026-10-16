@@ -1,0 +1,352 @@
+package info.internext.pos.storage;
+
+import android.content.ContentValues;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import info.internext.pos.offline.CanonicalJson;
+import info.internext.pos.offline.OfflineBundle;
+import info.internext.pos.offline.OfflineCalculator;
+import info.internext.pos.offline.OfflineClock;
+import info.internext.pos.offline.SignedProtocol;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.nio.charset.StandardCharsets;
+import java.security.PublicKey;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+
+/** Internal native checkout. No WebView write bridge is exposed until enrollment, local unlock,
+ * fresh server-time handoff and two-device acceptance are integrated. All money is recalculated
+ * from signed snapshots; the caller can supply quantities and recorded tender only. */
+public final class NativeCheckoutEngine {
+    interface UnlockGuard { void requireUnlocked(OfflineBundle.Binding binding) throws Exception; }
+    interface ClockSource { OfflineClock.Reading read() throws Exception; }
+    interface Signer { byte[] sign(byte[] canonicalPayload) throws Exception; }
+    private final NativeJournal journal;
+    private final Map<String, PublicKey> serverKeys;
+    private final OfflineBundle.Binding binding;
+    private final PublicKey deviceKey;
+    private final UnlockGuard unlock;
+    private final ClockSource clock;
+    private final Signer signer;
+
+    // Package-private deliberately: there is no externally callable authorization bypass.
+    NativeCheckoutEngine(NativeJournal journal, Map<String, PublicKey> serverKeys,
+                         OfflineBundle.Binding binding, PublicKey deviceKey,
+                         UnlockGuard unlock, ClockSource clock, Signer signer) throws Exception {
+        if (journal == null || serverKeys == null || binding == null || unlock == null || clock == null || signer == null)
+            throw invalid("native_configuration_missing");
+        this.journal = journal; this.serverKeys = Collections.unmodifiableMap(new HashMap<>(serverKeys));
+        this.binding = binding; this.deviceKey = deviceKey; this.unlock = unlock; this.clock = clock; this.signer = signer;
+        journal.bindDeviceKey(SignedProtocol.fingerprint(deviceKey));
+    }
+
+    static void createTables(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE offline_bundles (id TEXT PRIMARY KEY NOT NULL, snapshot_envelope TEXT NOT NULL, authority_envelope TEXT NOT NULL)");
+        db.execSQL("CREATE TABLE offline_authority_state (authority_id TEXT PRIMARY KEY NOT NULL REFERENCES offline_bundles(id), next_number INTEGER NOT NULL CHECK(next_number>0), gross_fils INTEGER NOT NULL CHECK(gross_fils>=0), clock_json TEXT NOT NULL, blocked INTEGER NOT NULL DEFAULT 0 CHECK(blocked IN (0,1)), seal_envelope TEXT)");
+        db.execSQL("CREATE TABLE offline_chain (slot INTEGER PRIMARY KEY CHECK(slot=1), key_epoch TEXT NOT NULL, sequence INTEGER NOT NULL CHECK(sequence>=0), event_hash TEXT, CHECK((sequence=0 AND event_hash IS NULL) OR (sequence>0 AND length(event_hash)=64)))");
+        db.execSQL("CREATE TABLE offline_intent_context (intent_id TEXT PRIMARY KEY NOT NULL REFERENCES intents(id), authority_id TEXT NOT NULL REFERENCES offline_bundles(id), order_id TEXT NOT NULL UNIQUE, document_id TEXT NOT NULL UNIQUE)");
+        db.execSQL("CREATE TABLE offline_intent_cancellations (intent_id TEXT PRIMARY KEY NOT NULL REFERENCES offline_intent_context(intent_id), reason TEXT NOT NULL, cancelled_at TEXT NOT NULL)");
+        for (String table : new String[]{"offline_bundles", "offline_intent_context", "offline_intent_cancellations"}) {
+            db.execSQL("CREATE TRIGGER " + table + "_immutable_update BEFORE UPDATE ON " + table + " BEGIN SELECT RAISE(ABORT,'immutable_record'); END");
+            db.execSQL("CREATE TRIGGER " + table + "_immutable_delete BEFORE DELETE ON " + table + " BEGIN SELECT RAISE(ABORT,'immutable_record'); END");
+        }
+        db.execSQL("CREATE TRIGGER offline_bundles_insert_guard BEFORE INSERT ON offline_bundles WHEN EXISTS(SELECT 1 FROM offline_bundles WHERE id=NEW.id) BEGIN SELECT RAISE(ABORT,'bundle_exists'); END");
+        db.execSQL("CREATE TRIGGER offline_context_insert_guard BEFORE INSERT ON offline_intent_context WHEN EXISTS(SELECT 1 FROM offline_intent_context WHERE intent_id=NEW.intent_id OR order_id=NEW.order_id OR document_id=NEW.document_id) BEGIN SELECT RAISE(ABORT,'intent_exists'); END");
+        db.execSQL("CREATE TRIGGER offline_cancellation_insert_guard BEFORE INSERT ON offline_intent_cancellations WHEN EXISTS(SELECT 1 FROM offline_intent_cancellations WHERE intent_id=NEW.intent_id) BEGIN SELECT RAISE(ABORT,'cancellation_exists'); END");
+        db.execSQL("CREATE TRIGGER offline_state_monotonic BEFORE UPDATE ON offline_authority_state WHEN NEW.authority_id IS NOT OLD.authority_id OR NEW.next_number<OLD.next_number OR NEW.gross_fils<OLD.gross_fils OR NEW.blocked<OLD.blocked OR (OLD.seal_envelope IS NOT NULL AND NEW.seal_envelope IS NOT OLD.seal_envelope) BEGIN SELECT RAISE(ABORT,'custody_rollback'); END");
+        db.execSQL("CREATE TRIGGER offline_state_delete BEFORE DELETE ON offline_authority_state BEGIN SELECT RAISE(ABORT,'custody_delete'); END");
+        db.execSQL("CREATE TRIGGER offline_state_replace BEFORE INSERT ON offline_authority_state WHEN EXISTS(SELECT 1 FROM offline_authority_state WHERE authority_id=NEW.authority_id) BEGIN SELECT RAISE(ABORT,'custody_replace'); END");
+        db.execSQL("CREATE TRIGGER offline_chain_monotonic BEFORE UPDATE ON offline_chain WHEN NEW.slot IS NOT OLD.slot OR NEW.key_epoch IS NOT OLD.key_epoch OR NEW.sequence!=OLD.sequence+1 BEGIN SELECT RAISE(ABORT,'chain_rollback'); END");
+        db.execSQL("CREATE TRIGGER offline_chain_delete BEFORE DELETE ON offline_chain BEGIN SELECT RAISE(ABORT,'custody_delete'); END");
+        db.execSQL("CREATE TRIGGER offline_chain_replace BEFORE INSERT ON offline_chain WHEN EXISTS(SELECT 1 FROM offline_chain) BEGIN SELECT RAISE(ABORT,'custody_replace'); END");
+    }
+
+    /** freshServerMs must originate from a fresh authenticated native HTTPS exchange, never JS
+     * wall time or an old authority timestamp. Exact installation retries never reset the anchor. */
+    public void installVerifiedBundle(String snapshotEnvelope, String authorityEnvelope, long freshServerMs) throws Exception {
+        OfflineBundle bundle = OfflineBundle.verify(snapshotEnvelope, authorityEnvelope, serverKeys, binding);
+        if (!bundle.deviceKeySha256.equals(SignedProtocol.fingerprint(deviceKey))) throw invalid("device_key_mismatch");
+        synchronized (journal) {
+            SQLiteDatabase db = journal.getWritableDatabase(); db.beginTransaction();
+            try {
+                try (Cursor c = db.rawQuery("SELECT snapshot_envelope,authority_envelope FROM offline_bundles WHERE id=?", new String[]{bundle.authorityId})) {
+                    if (c.moveToFirst()) {
+                        OfflineBundle stored = OfflineBundle.verify(c.getString(0), c.getString(1), serverKeys, binding);
+                        if (!stored.snapshotSha256.equals(bundle.snapshotSha256) || !stored.authoritySha256.equals(bundle.authoritySha256)) throw invalid("bundle_conflict");
+                        db.setTransactionSuccessful(); return;
+                    }
+                }
+                unlock.requireUnlocked(binding);
+                if (exists(db, "SELECT 1 FROM offline_authority_state WHERE seal_envelope IS NULL OR blocked=1") || hasUncertain(db)) throw invalid("previous_authority_unresolved");
+                try (Cursor c = db.rawQuery("SELECT key_epoch FROM offline_chain WHERE slot=1", null)) {
+                    if (c.moveToFirst()) {
+                        if (!bundle.keyEpoch.equals(c.getString(0))) throw invalid("key_epoch_rotation_required");
+                    } else {
+                        if (exists(db, "SELECT 1 FROM receipts")) throw invalid("legacy_custody_requires_reconciliation");
+                        ContentValues row = new ContentValues(); row.put("slot", 1); row.put("key_epoch", bundle.keyEpoch); row.put("sequence", 0); row.putNull("event_hash");
+                        db.insertOrThrow("offline_chain", null, row);
+                    }
+                }
+                OfflineClock.Reading reading = clock.read();
+                OfflineClock.Tick tick = OfflineClock.advance(OfflineClock.anchor(freshServerMs, reading), reading, bundle.notBeforeMs, bundle.expiresAtMs);
+                ContentValues row = new ContentValues(); row.put("id", bundle.authorityId); row.put("snapshot_envelope", snapshotEnvelope); row.put("authority_envelope", authorityEnvelope); db.insertOrThrow("offline_bundles", null, row);
+                row = new ContentValues(); row.put("authority_id", bundle.authorityId); row.put("next_number", bundle.firstInvoice); row.put("gross_fils", 0); row.put("clock_json", tick.nextState.toJson()); db.insertOrThrow("offline_authority_state", null, row);
+                db.setTransactionSuccessful();
+            } finally { db.endTransaction(); }
+        }
+    }
+
+    /** Freeze intent BEFORE the cashier collects cash or records external card success. */
+    public JSONObject beginPaymentIntent(String intentId, JSONObject input) throws Exception {
+        uuid(intentId); JSONObject request = checkedRequest(input); String exact = canonical(request);
+        String authorityId = request.getString("authorityId");
+        synchronized (journal) {
+            SQLiteDatabase db = journal.getWritableDatabase(); db.beginTransaction();
+            try {
+                try (Cursor c = db.rawQuery("SELECT request_json FROM intents WHERE id=?", new String[]{intentId})) {
+                    if (c.moveToFirst()) {
+                        if (!exact.equals(c.getString(0))) throw invalid("intent_conflict");
+                        JSONObject result = intentState(db, intentId); db.setTransactionSuccessful(); return result;
+                    }
+                }
+                if (hasUncertain(db)) throw invalid("payment_reconciliation_required");
+                OfflineBundle bundle = bundle(db, authorityId); unlock.requireUnlocked(binding);
+                OfflineCalculator.Calculation calculation = calculate(bundle, request);
+                State state = state(db, authorityId); checkBudget(bundle, state, calculation.grossFils);
+                OfflineClock.Tick tick = advance(db, bundle, state);
+                journal.beginIntent(intentId, exact, iso(tick.estimatedServerMs));
+                ContentValues row = new ContentValues(); row.put("intent_id", intentId); row.put("authority_id", authorityId); row.put("order_id", UUID.randomUUID().toString()); row.put("document_id", UUID.randomUUID().toString()); db.insertOrThrow("offline_intent_context", null, row);
+                saveClock(db, authorityId, tick);
+                JSONObject result = intentState(db, intentId); db.setTransactionSuccessful(); return result;
+            } finally { db.endTransaction(); }
+        }
+    }
+
+    /** Explicit cashier confirmation only; never invoked automatically from a recovery loop. */
+    public String commitPaymentIntent(String intentId) throws Exception {
+        uuid(intentId);
+        synchronized (journal) {
+            SQLiteDatabase db = journal.getWritableDatabase(); db.beginTransaction();
+            try {
+                JSONObject intent = intentState(db, intentId);
+                if ("committed".equals(intent.getString("state"))) {
+                    String original = receiptEnvelope(db, intent.getString("orderId")); db.setTransactionSuccessful(); return original;
+                }
+                if ("cancelled".equals(intent.getString("state"))) throw invalid("intent_cancelled");
+                JSONObject request = intent.getJSONObject("request"); OfflineBundle bundle = bundle(db, request.getString("authorityId"));
+                unlock.requireUnlocked(binding); OfflineCalculator.Calculation calculation = calculate(bundle, request);
+                State state = state(db, bundle.authorityId); checkBudget(bundle, state, calculation.grossFils);
+                OfflineClock.Reading reading = safeReading(db, bundle); OfflineClock.Tick tick = advance(db, bundle, state, reading);
+                long sequence; String previous;
+                try (Cursor c = db.rawQuery("SELECT key_epoch,sequence,event_hash FROM offline_chain WHERE slot=1", null)) {
+                    if (!c.moveToFirst() || !bundle.keyEpoch.equals(c.getString(0))) throw invalid("chain_missing");
+                    sequence = Math.addExact(c.getLong(1), 1); previous = c.isNull(2) ? null : c.getString(2);
+                }
+                if (sequence > 9_007_199_254_740_991L) throw invalid("sequence_exhausted");
+                String issuedAt = iso(tick.estimatedServerMs);
+                String number = bundle.invoicePrefix + "-INV-" + String.format(Locale.ROOT, "%010d", state.nextNumber);
+                JSONObject document = document(bundle, request, calculation, intent.getString("orderId"), intent.getString("documentId"), number, issuedAt);
+                JSONObject payload = new JSONObject().put("kind", "offline-sale").put("schemaVersion", 1).put("id", intent.getString("orderId"))
+                    .put("authorityId", bundle.authorityId).put("authoritySha256", bundle.authoritySha256).put("snapshotSha256", bundle.snapshotSha256)
+                    .put("deviceSequence", sequence).put("previousEventSha256", previous == null ? JSONObject.NULL : previous).put("document", document)
+                    .put("clock", new JSONObject().put("estimatedServerAt", issuedAt).put("bootId", reading.bootId).put("elapsedRealtimeMs", reading.elapsedRealtimeMs)).put("paymentIntentId", intentId);
+                String signed = sign(payload); String result = journal.commitVerifiedIssuance(intentId, canonical(request), intent.getString("orderId"), number, issuedAt, calculation.grossFils, signed);
+                ContentValues row = new ContentValues(); row.put("sequence", sequence); row.put("event_hash", SignedProtocol.hash(CanonicalJson.bytes(payload)));
+                if (db.update("offline_chain", row, "slot=1", null) != 1) throw invalid("chain_missing");
+                row = new ContentValues(); row.put("next_number", Math.addExact(state.nextNumber, 1)); row.put("gross_fils", Math.addExact(state.grossFils, calculation.grossFils)); row.put("clock_json", tick.nextState.toJson());
+                if (db.update("offline_authority_state", row, "authority_id=?", new String[]{bundle.authorityId}) != 1) throw invalid("authority_missing");
+                db.setTransactionSuccessful(); return result;
+            } finally { db.endTransaction(); }
+        }
+    }
+
+    /** Human reconciliation that explicitly confirms no money was collected. Retains the intent. */
+    public void cancelUncollectedIntent(String intentId, String reason) throws Exception {
+        uuid(intentId); text(reason, 240);
+        synchronized (journal) {
+            SQLiteDatabase db = journal.getWritableDatabase(); db.beginTransaction();
+            try {
+                JSONObject intent = intentState(db, intentId);
+                unlock.requireUnlocked(binding);
+                if ("committed".equals(intent.getString("state"))) throw invalid("already_issued");
+                if ("cancelled".equals(intent.getString("state"))) {
+                    try (Cursor c = db.rawQuery("SELECT reason FROM offline_intent_cancellations WHERE intent_id=?", new String[]{intentId})) {
+                        if (!c.moveToFirst() || !reason.equals(c.getString(0))) throw invalid("cancellation_conflict");
+                    }
+                } else {
+                    bundle(db, intent.getJSONObject("request").getString("authorityId"));
+                    ContentValues row = new ContentValues(); row.put("intent_id", intentId); row.put("reason", reason); row.put("cancelled_at", iso(clock.read().wallTimeMs)); db.insertOrThrow("offline_intent_cancellations", null, row);
+                }
+                db.setTransactionSuccessful();
+            } finally { db.endTransaction(); }
+        }
+    }
+
+    /** Stop new issuance durably BEFORE returning the exact signed terminal declaration. */
+    public String sealAuthority(String authorityId) throws Exception {
+        uuid(authorityId);
+        synchronized (journal) {
+            SQLiteDatabase db = journal.getWritableDatabase(); db.beginTransaction();
+            try {
+                OfflineBundle bundle = bundle(db, authorityId); State state = state(db, authorityId);
+                if (state.seal != null) { db.setTransactionSuccessful(); return state.seal; }
+                unlock.requireUnlocked(binding);
+                if (hasUncertain(db)) throw invalid("payment_reconciliation_required");
+                long sequence; String hash;
+                try (Cursor c = db.rawQuery("SELECT sequence,event_hash FROM offline_chain WHERE slot=1", null)) {
+                    if (!c.moveToFirst()) throw invalid("chain_missing"); sequence = c.getLong(0); hash = c.isNull(1) ? null : c.getString(1);
+                }
+                JSONObject payload = new JSONObject().put("kind", "offline-seal").put("schemaVersion", 1).put("id", UUID.randomUUID().toString())
+                    .put("authorityId", authorityId).put("keyEpoch", bundle.keyEpoch).put("deviceId", bundle.deviceId).put("finalSequence", sequence).put("finalEventSha256", hash == null ? JSONObject.NULL : hash);
+                String envelope = sign(payload); ContentValues row = new ContentValues(); row.put("seal_envelope", envelope); db.update("offline_authority_state", row, "authority_id=?", new String[]{authorityId}); db.setTransactionSuccessful(); return envelope;
+            } finally { db.endTransaction(); }
+        }
+    }
+
+    /** Verify exact server custody before dropping an outbox entry. Works while locally locked. */
+    public void acknowledgeIssuance(String acknowledgement) throws Exception {
+        SignedProtocol.Verified verified = SignedProtocol.verify(acknowledgement, serverKeys);
+        JSONObject ack = object(verified.payload()); fields(ack, "kind", "schemaVersion", "id", "issuanceId", "payloadSha256", "authorityId", "keyEpoch", "deviceSequence", "receivedAt");
+        if (!"offline-ack".equals(string(ack,"kind")) || integer(ack,"schemaVersion",1,1)!=1) throw invalid("invalid_ack");
+        uuid(string(ack,"id")); String receiptId = string(ack,"issuanceId"); uuid(receiptId); uuid(string(ack,"authorityId")); uuid(string(ack,"keyEpoch"));
+        integer(ack,"deviceSequence",1,9_007_199_254_740_991L); String received = string(ack,"receivedAt"); strictIso(received);
+        synchronized (journal) {
+            SQLiteDatabase db = journal.getWritableDatabase(); db.beginTransaction();
+            try {
+                String receiptEnvelope = receiptEnvelope(db, receiptId);
+                SignedProtocol.Verified original = SignedProtocol.verify(receiptEnvelope, Collections.singletonMap(SignedProtocol.fingerprint(deviceKey), deviceKey));
+                JSONObject issuance = object(original.payload());
+                if (!original.payloadSha256.equals(string(ack,"payloadSha256")) || !issuance.getString("authorityId").equals(ack.getString("authorityId")) || issuance.getLong("deviceSequence") != ack.getLong("deviceSequence")) throw invalid("ack_mismatch");
+                String epoch;
+                try (Cursor c = db.rawQuery("SELECT key_epoch FROM offline_chain WHERE slot=1", null)) { if (!c.moveToFirst()) throw invalid("chain_missing"); epoch=c.getString(0); }
+                if (!epoch.equals(ack.getString("keyEpoch"))) throw invalid("ack_mismatch");
+                try (Cursor c = db.rawQuery("SELECT ack_json FROM acknowledgements WHERE receipt_id=?", new String[]{receiptId})) {
+                    if (c.moveToFirst()) {
+                        if (!SignedProtocol.verify(c.getString(0), serverKeys).payloadSha256.equals(verified.payloadSha256)) throw invalid("ack_conflict");
+                        db.setTransactionSuccessful(); return;
+                    }
+                }
+                journal.acknowledgeVerified(receiptId, original.payloadSha256, acknowledgement, received); db.setTransactionSuccessful();
+            } finally { db.endTransaction(); }
+        }
+    }
+
+    public JSONObject getIntent(String intentId) throws Exception {
+        uuid(intentId); synchronized (journal) { return intentState(journal.getReadableDatabase(), intentId); }
+    }
+    public JSONArray listPendingIssuances() throws Exception {
+        synchronized (journal) {
+            JSONArray result = new JSONArray();
+            try (Cursor c = journal.getReadableDatabase().rawQuery("SELECT r.envelope_json FROM receipts r JOIN outbox o ON o.receipt_id=r.id JOIN offline_intent_context i ON i.intent_id=r.intent_id ORDER BY r.rowid LIMIT 100", null)) {
+                while (c.moveToNext()) { SignedProtocol.verify(c.getString(0), Collections.singletonMap(SignedProtocol.fingerprint(deviceKey),deviceKey)); result.put(new JSONObject(c.getString(0))); }
+            }
+            return result;
+        }
+    }
+
+    private OfflineBundle bundle(SQLiteDatabase db, String id) throws Exception {
+        try (Cursor c = db.rawQuery("SELECT snapshot_envelope,authority_envelope FROM offline_bundles WHERE id=?", new String[]{id})) {
+            if (!c.moveToFirst()) throw invalid("authority_missing"); return OfflineBundle.verify(c.getString(0),c.getString(1),serverKeys,binding);
+        }
+    }
+    private static final class State {
+        long nextNumber, grossFils; String clockJson, seal; boolean blocked;
+    }
+    private static State state(SQLiteDatabase db, String id) {
+        try (Cursor c = db.rawQuery("SELECT next_number,gross_fils,clock_json,blocked,seal_envelope FROM offline_authority_state WHERE authority_id=?",new String[]{id})) {
+            if (!c.moveToFirst()) throw invalid("authority_missing"); State s=new State(); s.nextNumber=c.getLong(0); s.grossFils=c.getLong(1); s.clockJson=c.getString(2); s.blocked=c.getInt(3)!=0; s.seal=c.isNull(4)?null:c.getString(4); return s;
+        }
+    }
+    private static void checkBudget(OfflineBundle bundle, State state, long gross) {
+        if (state.blocked || state.seal!=null) throw invalid("authority_closed");
+        if (state.nextNumber<bundle.firstInvoice || state.nextNumber>bundle.lastInvoice || gross>bundle.maxInvoiceTotalFils || state.grossFils>bundle.maxGrossFils-gross) throw invalid("authority_exhausted");
+    }
+    private OfflineClock.Tick advance(SQLiteDatabase db, OfflineBundle bundle, State state) throws Exception { return advance(db,bundle,state,safeReading(db,bundle)); }
+    private OfflineClock.Tick advance(SQLiteDatabase db, OfflineBundle bundle, State state, OfflineClock.Reading reading) throws Exception {
+        try { return OfflineClock.advance(OfflineClock.State.fromJson(state.clockJson),reading,bundle.notBeforeMs,bundle.expiresAtMs); }
+        catch (OfflineClock.ClockException error) {
+            if (!"clock_not_started".equals(error.code) && !"clock_expired".equals(error.code)) {
+                // Called before any financial writes in this transaction. Persist detected anomaly
+                // even though the requested sale fails; restarting must not erase the warning.
+                ContentValues row=new ContentValues(); row.put("blocked",1); db.update("offline_authority_state",row,"authority_id=?",new String[]{bundle.authorityId}); db.setTransactionSuccessful();
+            }
+            throw error;
+        }
+    }
+    private OfflineClock.Reading safeReading(SQLiteDatabase db, OfflineBundle bundle) throws Exception {
+        try { return clock.read(); }
+        catch (OfflineClock.ClockException error) {
+            if (error.isAnomaly()) {
+                ContentValues row=new ContentValues(); row.put("blocked",1); db.update("offline_authority_state",row,"authority_id=?",new String[]{bundle.authorityId}); db.setTransactionSuccessful();
+            }
+            throw error;
+        }
+    }
+    private static void saveClock(SQLiteDatabase db,String id,OfflineClock.Tick tick) throws Exception {
+        ContentValues row=new ContentValues(); row.put("clock_json",tick.nextState.toJson()); db.update("offline_authority_state",row,"authority_id=?",new String[]{id});
+    }
+    private static boolean hasUncertain(SQLiteDatabase db) { return exists(db,"SELECT 1 FROM intents i LEFT JOIN offline_intent_cancellations c ON c.intent_id=i.id WHERE i.receipt_id IS NULL AND c.intent_id IS NULL LIMIT 1"); }
+    private static boolean exists(SQLiteDatabase db,String sql) { try(Cursor c=db.rawQuery(sql,null)){return c.moveToFirst();} }
+    private static JSONObject intentState(SQLiteDatabase db,String id) throws Exception {
+        try(Cursor c=db.rawQuery("SELECT i.request_json,i.receipt_id,x.order_id,x.document_id,c.intent_id FROM intents i JOIN offline_intent_context x ON x.intent_id=i.id LEFT JOIN offline_intent_cancellations c ON c.intent_id=i.id WHERE i.id=?",new String[]{id})) {
+            if(!c.moveToFirst())throw invalid("intent_missing");
+            return new JSONObject().put("intentId",id).put("state",!c.isNull(1)?"committed":!c.isNull(4)?"cancelled":"payment_confirmation_required")
+                .put("orderId",c.getString(2)).put("documentId",c.getString(3)).put("request",CanonicalJson.parse(c.getString(0).getBytes(StandardCharsets.UTF_8)));
+        }
+    }
+    private static String receiptEnvelope(SQLiteDatabase db,String id) {
+        try(Cursor c=db.rawQuery("SELECT envelope_json,envelope_hash FROM receipts WHERE id=?",new String[]{id})) {
+            if(!c.moveToFirst() || !NativeJournal.hash(c.getString(0)).equals(c.getString(1)))throw invalid("receipt_integrity_failed"); return c.getString(0);
+        }
+    }
+    private String sign(JSONObject payload) throws Exception {
+        byte[] bytes=CanonicalJson.bytes(payload), signature=signer.sign(bytes); SignedProtocol.requireDer(signature);
+        String envelope=new JSONObject().put("format","pos-signed-v1").put("alg","ECDSA-P256-SHA256-DER").put("keyId",SignedProtocol.fingerprint(deviceKey))
+            .put("payloadBase64Url",SignedProtocol.encode(bytes)).put("signatureBase64Url",SignedProtocol.encode(signature)).toString();
+        SignedProtocol.verify(envelope,Collections.singletonMap(SignedProtocol.fingerprint(deviceKey),deviceKey)); return envelope;
+    }
+    private static JSONObject checkedRequest(JSONObject raw) throws Exception {
+        JSONObject r=object(CanonicalJson.parse(CanonicalJson.bytes(raw)));
+        fields(r,"authorityId","serviceType","customer","lines","cashTenderedFils","recordedCardFils","presentedTotalFils"); uuid(string(r,"authorityId"));
+        if(!java.util.Arrays.asList("dine_in","takeaway","delivery").contains(string(r,"serviceType")))throw invalid("invalid_service_type");
+        if(r.get("customer")!=JSONObject.NULL){JSONObject customer=object(r.get("customer")); fields(customer,"name","address","trn"); text(string(customer,"name"),200);text(string(customer,"address"),400);if(customer.get("trn")!=JSONObject.NULL&&!string(customer,"trn").matches("[0-9]{15}"))throw invalid("invalid_customer");}
+        if(!(r.get("lines") instanceof JSONArray))throw invalid("invalid_lines");JSONArray lines=r.getJSONArray("lines");if(lines.length()<1||lines.length()>200)throw invalid("invalid_lines");
+        for(int i=0;i<lines.length();i++){JSONObject line=object(lines.get(i));fields(line,"productId","quantityMilli");uuid(string(line,"productId"));integer(line,"quantityMilli",1,1_000_000);}
+        integer(r,"cashTenderedFils",0,100_000_000);integer(r,"recordedCardFils",0,100_000_000);integer(r,"presentedTotalFils",1,100_000_000);return r;
+    }
+    private static OfflineCalculator.Calculation calculate(OfflineBundle bundle,JSONObject request) throws Exception {
+        checkedRequest(request); List<OfflineCalculator.InputLine> inputs=new ArrayList<>();JSONArray lines=request.getJSONArray("lines");
+        for(int i=0;i<lines.length();i++){JSONObject line=lines.getJSONObject(i);OfflineBundle.Product product=bundle.product(line.getString("productId"));if(product==null)throw invalid("product_unavailable");inputs.add(product.calculatorInput(line.getLong("quantityMilli")));}
+        OfflineCalculator.Calculation c=OfflineCalculator.calculate(OfflineCalculator.VERSION,true,inputs,request.getLong("cashTenderedFils"),request.getLong("recordedCardFils"));
+        if(c.grossFils!=request.getLong("presentedTotalFils"))throw invalid("presented_total_changed");
+        boolean cash=false,card=false;for(OfflineCalculator.Payment p:c.payments){cash|="cash".equals(p.method);card|="card".equals(p.method);}
+        if((cash&&!bundle.cashAllowed)||(card&&!bundle.recordedCardAllowed)||(cash&&card&&!bundle.mixedTenderAllowed))throw invalid("tender_not_authorized");
+        if(c.requiresBuyerDetails&&request.isNull("customer"))throw invalid("buyer_details_required");return c;
+    }
+    private static JSONObject document(OfflineBundle bundle,JSONObject request,OfflineCalculator.Calculation c,String orderId,String documentId,String number,String issuedAt)throws Exception{
+        JSONArray lines=new JSONArray(),payments=new JSONArray();
+        for(OfflineCalculator.Line l:c.lines)lines.put(new JSONObject().put("lineNumber",l.lineNumber).put("productId",l.productId).put("name",l.name).put("unit",l.unit.name()).put("quantityMilli",l.quantityMilli).put("unitPriceFils",l.unitPriceFils).put("taxRateBps",l.taxRateBps).put("grossFils",l.grossFils).put("netFils",l.netFils).put("taxFils",l.taxFils));
+        for(OfflineCalculator.Payment p:c.payments)payments.put(new JSONObject().put("method",p.method).put("amountFils",p.amountFils));
+        return new JSONObject().put("schemaVersion",1).put("kind","tax_invoice").put("id",documentId).put("orderId",orderId).put("documentNumber",number).put("issuedAt",issuedAt)
+            .put("merchant",bundle.profile()).put("branchId",bundle.branchId).put("deviceId",bundle.deviceId).put("shiftId",bundle.shiftId).put("actorId",bundle.actorId)
+            .put("serviceType",request.get("serviceType")).put("customer",request.get("customer")).put("lines",lines).put("totals",new JSONObject().put("grossFils",c.grossFils).put("netFils",c.netFils).put("taxFils",c.taxFils))
+            .put("payments",payments).put("paymentSettlement","recorded").put("cashTenderedFils",c.cashTenderedFils).put("changeFils",c.changeFils);
+    }
+    private static JSONObject object(Object v){if(!(v instanceof JSONObject))throw invalid("invalid_object");return (JSONObject)v;}
+    private static String string(JSONObject o,String key)throws Exception{Object v=o.get(key);if(!(v instanceof String))throw invalid("invalid_string");return (String)v;}
+    private static void fields(JSONObject o,String...keys){if(o.length()!=keys.length)throw invalid("unexpected_field");for(String key:keys)if(!o.has(key))throw invalid("missing_field");}
+    private static long integer(JSONObject o,String key,long min,long max)throws Exception{Object v=o.get(key);if(!(v instanceof Integer)&&!(v instanceof Long))throw invalid("invalid_integer");long n=((Number)v).longValue();if(n<min||n>max)throw invalid("invalid_integer");return n;}
+    private static void uuid(String id){if(id==null||!id.matches("[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"))throw invalid("invalid_id");}
+    private static void text(String value,int max){if(value.isEmpty()||value.length()>max||trimChar(value.charAt(0))||trimChar(value.charAt(value.length()-1)))throw invalid("invalid_text");}
+    private static boolean trimChar(char c){return c==0x0009||c==0x000a||c==0x000b||c==0x000c||c==0x000d||c==0x0020||c==0x00a0||c==0x1680||(c>=0x2000&&c<=0x200a)||c==0x2028||c==0x2029||c==0x202f||c==0x205f||c==0x3000||c==0xfeff;}
+    private static String canonical(Object value)throws Exception{return new String(CanonicalJson.bytes(value),StandardCharsets.UTF_8);}
+    static String iso(long millis){java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",Locale.ROOT);f.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));return f.format(new java.util.Date(millis));}
+    private static void strictIso(String value)throws Exception{if(!value.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z"))throw invalid("invalid_timestamp");java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",Locale.ROOT);f.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));f.setLenient(false);if(!iso(f.parse(value).getTime()).equals(value))throw invalid("invalid_timestamp");}
+    private static IllegalStateException invalid(String code){return new IllegalStateException(code);}
+}

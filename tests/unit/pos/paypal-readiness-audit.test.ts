@@ -1,4 +1,4 @@
-import { createElement } from 'react'
+import { createElement, Profiler } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import BillingClient from '@/app/billing/BillingClient'
@@ -171,22 +171,45 @@ describe('branch billing cancellation consent belongs to one agreement', () => {
         last_payment_at: null,
       },
     })
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (url: string) => {
-        if (url === '/api/pos/bootstrap')
-          return Response.json({
-            userId: actor,
-            branches: [{ id: branch, name: 'Synthetic branch', role: 'manager' }],
-          })
-        if (url.endsWith('/reconcile')) {
-          subscriptionId = second
-          return Response.json({ status: 'reconciled' })
-        }
-        return Response.json(body())
-      })
+    const fetcher = vi.fn(async (url: string) => {
+      if (url === '/api/pos/bootstrap')
+        return Response.json({
+          userId: actor,
+          branches: [{ id: branch, name: 'Synthetic branch', role: 'manager' }],
+        })
+      if (url.endsWith('/reconcile')) {
+        subscriptionId = second
+        return Response.json({ status: 'reconciled' })
+      }
+      return Response.json(body())
+    })
+    vi.stubGlobal('fetch', fetcher)
+    const replacementCommits: { checked: boolean; disabled: boolean }[] = []
+    render(
+      createElement(
+        Profiler,
+        {
+          id: 'billing-consent',
+          onRender: () => {
+            // Inspect the actual commit, before passive effects could repair it.
+            // Waiting for an effect would hide the original unsafe render.
+            const status = screen.queryByRole('status')
+            if (
+              !status?.textContent?.includes('The latest status below was confirmed with PayPal.')
+            )
+              return
+            const checkbox = screen.getByRole('checkbox', {
+              name: 'Stop future recurring payments for this branch.',
+            }) as HTMLInputElement
+            const button = screen.getByRole('button', {
+              name: 'Cancel recurring subscription',
+            }) as HTMLButtonElement
+            replacementCommits.push({ checked: checkbox.checked, disabled: button.disabled })
+          },
+        },
+        createElement(BillingClient)
+      )
     )
-    render(createElement(BillingClient))
     const consent = await screen.findByRole('checkbox', {
       name: 'Stop future recurring payments for this branch.',
     })
@@ -202,5 +225,26 @@ describe('branch billing cancellation consent belongs to one agreement', () => {
       screen.getByRole('checkbox', { name: 'Stop future recurring payments for this branch.' })
     ).not.toBeChecked()
     expect(screen.getByRole('button', { name: 'Cancel recurring subscription' })).toBeDisabled()
+    expect(replacementCommits.length).toBeGreaterThan(0)
+    expect(replacementCommits.every((commit) => !commit.checked && commit.disabled)).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel recurring subscription' }))
+    expect(fetcher.mock.calls.some(([url]) => url.endsWith('/cancel'))).toBe(false)
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Stop future recurring payments for this branch.' })
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel recurring subscription' }))
+    await waitFor(() =>
+      expect(fetcher).toHaveBeenCalledWith(
+        '/api/billing/paypal/cancel',
+        expect.objectContaining({
+          body: JSON.stringify({
+            branchId: branch,
+            subscriptionId: second,
+            confirmCancellation: true,
+          }),
+        })
+      )
+    )
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Check PayPal' })).toBeEnabled())
   })
 })

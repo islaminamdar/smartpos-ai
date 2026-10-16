@@ -12,7 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.UUID;
 
-/** Durable storage boundary. Only a future verified native issuance engine may write receipts.
+/** Durable storage boundary. Only the internal verified native issuance engine may write receipts.
  * No write method is exported through the WebView plugin. This is not an issuance authorizer. */
 public final class NativeJournal extends SQLiteOpenHelper {
     public static final String DATABASE = "internext-pos-ledger-v1.db";
@@ -20,7 +20,7 @@ public final class NativeJournal extends SQLiteOpenHelper {
     private final CommitProbe probe;
     public NativeJournal(Context context) { this(context, DATABASE, () -> {}); }
     NativeJournal(Context context, String name, CommitProbe probe) {
-        super(context, name, null, 1);
+        super(context, name, null, 2);
         this.probe = probe;
         setWriteAheadLoggingEnabled(true);
     }
@@ -49,8 +49,10 @@ public final class NativeJournal extends SQLiteOpenHelper {
         db.execSQL("CREATE TRIGGER intents_immutable_update BEFORE UPDATE ON intents WHEN NEW.id IS NOT OLD.id OR NEW.request_hash IS NOT OLD.request_hash OR NEW.request_json IS NOT OLD.request_json OR NEW.created_at IS NOT OLD.created_at OR (OLD.receipt_id IS NOT NULL AND (NEW.receipt_id IS NULL OR NEW.receipt_id IS NOT OLD.receipt_id)) BEGIN SELECT RAISE(ABORT,'immutable_intent'); END");
         db.execSQL("CREATE TRIGGER intents_immutable_delete BEFORE DELETE ON intents BEGIN SELECT RAISE(ABORT,'immutable_intent'); END");
         db.execSQL("CREATE TRIGGER intents_insert_guard BEFORE INSERT ON intents WHEN EXISTS(SELECT 1 FROM intents WHERE id=NEW.id) BEGIN SELECT RAISE(ABORT,'intent_exists'); END");
+        NativeCheckoutEngine.createTables(db);
     }
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if (oldVersion == 1 && newVersion == 2) { NativeCheckoutEngine.createTables(db); return; }
         throw new IllegalStateException("A reviewed ledger migration is required");
     }
     public synchronized String installationId() {
@@ -59,7 +61,7 @@ public final class NativeJournal extends SQLiteOpenHelper {
             return c.getString(0);
         }
     }
-    public synchronized boolean hasCustody() { return count("intents") > 0 || count("receipts") > 0; }
+    public synchronized boolean hasCustody() { return count("intents") > 0 || count("receipts") > 0 || count("offline_bundles") > 0; }
     public synchronized void bindDeviceKey(String fingerprint) {
         if (!fingerprint.matches("[a-f0-9]{64}")) throw new IllegalArgumentException("invalid_key_fingerprint");
         SQLiteDatabase db = getWritableDatabase(); db.beginTransaction();
@@ -109,7 +111,7 @@ public final class NativeJournal extends SQLiteOpenHelper {
     private static void bounded(String value, int max) {
         if (value == null || value.isEmpty() || value.getBytes(StandardCharsets.UTF_8).length > max) throw new IllegalArgumentException("invalid_payload_size");
     }
-    public synchronized void beginIntent(String id, String canonicalRequest, String createdAt) {
+    synchronized void beginIntent(String id, String canonicalRequest, String createdAt) {
         uuid(id); bounded(canonicalRequest, 131072); bounded(createdAt, 32);
         SQLiteDatabase db = getWritableDatabase(); db.beginTransaction();
         try {
@@ -125,7 +127,7 @@ public final class NativeJournal extends SQLiteOpenHelper {
     }
     /** Caller must already verify authority, calculate the complete invoice, and sign its payload.
      * Exact retries return the originally stored envelope; no caller may modify a committed receipt. */
-    public synchronized String commitVerifiedIssuance(String intentId, String exactRequest, String receiptId,
+    synchronized String commitVerifiedIssuance(String intentId, String exactRequest, String receiptId,
             String documentNumber, String issuedAt, long totalFils, String signedEnvelope) {
         uuid(intentId); uuid(receiptId); bounded(exactRequest, 131072); bounded(signedEnvelope, 1500000);
         bounded(documentNumber, 80); bounded(issuedAt, 32);
@@ -161,7 +163,7 @@ public final class NativeJournal extends SQLiteOpenHelper {
             db.setTransactionSuccessful(); return signedEnvelope;
         } finally { db.endTransaction(); }
     }
-    public synchronized void acknowledgeVerified(String receiptId, String expectedPayloadHash, String canonicalAck, String acknowledgedAt) {
+    synchronized void acknowledgeVerified(String receiptId, String expectedPayloadHash, String canonicalAck, String acknowledgedAt) {
         uuid(receiptId); bounded(canonicalAck, 131072); bounded(acknowledgedAt, 32);
         SQLiteDatabase db = getWritableDatabase(); db.beginTransaction();
         try {

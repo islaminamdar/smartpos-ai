@@ -35,6 +35,7 @@ const stateSchema = z.object({
   ),
 })
 type BillingState = z.infer<typeof stateSchema>
+type CancellationConsent = { actorId: string; branchId: string; subscriptionId: string }
 async function api(path: string, body?: unknown) {
   const response = await fetch(path, {
     method: body ? 'POST' : 'GET',
@@ -66,7 +67,7 @@ export default function BillingClient() {
   const [message, setMessage] = useState('Loading your branches…'),
     [busy, setBusy] = useState(false),
     [agree, setAgree] = useState(false),
-    [cancelAgree, setCancelAgree] = useState(false),
+    [cancelConsent, setCancelConsent] = useState<CancellationConsent | null>(null),
     [approval, setApproval] = useState<string | null>(null)
   useEffect(() => {
     let active = true
@@ -92,7 +93,7 @@ export default function BillingClient() {
     let active = true
     setState(null)
     setAgree(false)
-    setCancelAgree(false)
+    setCancelConsent(null)
     setApproval(null)
     if (!branch) return
     api('/api/billing/paypal/status?branchId=' + branch)
@@ -112,10 +113,22 @@ export default function BillingClient() {
       active = false
     }
   }, [branch, actor])
-  useEffect(() => {
-    setCancelAgree(false)
-  }, [state?.subscription?.id])
+  const current = state?.subscription,
+    terminal = !current || ['CANCELLED', 'EXPIRED'].includes(current.status)
+  const cancelAgree = !!(
+    current &&
+    !terminal &&
+    cancelConsent?.actorId === actor &&
+    cancelConsent.branchId === branch &&
+    cancelConsent.subscriptionId === current.id
+  )
   async function action(kind: 'checkout' | 'reconcile' | 'cancel') {
+    if (busy || !state || !branch || !actor) return
+    // Capture the reviewed identity before any asynchronous work. A refreshed
+    // agreement cannot inherit consent or replace the cancellation payload.
+    const cancellationId = current?.id
+    if (kind === 'cancel' && (!cancelAgree || !cancellationId)) return
+    if (kind === 'cancel') setCancelConsent(null)
     setBusy(true)
     setMessage('Checking with PayPal…')
     setApproval(null)
@@ -132,13 +145,20 @@ export default function BillingClient() {
           : kind === 'cancel'
             ? {
                 branchId: branch,
-                subscriptionId: state?.subscription?.id,
+                subscriptionId: cancellationId,
                 confirmCancellation: true,
               }
             : { branchId: branch }
       const result = await api('/api/billing/paypal/' + kind, body)
       const fresh = stateSchema.parse(await api('/api/billing/paypal/status?branchId=' + branch))
       setState(fresh)
+      setCancelConsent((consent) =>
+        consent?.actorId === actor &&
+        consent.branchId === branch &&
+        consent.subscriptionId === fresh.subscription?.id
+          ? consent
+          : null
+      )
       if (['CANCELLED', 'EXPIRED'].includes(fresh.subscription?.status ?? ''))
         localStorage.removeItem(key)
       if (result.approvalUrl) {
@@ -167,8 +187,6 @@ export default function BillingClient() {
       setBusy(false)
     }
   }
-  const current = state?.subscription,
-    terminal = !current || ['CANCELLED', 'EXPIRED'].includes(current.status)
   return (
     <main className="billing-shell">
       <header className="billing-nav">
@@ -298,7 +316,13 @@ export default function BillingClient() {
                     <input
                       type="checkbox"
                       checked={cancelAgree}
-                      onChange={(e) => setCancelAgree(e.target.checked)}
+                      onChange={(e) =>
+                        setCancelConsent(
+                          e.target.checked
+                            ? { actorId: actor, branchId: branch, subscriptionId: current.id }
+                            : null
+                        )
+                      }
                       disabled={busy}
                     />
                     <span>Stop future recurring payments for this branch.</span>
