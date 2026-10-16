@@ -2,6 +2,9 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../../../apps/android-pos/node_modules/react', async () => await import('react'))
 const bridge = vi.hoisted(() => ({
+  getNativePinRecoveryState: vi.fn(),
+  startNativePinRecovery: vi.fn(),
+  retryNativePinRecovery: vi.fn(),
   getNativeShiftCloseState: vi.fn(),
   checkNativeShiftClose: vi.fn(),
   closeNativeShift: vi.fn(),
@@ -110,6 +113,15 @@ const reconciliation = {
   noticeCode: null,
 }
 beforeEach(() => {
+  bridge.getNativePinRecoveryState.mockResolvedValue({
+    schemaVersion: 1,
+    status: 'not_available',
+    requestId: null,
+    canStart: false,
+    canRetry: false,
+    passwordRequired: false,
+    reasonCode: 'pin_not_provisioned',
+  })
   bridge.getNativeShiftCloseState.mockResolvedValue({
     schemaVersion: 1,
     status: 'not_available',
@@ -243,7 +255,9 @@ describe('Native secure access', () => {
     const signIn = await screen.findByRole('button', { name: 'Sign in securely' })
     await waitFor(() => expect(signIn).toBeEnabled())
     expect(document.querySelector('input[type=password]')).toBeNull()
-    expect(screen.queryByLabelText(/password|email|pin/i)).toBeNull()
+    expect(
+      document.querySelector('input[type=password], input[type=email], input[inputmode=numeric]')
+    ).toBeNull()
     fireEvent.click(signIn)
     await screen.findByText('Signed in')
     expect(bridge.signInNative).toHaveBeenCalledWith()
@@ -1031,4 +1045,111 @@ it('keeps verified cash closing totals visible after setup refresh and does not 
   expect(screen.getByText('AED -1.55')).toBeVisible()
   expect(bridge.closeNativeShift).toHaveBeenCalledExactlyOnceWith(branchId, 12345)
   expect(bridge.openNativeOfflineShift).not.toHaveBeenCalled()
+})
+
+const pinReady = {
+  schemaVersion: 1,
+  status: 'ready',
+  requestId: null,
+  canStart: true,
+  canRetry: false,
+  passwordRequired: true,
+  reasonCode: null,
+}
+const pinPending = {
+  ...pinReady,
+  status: 'pending',
+  requestId: '10000000-0000-4000-8000-000000000099',
+  canStart: false,
+  canRetry: true,
+  reasonCode: 'pin_recovery_pending',
+}
+it('discovers saved PIN recovery before new setup and preserves historical upload and payment reads', async () => {
+  bridge.readAccessState.mockResolvedValue(enrolled)
+  bridge.readOfflineState.mockResolvedValue({ ...offline, stage: 'prepare', shiftId: branchId })
+  bridge.getNativePinRecoveryState.mockResolvedValue(pinPending)
+  render(<App />)
+  await screen.findByRole('button', { name: 'Check / retry saved PIN recovery' })
+  await waitFor(() => expect(bridge.readNativeCheckout).toHaveBeenCalled())
+  expect(screen.getByRole('button', { name: 'Sign out of this app' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Prepare this counter' })).toBeDisabled()
+  const upload = screen.getByRole('button', { name: 'Upload saved records' })
+  await waitFor(() => expect(upload).toBeEnabled())
+  fireEvent.click(upload)
+  await waitFor(() => expect(bridge.reconcileNativeOffline).toHaveBeenCalledTimes(1))
+  fireEvent.click(screen.getByRole('button', { name: /^Counter/ }))
+  await screen.findByText(/A saved PIN recovery needs checking/)
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Check counter status' })).toBeEnabled()
+  )
+})
+it('allows original-account sign-in for a saved PIN recovery but prevents enrollment', async () => {
+  bridge.getNativePinRecoveryState.mockResolvedValue({ ...pinPending, passwordRequired: false })
+  bridge.signInNative.mockResolvedValue(signedIn)
+  render(<App />)
+  const signin = await screen.findByRole('button', { name: 'Sign in securely' })
+  await waitFor(() => expect(signin).toBeEnabled())
+  fireEvent.click(signin)
+  await screen.findByText('Signed in')
+  await waitFor(() => expect(bridge.getNativePinRecoveryState).toHaveBeenCalledTimes(2))
+  expect(screen.getByRole('button', { name: 'Enroll this counter' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Sign out of this app' })).toBeDisabled()
+})
+it('fails closed on unreadable PIN metadata and releases only after an explicit successful read', async () => {
+  bridge.readAccessState.mockResolvedValue(enrolled)
+  bridge.readOfflineState.mockResolvedValue({ ...offline, stage: 'prepare', shiftId: branchId })
+  bridge.getNativePinRecoveryState
+    .mockRejectedValueOnce(new Error('native_storage_unavailable'))
+    .mockResolvedValue({
+      ...pinReady,
+      status: 'not_available',
+      canStart: false,
+      passwordRequired: false,
+      reasonCode: 'pin_not_provisioned',
+    })
+  render(<App />)
+  await screen.findByText(/saved recovery record cannot be read/)
+  expect(screen.getByRole('button', { name: 'Prepare this counter' })).toBeDisabled()
+  const check = screen.getByRole('button', { name: 'Check saved PIN recovery' })
+  await waitFor(() => expect(check).toBeEnabled())
+  fireEvent.click(check)
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Prepare this counter' })).toBeEnabled()
+  )
+})
+it('completes PIN recovery, refreshes preparation, preserves the completion and requires new-PIN unlock', async () => {
+  bridge.readAccessState.mockResolvedValue(enrolled)
+  bridge.readOfflineState.mockResolvedValue({
+    ...offlinePrepared,
+    status: 'locked',
+    stage: 'unlock',
+  })
+  bridge.getNativePinRecoveryState.mockResolvedValue(pinReady)
+  const complete = {
+    ...pinReady,
+    status: 'completed',
+    requestId: pinPending.requestId,
+    passwordRequired: false,
+    reasonCode: 'pin_recovery_completed',
+  }
+  bridge.startNativePinRecovery.mockImplementation(async () => {
+    bridge.getNativePinRecoveryState.mockResolvedValue(complete)
+    return complete
+  })
+  render(<App />)
+  const start = await screen.findByRole('button', { name: 'Continue in Android' })
+  const consent = screen.getByRole('checkbox', {
+    name: /Recover the PIN for this original staff account/,
+  })
+  await waitFor(() => expect(consent).toBeEnabled())
+  fireEvent.click(consent)
+  fireEvent.click(start)
+  await screen.findByText(/PIN recovery complete\./)
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Unlock with Android PIN' })).toBeEnabled()
+  )
+  expect(screen.getByRole('button', { name: 'Recover PIN again' })).toBeDisabled()
+  expect(bridge.unlockNativeOffline).not.toHaveBeenCalled()
+  expect(bridge.startNativePinRecovery).toHaveBeenCalledTimes(1)
+  expect(screen.getByText('New sales paused')).toBeVisible()
 })

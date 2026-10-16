@@ -20,6 +20,7 @@ import info.internext.pos.storage.NativeCheckoutCoordinator;
 import info.internext.pos.storage.NativeBundleRecovery;
 import info.internext.pos.storage.NativePaymentRecovery;
 import info.internext.pos.storage.NativeShiftClose;
+import info.internext.pos.storage.NativePinRecovery;
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -35,6 +36,7 @@ public final class NativeLedgerPlugin extends Plugin {
     private NativeBundleRecovery bundleRecovery;
     private NativePaymentRecovery paymentRecovery;
     private volatile NativeShiftClose shiftClose;
+    private volatile NativePinRecovery pinRecovery;
     private volatile boolean foreground=true;
     private final java.util.concurrent.atomic.AtomicLong checkoutEpoch=new java.util.concurrent.atomic.AtomicLong();
     private AlertDialog credentials;
@@ -53,6 +55,61 @@ public final class NativeLedgerPlugin extends Plugin {
     private NativeBundleRecovery bundleRecovery()throws Exception{if(bundleRecovery==null)bundleRecovery=new NativeBundleRecovery(getContext(),journal,session());return bundleRecovery;}
     private NativePaymentRecovery paymentRecovery()throws Exception{if(paymentRecovery==null)paymentRecovery=new NativePaymentRecovery(getContext(),journal,session());return paymentRecovery;}
     private NativeShiftClose shiftClose()throws Exception{if(shiftClose==null)shiftClose=new NativeShiftClose(getContext(),journal,session(),offline());return shiftClose;}
+    private NativePinRecovery pinRecovery()throws Exception{if(pinRecovery==null)pinRecovery=new NativePinRecovery(getContext(),journal,session(),offline());return pinRecovery;}
+    private void requireRecoveryForeground(long epoch)throws NativeAccessError{if(destroyed||!foreground||epoch!=checkoutEpoch.get())throw new NativeAccessError("pin_recovery_interrupted");}
+    @PluginMethod public void getPinRecoveryState(PluginCall call){
+        if(call.getData().length()!=0){call.reject("Check the original PIN recovery.","pin_recovery_invalid");return;}
+        final long epoch=checkoutEpoch.get();execute(call,()->{requireRecoveryForeground(epoch);org.json.JSONObject result=pinRecovery().getState();requireRecoveryForeground(epoch);return result;},true);
+    }
+    @PluginMethod public void startPinRecovery(PluginCall call){
+        if(call.getData().length()!=0){call.reject("Enter recovery credentials only in Android.","pin_recovery_invalid");return;}
+        final long epoch=checkoutEpoch.get();execute(call,()->{requireRecoveryForeground(epoch);org.json.JSONObject state=pinRecovery().getState();
+            if(!state.getBoolean("canStart"))throw new NativeAccessError("pin_recovery_invalid");
+            String previous=state.isNull("requestId")?null:state.getString("requestId");requireRecoveryForeground(epoch);
+            getActivity().runOnUiThread(()->showPinRecoveryDialog(call,null,false,previous,epoch));return null;},true);
+    }
+    @PluginMethod public void retryPinRecovery(PluginCall call){
+        Object id=call.getData().opt("requestId");if(call.getData().length()!=1||!closeId(id)){call.reject("Select the original saved PIN recovery.","pin_recovery_invalid");return;}
+        final String requestId=(String)id;final long epoch=checkoutEpoch.get();execute(call,()->{requireRecoveryForeground(epoch);org.json.JSONObject state=pinRecovery().getState();
+            if(!requestId.equals(state.opt("requestId"))||(!state.getBoolean("canRetry")&&!"completed".equals(state.opt("status"))))throw new NativeAccessError("pin_recovery_invalid");
+            requireRecoveryForeground(epoch);getActivity().runOnUiThread(()->showPinRecoveryDialog(call,requestId,false,null,epoch));return null;},true);
+    }
+    /** Secrets are Android-owned; retry first checks the saved request without a password. */
+    private void showPinRecoveryDialog(PluginCall call,String requestId,boolean passwordOnly,String previousRequestId,long epoch){
+        if(destroyed||!foreground||epoch!=checkoutEpoch.get()||getActivity().isFinishing()||credentials!=null){call.reject("PIN recovery confirmation is unavailable right now.","native_pin_cancelled");return;}
+        final boolean starting=requestId==null;
+        final EditText password=(starting||passwordOnly)?recoveryPasswordField():null;
+        final EditText pin=starting?pinField("New PIN"):null,confirmation=starting?pinField("Confirm new PIN"):null;
+        String message=starting?"Reset the PIN for the original signed-in staff account on this counter. Bills, payment records and invoice limits are kept. Enter your current account password and a new 8–12 digit PIN. Recovery leaves the counter locked.":passwordOnly?"No approval was found for saved recovery "+requestId+". Enter the original staff account password to authorize the same saved replacement. The new PIN stays unchanged. Recovery leaves this counter locked until you enter the new PIN.":"Check saved PIN recovery "+requestId+". The saved replacement stays unchanged. If it is already approved, this will apply that replacement. The counter remains locked until you enter the new PIN. No new reset is submitted.";
+        AlertDialog.Builder builder=new AlertDialog.Builder(getActivity()).setTitle(starting?"Recover staff PIN":passwordOnly?"Authorize saved PIN recovery":"Check saved PIN recovery").setMessage(message);
+        if(password!=null){LinearLayout layout=new LinearLayout(getActivity());layout.setOrientation(LinearLayout.VERTICAL);int padding=(int)(24*getContext().getResources().getDisplayMetrics().density);layout.setPadding(padding,8,padding,8);layout.addView(password);if(pin!=null){layout.addView(pin);layout.addView(confirmation);}builder.setView(layout);passwordField=password;}
+        AlertDialog dialog=builder.setNegativeButton("Cancel",(d,w)->call.reject("PIN recovery confirmation cancelled.","native_pin_cancelled")).setPositiveButton(starting?"Recover PIN":passwordOnly?"Authorize saved recovery":"Check and finish recovery",null).create();
+        credentials=dialog;dialog.setOnCancelListener(d->call.reject("PIN recovery confirmation cancelled.","native_pin_cancelled"));
+        dialog.setOnDismissListener(d->{if(password!=null)password.getText().clear();if(pin!=null)pin.getText().clear();if(confirmation!=null)confirmation.getText().clear();if(credentials==dialog){credentials=null;passwordField=null;}});
+        dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            if(destroyed||!foreground||epoch!=checkoutEpoch.get()){dialog.cancel();return;}
+            if(password!=null&&password.length()==0){password.setError("Enter your account password");return;}
+            if(pin!=null&&!validRecoveryPin(pin)){pin.setError("Use 8–12 digits");return;}
+            if(confirmation!=null&&!android.text.TextUtils.equals(pin.getText(),confirmation.getText())){confirmation.setError("The PINs must match");return;}
+            final char[] secret=copySecret(password),replacement=copySecret(pin),repeat=copySecret(confirmation);
+            dialog.dismiss();if(!execute(call,()->{try{
+                requireRecoveryForeground(epoch);org.json.JSONObject state=pinRecovery().getState();
+                if(starting){String current=state.isNull("requestId")?null:state.getString("requestId");if(!state.getBoolean("canStart")||!java.util.Objects.equals(previousRequestId,current))throw new NativeAccessError("pin_recovery_invalid");}
+                else if(!requestId.equals(state.opt("requestId")))throw new NativeAccessError("pin_recovery_invalid");
+                requireRecoveryForeground(epoch);org.json.JSONObject result=starting?pinRecovery().startWithCredentials(secret,replacement,repeat):pinRecovery().retryWithPassword(requestId,secret);
+                requireRecoveryForeground(epoch);
+                if(!starting&&!passwordOnly&&"pending".equals(result.opt("status"))&&requestId.equals(result.opt("requestId"))&&result.getBoolean("canRetry")&&result.getBoolean("passwordRequired")){
+                    getActivity().runOnUiThread(()->showPinRecoveryDialog(call,requestId,true,null,epoch));return null;
+                }
+                return result;
+            }finally{wipeSecret(secret);wipeSecret(replacement);wipeSecret(repeat);}},true)){wipeSecret(secret);wipeSecret(replacement);wipeSecret(repeat);}
+        }));
+        if(dialog.getWindow()!=null)dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);dialog.show();
+    }
+    private EditText recoveryPasswordField(){EditText field=new EditText(getActivity());field.setHint("Current account password");field.setContentDescription("Current account password");field.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);field.setSingleLine(true);field.setSaveEnabled(false);field.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(256)});if(android.os.Build.VERSION.SDK_INT>=26)field.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);return field;}
+    private static boolean validRecoveryPin(EditText field){if(field.length()<8||field.length()>12)return false;for(int i=0;i<field.length();i++)if(field.getText().charAt(i)<'0'||field.getText().charAt(i)>'9')return false;return true;}
+    private static char[] copySecret(EditText field){if(field==null)return null;char[] value=new char[field.length()];android.text.TextUtils.getChars(field.getText(),0,field.length(),value,0);return value;}
+    private static void wipeSecret(char[] value){if(value!=null)Arrays.fill(value,'\0');}
     @PluginMethod public void getShiftCloseState(PluginCall call){
         if(call.getData().length()!=0){call.reject("Check this drawer's saved status.","offline_context_changed");return;}
         final long epoch=checkoutEpoch.get();
@@ -126,7 +183,7 @@ public final class NativeLedgerPlugin extends Plugin {
             return result;
         }catch(Exception error){throw new NativeAccessError(NativeCheckoutCoordinator.code(error));}},true);
     }
-    private void notifyCheckoutLocked(){checkoutEpoch.incrementAndGet();if(shiftClose!=null)shiftClose.invalidateCheck();notifyListeners("nativeCheckoutLocked",new JSObject().put("schemaVersion",1),true);}
+    private void notifyCheckoutLocked(){checkoutEpoch.incrementAndGet();if(shiftClose!=null)shiftClose.invalidateCheck();if(pinRecovery!=null)pinRecovery.invalidate();notifyListeners("nativeCheckoutLocked",new JSObject().put("schemaVersion",1),true);}
     @PluginMethod public void getCheckoutState(PluginCall call){checkoutCall(call,()->checkout().getState());}
     @PluginMethod public void quoteBasket(PluginCall call){checkoutCall(call,()->checkout().quoteBasket(call.getData()),"authorityId","serviceType","customer","lines","tenderMode","cashTenderedFils","recordedCardFils");}
     @PluginMethod public void beginPaymentIntent(PluginCall call){checkoutCall(call,()->checkout().beginPaymentIntent(call.getData().getString("intentId"),call.getData().getJSONObject("request")),"intentId","request");}
@@ -167,7 +224,7 @@ public final class NativeLedgerPlugin extends Plugin {
     }
     private static String accessCode(Exception error){
         if(error instanceof NativeAccessError)return ((NativeAccessError)error).code;
-        String code=error.getMessage();return java.util.Arrays.asList("pin_incorrect","pin_locked","pin_online_reset_required","pin_unlock_required","pin_format_invalid","pin_confirmation_mismatch","clock_source_blocked","clock_rollback","pin_kdf_unsupported").contains(code)?code:"native_access_unavailable";
+        String code=error.getMessage();return java.util.Arrays.asList("pin_incorrect","pin_locked","pin_online_reset_required","pin_unlock_required","pin_format_invalid","pin_confirmation_mismatch","pin_recovery_pending","pin_recovery_invalid","pin_recovery_conflict","pin_recovery_interrupted","clock_source_blocked","clock_rollback","pin_kdf_unsupported").contains(code)?code:"native_access_unavailable";
     }
     private void read(PluginCall call, ReadOperation operation) {
         execute(call,operation,false);
@@ -253,7 +310,7 @@ public final class NativeLedgerPlugin extends Plugin {
     @Override protected void handleOnPause(){foreground=false;notifyCheckoutLocked();if(credentials!=null)credentials.cancel();try{storage.execute(()->{if(offline!=null)offline.lock();});}catch(java.util.concurrent.RejectedExecutionException ignored){}super.handleOnPause();}
     @Override protected void handleOnResume(){foreground=true;super.handleOnResume();}
     @Override protected void handleOnDestroy() {
-        destroyed=true;
+        destroyed=true;checkoutEpoch.incrementAndGet();if(pinRecovery!=null)pinRecovery.invalidate();
         if(passwordField!=null)passwordField.getText().clear();
         if(credentials!=null)credentials.dismiss();
         storage.execute(() -> {if(offline!=null)offline.close();journal.close();}); storage.shutdown(); super.handleOnDestroy();

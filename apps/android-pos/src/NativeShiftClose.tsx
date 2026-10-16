@@ -460,8 +460,8 @@ export default function NativeShiftClose({
           )}
           {actionsBlocked && (
             <p className="access-note">
-              A payment or setup request needs checking. A new close is paused. Upload saved records
-              and finish an eligible allocation to resolve those requirements.
+              A payment or setup request needs checking. A new close is paused. Resolve the original
+              request in its recovery panel before closing this drawer.
             </p>
           )}
           {currentDetails && onlineChecked && state?.status === 'ready' && !original && (

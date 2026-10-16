@@ -1,0 +1,56 @@
+{
+  "states": {
+    "ready": {
+      "schemaVersion": 1,
+      "status": "ready",
+      "requestId": null,
+      "canStart": true,
+      "canRetry": false,
+      "passwordRequired": true,
+      "reasonCode": null
+    },
+    "pending": {
+      "schemaVersion": 1,
+      "status": "pending",
+      "requestId": "bf9eeb6e-3768-4838-8757-942d2668ff20",
+      "canStart": false,
+      "canRetry": true,
+      "passwordRequired": true,
+      "reasonCode": "pin_recovery_pending"
+    },
+    "approved": {
+      "schemaVersion": 1,
+      "status": "approved",
+      "requestId": "bf9eeb6e-3768-4838-8757-942d2668ff20",
+      "canStart": false,
+      "canRetry": true,
+      "passwordRequired": false,
+      "reasonCode": "pin_recovery_approved"
+    },
+    "completed": {
+      "schemaVersion": 1,
+      "status": "completed",
+      "requestId": "bf9eeb6e-3768-4838-8757-942d2668ff20",
+      "canStart": true,
+      "canRetry": false,
+      "passwordRequired": false,
+      "reasonCode": "pin_recovery_completed"
+    }
+  },
+  "publicKeySpki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEEUCWZ4ien60h7HF4_f_gO2h0Hrb5RQn7O5jso4llL4uAYN0XCNvEqmnFj7kZcKi2883ol0-vIhWfZEmfTP2-5w",
+  "serverPublicKeySpki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEMCCsq_yoHKh74SAap8e6hNDAK0YEToPQUQ3ZEpijD6Tlij8rjZ7ccfKiqz7NzykqLeKMQrk8iiqt-yzP5hx-aQ",
+  "proof": {
+    "format": "pos-signed-v1",
+    "alg": "ECDSA-P256-SHA256-DER",
+    "keyId": "b535d24ed0b3441065ee6212a48cf0e9709317b467c47249f34576e710701b39",
+    "payloadBase64Url": "eyJhY3RvcklkIjoiZjhjZjM3NDktYTU3My00YjBlLTliMWItOWY4NGRiMmZlODM5IiwiYnJhbmNoSWQiOiJlNTc4NWQxNy01NjRmLTRmNjMtOTg2Ni0wNjE0YTk2YmI1ZDUiLCJkZXZpY2VJZCI6ImI1ZDkxODMyLWIzZTItNDIxZS1iMWI2LTNlYjZiZDRiMTUxZCIsImRldmljZUtleVNoYTI1NiI6ImI1MzVkMjRlZDBiMzQ0MTA2NWVlNjIxMmE0OGNmMGU5NzA5MzE3YjQ2N2M0NzI0OWYzNDU3NmU3MTA3MDFiMzkiLCJrZXlFcG9jaCI6Ijc1YzRlMjNhLWM1MTQtNGYyNS04MjJhLTA5YTYxZTQ1MjdkMiIsImtpbmQiOiJuYXRpdmUtcGluLXJlY292ZXJ5IiwibmV3Q3JlZGVudGlhbFNoYTI1NiI6IjU2ZWEzZmEwZTk3ODIzZTJiZmVjMmJlZjQ5NGJkNmJhOGZjZTllYTFjMjRlNGQwMDM0NzA1NmVkZDRhYzM5NGMiLCJvbGRDcmVkZW50aWFsU2hhMjU2IjoiODczN2FkZThmMjg5MjE3YzkzNDQ2Y2ZhNDYyNTdiMzgzNDliZWQ3MWMxYjQzYWJmNmJkNjIxNDllNDM3YzhmMSIsIm9yZ2FuaXphdGlvbklkIjoiZTY2OGRlODUtOWRjNi00MTZjLTk4MTYtNWI4NmYyZDZmZWU5IiwicmVxdWVzdElkIjoiYmY5ZWViNmUtMzc2OC00ODM4LTg3NTctOTQyZDI2NjhmZjIwIiwic2NoZW1hVmVyc2lvbiI6MSwic2lnbmVkQXQiOiIyMDI2LTEwLTE2VDA2OjMwOjAwLjAwMFoifQ",
+    "signatureBase64Url": "MEYCIQDqZ7sF8Xo68wpg3EypVKm3jOVuXLLA2YBGSu7dRXKBlwIhAITNd67gey2fZ3_3cp2AbqxqFYEvCw115UkFxXbMMJaU"
+  },
+  "approval": {
+    "format": "pos-signed-v1",
+    "alg": "ECDSA-P256-SHA256-DER",
+    "keyId": "synthetic-server",
+    "payloadBase64Url": "eyJhY3RvcklkIjoiZjhjZjM3NDktYTU3My00YjBlLTliMWItOWY4NGRiMmZlODM5IiwiYXBwcm92ZWRBdCI6IjIwMjYtMTAtMTZUMDY6MzA6MDAuMDAwWiIsImJyYW5jaElkIjoiZTU3ODVkMTctNTY0Zi00ZjYzLTk4NjYtMDYxNGE5NmJiNWQ1IiwiZGV2aWNlSWQiOiJiNWQ5MTgzMi1iM2UyLTQyMWUtYjFiNi0zZWI2YmQ0YjE1MWQiLCJkZXZpY2VLZXlTaGEyNTYiOiJiNTM1ZDI0ZWQwYjM0NDEwNjVlZTYyMTJhNDhjZjBlOTcwOTMxN2I0NjdjNDcyNDlmMzQ1NzZlNzEwNzAxYjM5Iiwia2V5RXBvY2giOiI3NWM0ZTIzYS1jNTE0LTRmMjUtODIyYS0wOWE2MWU0NTI3ZDIiLCJraW5kIjoibmF0aXZlLXBpbi1yZWNvdmVyeS1hcHByb3ZhbCIsIm5ld0NyZWRlbnRpYWxTaGEyNTYiOiI1NmVhM2ZhMGU5NzgyM2UyYmZlYzJiZWY0OTRiZDZiYThmY2U5ZWExYzI0ZTRkMDAzNDcwNTZlZGQ0YWMzOTRjIiwib2xkQ3JlZGVudGlhbFNoYTI1NiI6Ijg3MzdhZGU4ZjI4OTIxN2M5MzQ0NmNmYTQ2MjU3YjM4MzQ5YmVkNzFjMWI0M2FiZjZiZDYyMTQ5ZTQzN2M4ZjEiLCJvcmdhbml6YXRpb25JZCI6ImU2NjhkZTg1LTlkYzYtNDE2Yy05ODE2LTViODZmMmQ2ZmVlOSIsInByb29mU2hhMjU2IjoiNDhlYjk0ZWNiNjZkZGUwNzBiNWQwNThjMzRhZjIxYjFmMzA3MTQ4MWRjZGRlMTViZTNiNjM3ODU3NjlmZTE5NSIsInJlcXVlc3RJZCI6ImJmOWVlYjZlLTM3NjgtNDgzOC04NzU3LTk0MmQyNjY4ZmYyMCIsInNjaGVtYVZlcnNpb24iOjF9",
+    "signatureBase64Url": "MEUCIFQghTDTJJI14ibUefpuyAUCZ3v43Nf_GTnurkAsiGsTAiEA17HZZQPryi-iU2RZ2jXekeFZVdb0KaaKegfPaAiP5fA"
+  }
+}

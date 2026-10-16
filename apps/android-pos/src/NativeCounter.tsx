@@ -135,6 +135,7 @@ type Props = {
   available: boolean
   ready: boolean
   newSalesBlocked?: boolean
+  newSalesBlockReason?: 'drawer_close' | 'pin_recovery'
   revision: number
   operationLock: { current: boolean }
   onBusyChange: (busy: boolean) => void
@@ -146,6 +147,7 @@ export default function NativeCounter({
   available,
   ready,
   newSalesBlocked = false,
+  newSalesBlockReason = 'drawer_close',
   revision,
   operationLock,
   onBusyChange,
@@ -826,8 +828,11 @@ export default function NativeCounter({
       </div>
       {newSalesBlocked && available && (
         <p className="access-note">
-          A drawer close request needs checking. New payment collection and receipt confirmation are
-          paused; saved payment review remains available.
+          {newSalesBlockReason === 'pin_recovery'
+            ? 'A saved PIN recovery needs checking.'
+            : 'A drawer close request needs checking.'}{' '}
+          New payment collection and receipt confirmation are paused; saved payment review remains
+          available.
         </p>
       )}
       {!available ? (

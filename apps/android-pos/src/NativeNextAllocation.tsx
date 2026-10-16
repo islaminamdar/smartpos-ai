@@ -363,8 +363,8 @@ export default function NativeNextAllocation({
           )}
           {actionsBlocked && (
             <p className="access-note">
-              Check the saved payment in Counter first. Setup cannot continue while payment status
-              needs attention or is unverified.
+              Resolve the saved payment or setup request first. Setup cannot continue while its
+              status needs attention or is unverified.
             </p>
           )}
           {visible && ['ready', 'pending'].includes(visible.status) && visible.canContinue && (

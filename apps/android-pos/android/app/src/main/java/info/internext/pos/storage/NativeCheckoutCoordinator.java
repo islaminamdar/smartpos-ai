@@ -180,7 +180,7 @@ public final class NativeCheckoutCoordinator {
         if(error instanceof NativeAccessError)return ((NativeAccessError)error).code;
         if(error instanceof OfflineClock.ClockException)return ((OfflineClock.ClockException)error).code;
         String message=error.getMessage();
-        return java.util.Arrays.asList("native_shift_close_pending","offline_payment_recovery_uncertain","payment_resolution_invalid","payment_resolution_integrity_failed","unsupported_text","payment_frozen","freeze_integrity_failed","intent_integrity_failed","pin_unlock_required","authority_missing","authority_closed","authority_exhausted","payment_reconciliation_required","intent_missing","intent_conflict","intent_cancelled","already_issued","cancellation_conflict","buyer_details_required","presented_total_changed","tender_not_authorized","receipt_integrity_failed","invalid_tender").contains(message)?message:"native_checkout_unavailable";
+        return java.util.Arrays.asList("pin_recovery_pending","native_shift_close_pending","offline_payment_recovery_uncertain","payment_resolution_invalid","payment_resolution_integrity_failed","unsupported_text","payment_frozen","freeze_integrity_failed","intent_integrity_failed","pin_unlock_required","authority_missing","authority_closed","authority_exhausted","payment_reconciliation_required","intent_missing","intent_conflict","intent_cancelled","already_issued","cancellation_conflict","buyer_details_required","presented_total_changed","tender_not_authorized","receipt_integrity_failed","invalid_tender").contains(message)?message:"native_checkout_unavailable";
     }
     private static NativeAccessError fail(String code){return new NativeAccessError(code);}
 }

@@ -72,3 +72,8 @@ The Android package is an internal engineering candidate, not a live-selling APK
 ### Manager review candidate following the earlier checkpoint
 
 SQL020, current-authorized case reads, fresh password confirmation, immutable full-return/card-void attestations and the candidate manager browser recovery journal are implemented. [Manager review scope](../contracts/20261016-offline-payment-manager-review.md) records the exact boundary. Native signed-result acceptance is pending; the decision POST remains excluded from hosted release and all review/resolution policies default off. SQL017–020 are not applied live. No customer-ready offline APK or provider payment/refund integration is established by this increment.
+
+
+### Current candidate follow-up
+
+Following the checkpoints above, candidate native manager-outcome acceptance, next-allocation continuation and drawer closing have been implemented. The daily manager Operations web view (SQL024) and same-original-staff Android PIN recovery (SQL025) extend the candidate; see [launch readiness follow-up](2026-10-16-launch-readiness.md) and [PIN recovery boundary](../../apps/android-pos/PIN-RECOVERY.md). Clock repair, staff/device loss, complete two-device/server operation, physical printing and manager acceptance remain pending. SQL017–025 are not applied live, new Android issuance is disabled, and PayPal remains uncommissioned. None of this changes the existing AED100 manual pilot agreement.

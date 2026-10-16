@@ -148,3 +148,12 @@ Prioritize three practical web workstreams alongside that foundation:
 In parallel, finish **USD 100 per branch/month PayPal commissioning** using the existing billing UI/service rather than adding another checkout screen. Source validates exact monthly USD100 plans and keeps provider ACTIVE separate from confirmed payment; merchant configuration and genuine sandbox approval/payment/failure/cancel/webhook evidence remain missing. No provider calls or configuration were performed for this audit. Keep the pilot’s AED100 manual agreement untouched. Missing provider setup should be reported as a commercial launch dependency, not treated as a reason to stop all other feature delivery. See `lib/billing/paypal/README.md` for the implemented boundary and remaining acceptance.
 
 Courses/station routing, physical printers, cross-branch reports, email-based account onboarding/recovery, off-host backup restoration, Windows packaging and full security/operational acceptance remain in the broader goal. Do not mark them done from current native tests or this plan. Complete browser-visible product increments with authoritative storage and role/branch checks, responsive review and verified readback before promoting their status.
+
+
+## Subsequent candidate: daily operations and original-staff PIN recovery
+
+The daily Operations web view is implemented in candidate f63c248 with SQL024. It reports one authorized branch at a time, including full counts and bounded detail lists, current open work, today's fiscal totals and recent cash closes. Unknown local offline coverage and stale reads remain explicit. Cross-branch comparison remains pending.
+
+SQL025 and native authenticated PIN-store version2 implement [same-original-staff PIN recovery](../contracts/20261016-native-pin-recovery.md). Native-only password/PIN dialogs, immutable saved request/proof versions, exact approval retrieval, original-row compare-and-swap and a consumed-approval audit preserve financial custody. Recovery ends locked and grants no invoice numbers or renewed authority. Blocked-clock repair is explicitly separate and remains pending.
+
+These are candidates, not production activation. Live release remains5573dcc with SQL001–016, online pilot enabled and offline issuance disabled. SQL017–025, server signing configuration, customer APK signing/distribution and full operational acceptance remain outstanding. Current scoped scans and tests do not replace the requested full platform security audit.

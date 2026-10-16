@@ -186,3 +186,11 @@ it('keeps only exact native drawer-close POST reachable for historical recovery'
   expect(publicReleaseAccess('/api/pos/native/shift-close/extra','POST',pilot)).not.toBe('allow')
  }
 })
+
+it('exposes only exact native PIN recovery POST even when new selling is paused',()=>{
+ for(const pilot of [true,false]){
+  expect(publicReleaseAccess('/api/pos/native/pin-recovery','POST',pilot)).toBe('allow')
+  for(const method of ['GET','PUT','PATCH','DELETE','OPTIONS'])expect(publicReleaseAccess('/api/pos/native/pin-recovery',method,pilot)).not.toBe('allow')
+  expect(publicReleaseAccess('/api/pos/native/pin-recovery/extra','POST',pilot)).not.toBe('allow')
+ }
+})

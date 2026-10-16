@@ -11,6 +11,10 @@ import info.internext.pos.offline.OfflineBundle;
 import info.internext.pos.offline.OfflineClock;
 import info.internext.pos.offline.SignedProtocol;
 import org.json.JSONObject;
+import java.util.UUID;
+import java.util.Map;
+import java.security.PublicKey;
+import info.internext.pos.offline.NativePinRecoveryProof;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -21,7 +25,7 @@ import javax.crypto.spec.PBEKeySpec;
 
 /** Internal native PIN guard, never a web credential cache. Host must call provisioning
  * only after fresh verified native online identity/device authorization and native PIN
- * confirmation. No reset/delete API exists. All PIN arrays are consumed and wiped.
+ * confirmation. Only signed original-actor recovery may replace a credential; no delete API exists. All PIN arrays are consumed and wiped.
  * Call expensive PIN methods on the native worker, not the UI thread. */
 public final class NativeStaffUnlock implements NativeCheckoutEngine.UnlockGuard,AutoCloseable {
     static final String DATABASE="internext-pos-local-auth-v1.db";
@@ -48,7 +52,7 @@ public final class NativeStaffUnlock implements NativeCheckoutEngine.UnlockGuard
         store=new Store(context,database);try {store.getWritableDatabase();}catch(Exception error){store.close();throw error;}
     }
     private final class Store extends SQLiteOpenHelper {
-        Store(Context c,String name) {super(c,name,null,1);setWriteAheadLoggingEnabled(true);}
+        Store(Context c,String name) {super(c,name,null,2);setWriteAheadLoggingEnabled(true);}
         @Override public void onConfigure(SQLiteDatabase db) {db.execSQL("PRAGMA synchronous=FULL");db.execSQL("PRAGMA recursive_triggers=ON");}
         @Override public void onCreate(SQLiteDatabase db) {
             db.execSQL("CREATE TABLE auth_identity(slot INTEGER PRIMARY KEY CHECK(slot=1),installation TEXT NOT NULL,mac TEXT NOT NULL)");
@@ -58,10 +62,20 @@ public final class NativeStaffUnlock implements NativeCheckoutEngine.UnlockGuard
                 db.execSQL("CREATE TRIGGER "+table+"_no_replace BEFORE INSERT ON "+table+" WHEN EXISTS(SELECT 1 FROM "+table+(table.equals("credentials")?" WHERE scope=NEW.scope":"")+") BEGIN SELECT RAISE(ABORT,'auth_custody_replace'); END");
             }
             db.execSQL("CREATE TRIGGER auth_identity_no_update BEFORE UPDATE ON auth_identity BEGIN SELECT RAISE(ABORT,'auth_custody_update'); END");
+            recoverySchema(db);
             try {ContentValues row=new ContentValues();row.put("slot",1);row.put("installation",installationId);row.put("mac",SignedProtocol.encode(key.mac("auth-identity-v1",installationId.getBytes(StandardCharsets.UTF_8))));db.insertOrThrow("auth_identity",null,row);}
             catch(Exception error){throw failure("pin_store_unavailable");}
         }
-        @Override public void onUpgrade(SQLiteDatabase db,int oldVersion,int newVersion) {throw failure("pin_migration_required");}
+        @Override public void onUpgrade(SQLiteDatabase db,int oldVersion,int newVersion) {if(oldVersion==1&&newVersion==2)recoverySchema(db);else throw failure("pin_migration_required");}
+        private void recoverySchema(SQLiteDatabase db){
+            for(String table:RECOVERY_TABLES){
+                db.execSQL("CREATE TABLE "+table+"(id TEXT PRIMARY KEY NOT NULL,request_id TEXT NOT NULL,payload TEXT NOT NULL,mac TEXT NOT NULL)");
+                db.execSQL("CREATE INDEX "+table+"_request ON "+table+"(request_id)");
+                db.execSQL("CREATE TRIGGER "+table+"_no_update BEFORE UPDATE ON "+table+" BEGIN SELECT RAISE(ABORT,'auth_recovery_immutable'); END");
+                db.execSQL("CREATE TRIGGER "+table+"_no_delete BEFORE DELETE ON "+table+" BEGIN SELECT RAISE(ABORT,'auth_recovery_immutable'); END");
+                db.execSQL("CREATE TRIGGER "+table+"_no_replace BEFORE INSERT ON "+table+" WHEN EXISTS(SELECT 1 FROM "+table+" WHERE id=NEW.id) BEGIN SELECT RAISE(ABORT,'auth_recovery_immutable'); END");
+            }
+        }
     }
 
     boolean isProvisioned(OfflineBundle.Binding binding) throws Exception {
@@ -77,7 +91,7 @@ public final class NativeStaffUnlock implements NativeCheckoutEngine.UnlockGuard
         try {
             assertDevice(binding);validPin(pin);
             synchronized(NativeStaffUnlock.class) {
-                String scope=scope(binding);SQLiteDatabase db=store.getWritableDatabase();db.beginTransaction();
+                String scope=scope(binding);SQLiteDatabase db=store.getWritableDatabase();requireNoRecovery();db.beginTransaction();
                 try {
                     if(load(db,scope)!=null)throw failure("pin_already_provisioned");
                     try(Cursor count=db.rawQuery("SELECT count(*) FROM credentials",null)){count.moveToFirst();if(count.getLong(0)>=32)throw failure("pin_staff_limit");}
@@ -96,7 +110,7 @@ public final class NativeStaffUnlock implements NativeCheckoutEngine.UnlockGuard
         try {
             assertDevice(binding);
             synchronized(NativeStaffUnlock.class) {
-                clearSession();String scope=scope(binding);SQLiteDatabase db=store.getWritableDatabase();JSONObject charged;
+                clearSession();requireNoRecovery();String scope=scope(binding);SQLiteDatabase db=store.getWritableDatabase();JSONObject charged;
                 OfflineClock.Reading start=clock.read();String rejected=null;
                 // Charge the attempt durably BEFORE KDF verification. Killing the process at
                 // any subsequent point cannot grant free guesses or erase failed attempts.
@@ -140,7 +154,7 @@ public final class NativeStaffUnlock implements NativeCheckoutEngine.UnlockGuard
         assertDevice(binding);
         synchronized(NativeStaffUnlock.class) {
             try {
-                OfflineClock.Reading now=clock.read();
+                requireNoRecovery();OfflineClock.Reading now=clock.read();
                 if(sessionBinding==null||!sessionBinding.equals(bindingKey(binding))||!now.bootId.equals(sessionBoot)||now.elapsedRealtimeMs>=sessionExpires)throw failure("pin_unlock_required");
                 JSONObject current=load(store.getReadableDatabase(),sessionScope);
                 if(current==null||current.getLong("revision")!=sessionRevision||current.getLong("failures")!=0)throw failure("pin_unlock_required");
@@ -150,6 +164,66 @@ public final class NativeStaffUnlock implements NativeCheckoutEngine.UnlockGuard
     void lock(){synchronized(NativeStaffUnlock.class){clearSession();}}
     private void clearSession(){sessionBinding=null;sessionScope=null;sessionBoot=null;sessionExpires=0;sessionRevision=0;}
     @Override public void close(){synchronized(NativeStaffUnlock.class){clearSession();store.close();}}
+
+    private static final String[] RECOVERY_TABLES={"pin_recovery_requests","pin_recovery_proofs","pin_recovery_expired","pin_recovery_approvals","pin_recovery_applied"};
+    /** All methods use the existing auth monitor. Never call journal while holding it. */
+    void requireNoRecovery()throws Exception{synchronized(NativeStaffUnlock.class){if(recoveryPending()!=null)throw failure("pin_recovery_pending");}}
+    JSONObject recoveryPending()throws Exception{
+        synchronized(NativeStaffUnlock.class){SQLiteDatabase db=store.getReadableDatabase();load(db,"identity-probe");JSONObject pending=null;
+            try(Cursor c=db.rawQuery("SELECT id FROM pin_recovery_requests ORDER BY rowid",null)){while(c.moveToNext()){
+                JSONObject r=recoveryRead(db,"pin_recovery_requests",c.getString(0));JSONObject audit=recoveryRead(db,"pin_recovery_applied",c.getString(0));
+                if(audit==null){if(pending!=null)throw failure("pin_store_invalid");pending=r;}
+                else {
+                    JSONObject approval=recoveryRead(db,"pin_recovery_approvals",r.getString("requestId"));
+                    if(approval==null||!audit.getString("approvalSha256").equals(NativePinRecoveryProof.payloadHash(approval.getString("envelope")))||!audit.getString("requestId").equals(r.getString("requestId"))||!audit.getString("oldPayloadSha256").equals(r.getString("oldPayloadSha256"))||!audit.getString("newPayloadSha256").equals(SignedProtocol.hash(CanonicalJson.bytes(r.getJSONObject("candidate")))))throw failure("pin_store_invalid");
+                }
+            }}return pending;}
+    }
+    JSONObject recoveryLatest()throws Exception{synchronized(NativeStaffUnlock.class){SQLiteDatabase db=store.getReadableDatabase();load(db,"identity-probe");try(Cursor c=db.rawQuery("SELECT id FROM pin_recovery_requests ORDER BY rowid DESC LIMIT 1",null)){return c.moveToFirst()?recoveryRead(db,"pin_recovery_requests",c.getString(0)):null;}}}
+    JSONObject recoveryStart(OfflineBundle.Binding binding,char[] pin,char[] confirmation,java.util.function.BooleanSupplier foreground)throws Exception{
+        try{assertDevice(binding);validPin(pin);if(confirmation==null||!Arrays.equals(pin,confirmation))throw failure("pin_confirmation_mismatch");
+            synchronized(NativeStaffUnlock.class){requireNoRecovery();clearSession();SQLiteDatabase db=store.getWritableDatabase();String scope=scope(binding);JSONObject old=load(db,scope);if(old==null)throw failure("pin_not_provisioned");
+                OfflineClock.Reading now=clock.read();byte[] salt=new byte[32];new SecureRandom().nextBytes(salt);byte[] verifier=derive(pin,salt,scope);JSONObject candidate;
+                try{candidate=new JSONObject(new String(CanonicalJson.bytes(old),StandardCharsets.UTF_8)).put("salt",SignedProtocol.encode(salt)).put("verifier",SignedProtocol.encode(verifier)).put("failures",0).put("lockBoot",now.bootId).put("lockUntilElapsed",0).put("revision",Math.addExact(old.getLong("revision"),1));}finally{Arrays.fill(verifier,(byte)0);}
+                String id=UUID.randomUUID().toString();JSONObject core=new JSONObject().put("requestId",id).put("organizationId",binding.organizationId).put("branchId",binding.branchId).put("deviceId",binding.deviceId).put("actorId",binding.actorId).put("keyEpoch",binding.keyEpoch).put("deviceKeySha256",binding.deviceKeySha256).put("oldCredentialSha256",generation(old)).put("newCredentialSha256",generation(candidate));
+                JSONObject record=new JSONObject().put("requestId",id).put("scope",scope).put("oldPayloadSha256",SignedProtocol.hash(CanonicalJson.bytes(old))).put("candidate",candidate).put("core",core).put("createdAt",NativeCheckoutEngine.iso(now.wallTimeMs));
+                db.beginTransaction();try{if(!foreground.getAsBoolean())throw failure("pin_recovery_interrupted");requireNoRecovery();JSONObject check=load(db,scope);if(check==null||!SignedProtocol.hash(CanonicalJson.bytes(check)).equals(record.getString("oldPayloadSha256")))throw failure("pin_state_changed");recoveryInsert(db,"pin_recovery_requests",id,id,record);db.setTransactionSuccessful();}finally{db.endTransaction();}return record;
+            }
+        }finally{wipe(pin);wipe(confirmation);lock();}
+    }
+    String recoveryProof(String requestId)throws Exception{synchronized(NativeStaffUnlock.class){SQLiteDatabase db=store.getReadableDatabase();try(Cursor c=db.rawQuery("SELECT id FROM pin_recovery_proofs WHERE request_id=? ORDER BY rowid DESC LIMIT 1",new String[]{requestId})){return c.moveToFirst()?recoveryRead(db,"pin_recovery_proofs",c.getString(0)).getString("envelope"):null;}}}
+    void recoveryAddProof(String requestId,String envelope,PublicKey deviceKey)throws Exception{synchronized(NativeStaffUnlock.class){SQLiteDatabase db=store.getWritableDatabase();JSONObject r=recoveryRead(db,"pin_recovery_requests",requestId);if(r==null||recoveryRead(db,"pin_recovery_applied",requestId)!=null)throw failure("pin_recovery_invalid");
+        JSONObject proof=NativePinRecoveryProof.request(envelope,java.util.Collections.singletonMap(r.getJSONObject("core").getString("deviceKeySha256"),deviceKey));if(!Arrays.equals(CanonicalJson.bytes(r.getJSONObject("core")),CanonicalJson.bytes(NativePinRecoveryProof.core(proof))))throw failure("pin_recovery_invalid");
+        String hash=NativePinRecoveryProof.payloadHash(envelope);JSONObject row=new JSONObject().put("requestId",requestId).put("envelope",envelope);if(recoveryRead(db,"pin_recovery_proofs",hash)==null)recoveryInsert(db,"pin_recovery_proofs",hash,requestId,row);
+    }}
+    boolean recoveryProofExpired(String envelope)throws Exception{synchronized(NativeStaffUnlock.class){return recoveryRead(store.getReadableDatabase(),"pin_recovery_expired",NativePinRecoveryProof.payloadHash(envelope))!=null;}}
+    void recoveryMarkExpired(String requestId,String envelope)throws Exception{synchronized(NativeStaffUnlock.class){SQLiteDatabase db=store.getWritableDatabase();String hash=NativePinRecoveryProof.payloadHash(envelope);JSONObject proof=recoveryRead(db,"pin_recovery_proofs",hash);if(proof==null||!proof.getString("requestId").equals(requestId))throw failure("pin_recovery_invalid");if(recoveryRead(db,"pin_recovery_expired",hash)==null)recoveryInsert(db,"pin_recovery_expired",hash,requestId,new JSONObject().put("requestId",requestId).put("proofSha256",hash));}}
+    String recoveryApproval(String requestId)throws Exception{synchronized(NativeStaffUnlock.class){JSONObject r=recoveryRead(store.getReadableDatabase(),"pin_recovery_approvals",requestId);return r==null?null:r.getString("envelope");}}
+    void recoveryAccept(String requestId,String envelope,Map<String,PublicKey> serverKeys,PublicKey deviceKey)throws Exception{synchronized(NativeStaffUnlock.class){SQLiteDatabase db=store.getWritableDatabase();verifyApproval(db,requestId,envelope,serverKeys,deviceKey);String original=recoveryApproval(requestId);
+        if(original==null)recoveryInsert(db,"pin_recovery_approvals",requestId,requestId,new JSONObject().put("requestId",requestId).put("envelope",envelope));
+        else if(!NativePinRecoveryProof.payloadHash(original).equals(NativePinRecoveryProof.payloadHash(envelope)))throw failure("pin_recovery_conflict");
+    }}
+    boolean recoveryApplied(String requestId)throws Exception{synchronized(NativeStaffUnlock.class){return recoveryRead(store.getReadableDatabase(),"pin_recovery_applied",requestId)!=null;}}
+    void recoveryApply(String requestId,OfflineBundle.Binding binding,Map<String,PublicKey> serverKeys,PublicKey deviceKey,java.util.function.BooleanSupplier foreground)throws Exception{
+        assertDevice(binding);synchronized(NativeStaffUnlock.class){clearSession();SQLiteDatabase db=store.getWritableDatabase();clock.read();db.beginTransaction();try{
+            JSONObject r=recoveryRead(db,"pin_recovery_requests",requestId);if(r==null||!scope(binding).equals(r.getString("scope")))throw failure("pin_recovery_invalid");
+            String envelope=recoveryApproval(requestId);if(envelope==null)throw failure("pin_recovery_pending");verifyApproval(db,requestId,envelope,serverKeys,deviceKey);
+            if(recoveryRead(db,"pin_recovery_applied",requestId)!=null){db.setTransactionSuccessful();return;}
+            JSONObject current=load(db,r.getString("scope"));if(current==null||!SignedProtocol.hash(CanonicalJson.bytes(current)).equals(r.getString("oldPayloadSha256")))throw failure("pin_state_changed");
+            JSONObject candidate=r.getJSONObject("candidate");if(!generation(current).equals(r.getJSONObject("core").getString("oldCredentialSha256"))||!generation(candidate).equals(r.getJSONObject("core").getString("newCredentialSha256")))throw failure("pin_recovery_invalid");
+            if(!foreground.getAsBoolean())throw failure("pin_recovery_interrupted");save(db,r.getString("scope"),candidate);recoveryInsert(db,"pin_recovery_applied",requestId,requestId,new JSONObject().put("requestId",requestId).put("oldPayloadSha256",r.getString("oldPayloadSha256")).put("newPayloadSha256",SignedProtocol.hash(CanonicalJson.bytes(candidate))).put("approvalSha256",NativePinRecoveryProof.payloadHash(envelope)).put("appliedAt",NativeCheckoutEngine.iso(clock.read().wallTimeMs)));db.setTransactionSuccessful();
+        }finally{db.endTransaction();}}
+    }
+    private JSONObject verifyApproval(SQLiteDatabase db,String id,String envelope,Map<String,PublicKey> keys,PublicKey deviceKey)throws Exception{
+        JSONObject r=recoveryRead(db,"pin_recovery_requests",id);if(r==null)throw failure("pin_recovery_invalid");Object decoded=SignedProtocol.verify(envelope,keys).payload();if(!(decoded instanceof JSONObject))throw failure("pin_recovery_invalid");String hash=((JSONObject)decoded).getString("proofSha256");JSONObject version=recoveryRead(db,"pin_recovery_proofs",hash);
+        if(version==null||!id.equals(version.getString("requestId")))throw failure("pin_recovery_invalid");JSONObject proof=NativePinRecoveryProof.request(version.getString("envelope"),java.util.Collections.singletonMap(r.getJSONObject("core").getString("deviceKeySha256"),deviceKey));
+        if(!Arrays.equals(CanonicalJson.bytes(r.getJSONObject("core")),CanonicalJson.bytes(NativePinRecoveryProof.core(proof))))throw failure("pin_recovery_invalid");return NativePinRecoveryProof.approval(envelope,keys,proof,hash);
+    }
+    private String generation(JSONObject credential)throws Exception{JSONObject g=new JSONObject();for(String k:new String[]{"installationId","scope","salt","verifier","iterations"})g.put(k,credential.get(k));return SignedProtocol.hash(CanonicalJson.bytes(g));}
+    private JSONObject recoveryRead(SQLiteDatabase db,String table,String id)throws Exception{
+        load(db,"identity-probe");try(Cursor c=db.rawQuery("SELECT request_id,payload,mac FROM "+table+" WHERE id=?",new String[]{id})){if(!c.moveToFirst())return null;byte[] bytes=c.getString(1).getBytes(StandardCharsets.UTF_8);if(!key.verify("pin-recovery-v1:"+table+":"+id,bytes,SignedProtocol.decode(c.getString(2),32)))throw failure("pin_store_invalid");Object parsed=CanonicalJson.parse(bytes);if(!(parsed instanceof JSONObject))throw failure("pin_store_invalid");JSONObject r=(JSONObject)parsed;if(!r.getString("requestId").equals(c.getString(0)))throw failure("pin_store_invalid");return r;}
+    }
+    private void recoveryInsert(SQLiteDatabase db,String table,String id,String requestId,JSONObject payload)throws Exception{byte[] bytes=CanonicalJson.bytes(payload);ContentValues values=new ContentValues();values.put("id",id);values.put("request_id",requestId);values.put("payload",new String(bytes,StandardCharsets.UTF_8));values.put("mac",SignedProtocol.encode(key.mac("pin-recovery-v1:"+table+":"+id,bytes)));db.insertOrThrow(table,null,values);}
 
     private void assertDevice(OfflineBundle.Binding binding) throws Exception {
         if(binding==null)throw failure("pin_binding_invalid");

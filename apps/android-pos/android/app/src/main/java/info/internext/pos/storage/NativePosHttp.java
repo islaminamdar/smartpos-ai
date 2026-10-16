@@ -28,7 +28,8 @@ final class NativePosHttp {
     NativePosHttp(SecureSessionStore store,ConnectionFactory connection){this.store=store;this.connection=connection;}
     synchronized JSONObject request(String method,String path,JSONObject body)throws Exception{
         if(!allowed(method,path)||((method.equals("POST"))!=(body!=null)))throw new NativeAccessError("native_access_unavailable");
-        boolean historical=path.equals("/api/pos/offline/import")||path.equals("/api/pos/offline/seal")||path.equals("/api/pos/offline/bundle-recovery")||path.equals("/api/pos/offline/payment-freeze")||path.equals("/api/pos/offline/payment-resolution");
+        boolean historical=(path.equals("/api/pos/native/pin-recovery")&&"lookup".equals(body.opt("mode")))||path.equals("/api/pos/offline/import")||path.equals("/api/pos/offline/seal")||path.equals("/api/pos/offline/bundle-recovery")||path.equals("/api/pos/offline/payment-freeze")||path.equals("/api/pos/offline/payment-resolution");
+        if(path.equals("/api/pos/native/pin-recovery")&&(!method.equals("POST")||body==null||!(body.opt("proof") instanceof JSONObject)||!(historical?body.length()==2&&"lookup".equals(body.opt("mode")):body.length()==3&&"approve".equals(body.opt("mode"))&&body.opt("password") instanceof String)))throw new NativeAccessError("native_access_unavailable");
         byte[] bytes=body==null?null:requestBytes(body,path,historical);if(bytes!=null&&bytes.length>requestLimit(path))throw new NativeAccessError("native_access_unavailable");
         HttpsURLConnection c=null;long deadline=SystemClock.elapsedRealtime()+30000;
         try{
@@ -40,7 +41,20 @@ final class NativePosHttp {
             // A refresh token can rotate on any authenticated route. Save headers before reading
             // the body, even for errors, so a truncated response cannot discard the new token.
             if(!historical)applyCookies(c.getHeaderFields());
+            if(status==401&&path.equals("/api/pos/native/pin-recovery")){
+                JSONObject error=readJson(c,deadline,1024,true);
+                if(error.length()!=2||!"unavailable".equals(error.opt("status")))throw new NativeAccessError("native_access_unavailable");
+                if("current_password_incorrect".equals(error.opt("code")))throw new NativeAccessError("native_authentication_failed");
+                if("authentication_required".equals(error.opt("code")))throw new NativeAccessError("native_session_expired");
+                throw new NativeAccessError("native_access_unavailable");
+            }
             if(status==401)throw new NativeAccessError(historical?"native_access_unavailable":path.equals("/api/pos/session")&&method.equals("POST")?"native_authentication_failed":"native_session_expired");
+            if(status==409&&method.equals("POST")&&path.equals("/api/pos/native/pin-recovery")){
+                JSONObject error=readJson(c,deadline,2048,true);String proofHash=info.internext.pos.offline.NativePinRecoveryProof.payloadHash(body.getJSONObject("proof").toString());
+                Object payload=CanonicalJson.parse(SignedProtocol.decode(body.getJSONObject("proof").getString("payloadBase64Url"),16384));
+                if(payload instanceof JSONObject&&error.length()==4&&"not_approved".equals(error.opt("status"))&&"pin_recovery_proof_expired".equals(error.opt("code"))&&((JSONObject)payload).get("requestId").equals(error.opt("requestId"))&&proofHash.equals(error.opt("proofSha256")))throw new NativeAccessError("pin_recovery_proof_expired");
+                throw new NativeAccessError("native_access_unavailable");
+            }
             if(status==409&&method.equals("POST")&&path.equals("/api/pos/offline/enroll")){
                 JSONObject error=readJson(c,deadline,1024,true);
                 // This exact route/status/body and digest binds a definitive pre-insert SQL
@@ -80,10 +94,10 @@ final class NativePosHttp {
             String raw=StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(output.toByteArray())).toString();
             Object parsed=CanonicalJson.transport(raw,limit);if(!(parsed instanceof JSONObject))throw new NativeAccessError("native_access_unavailable");return (JSONObject)parsed;
     }
-    private static int requestLimit(String path){return (path.equals("/api/pos/native/continuation")||path.equals("/api/pos/native/shift-close"))?1024:path.equals("/api/pos/offline/payment-freeze")?1_420_000:path.equals("/api/pos/offline/payment-resolution")?16384:path.equals("/api/pos/offline/import")?1_400_000:(path.equals("/api/pos/offline/enroll")||path.equals("/api/pos/offline/seal")||path.equals("/api/pos/offline/bundle-recovery"))?16384:path.equals("/api/pos/native/prepare")?8192:2048;}
-    private static int responseLimit(String path){return (path.equals("/api/pos/offline/payment-freeze")||path.equals("/api/pos/offline/payment-resolution"))?1_420_000:(path.equals("/api/pos/native/prepare")||path.equals("/api/pos/offline/bundle-recovery"))?2_900_000:path.equals("/api/pos/offline/import")?1_400_000:path.equals("/api/pos/offline/seal")?16384:131072;}
+    private static int requestLimit(String path){return path.equals("/api/pos/native/pin-recovery")?16384:(path.equals("/api/pos/native/continuation")||path.equals("/api/pos/native/shift-close"))?1024:path.equals("/api/pos/offline/payment-freeze")?1_420_000:path.equals("/api/pos/offline/payment-resolution")?16384:path.equals("/api/pos/offline/import")?1_400_000:(path.equals("/api/pos/offline/enroll")||path.equals("/api/pos/offline/seal")||path.equals("/api/pos/offline/bundle-recovery"))?16384:path.equals("/api/pos/native/prepare")?8192:2048;}
+    private static int responseLimit(String path){return path.equals("/api/pos/native/pin-recovery")?16384:(path.equals("/api/pos/offline/payment-freeze")||path.equals("/api/pos/offline/payment-resolution"))?1_420_000:(path.equals("/api/pos/native/prepare")||path.equals("/api/pos/offline/bundle-recovery"))?2_900_000:path.equals("/api/pos/offline/import")?1_400_000:path.equals("/api/pos/offline/seal")?16384:131072;}
     private static void checkDeadline(long deadline)throws NativeAccessError{if(SystemClock.elapsedRealtime()>=deadline)throw new NativeAccessError("native_network_unavailable");}
-    private static boolean allowed(String method,String path){return (method.equals("POST")&&(path.equals("/api/pos/native/preparation")||path.equals("/api/pos/native/continuation")||path.equals("/api/pos/native/shift-close")||path.equals("/api/pos/native/prepare")||path.equals("/api/pos/offline/enroll")||path.equals("/api/pos/offline/import")||path.equals("/api/pos/offline/seal")||path.equals("/api/pos/offline/bundle-recovery")||path.equals("/api/pos/offline/payment-freeze")||path.equals("/api/pos/offline/payment-resolution")||path.equals("/api/pos/commands")))||(path.equals("/api/pos/session")&&(method.equals("POST")||method.equals("DELETE")))||(path.equals("/api/pos/native/access")&&method.equals("GET"))||(path.equals("/api/pos/native/device")&&method.equals("POST"));}
+    private static boolean allowed(String method,String path){return (method.equals("POST")&&(path.equals("/api/pos/native/pin-recovery")||path.equals("/api/pos/native/preparation")||path.equals("/api/pos/native/continuation")||path.equals("/api/pos/native/shift-close")||path.equals("/api/pos/native/prepare")||path.equals("/api/pos/offline/enroll")||path.equals("/api/pos/offline/import")||path.equals("/api/pos/offline/seal")||path.equals("/api/pos/offline/bundle-recovery")||path.equals("/api/pos/offline/payment-freeze")||path.equals("/api/pos/offline/payment-resolution")||path.equals("/api/pos/commands")))||(path.equals("/api/pos/session")&&(method.equals("POST")||method.equals("DELETE")))||(path.equals("/api/pos/native/access")&&method.equals("GET"))||(path.equals("/api/pos/native/device")&&method.equals("POST"));}
     static boolean nameAllowed(String name){return name.equals("pos-access")||name.equals("pos-refresh")||name.matches("pos-device-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}");}
     private static String cookieHeader(JSONObject cookies)throws Exception{
         StringBuilder result=new StringBuilder();Iterator<String> keys=cookies.keys();while(keys.hasNext()){String name=keys.next();Object value=cookies.get(name);if(!nameAllowed(name)||!(value instanceof String)||!validValue((String)value))throw new NativeAccessError("native_storage_unavailable");if(result.length()>0)result.append("; ");result.append(name).append('=').append(value);}if(result.length()>24000)throw new NativeAccessError("native_storage_unavailable");return result.toString();

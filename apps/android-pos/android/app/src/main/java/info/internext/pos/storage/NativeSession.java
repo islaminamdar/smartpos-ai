@@ -14,6 +14,9 @@ public final class NativeSession {
     private final SecureSessionStore store;
     private final NativePosHttp http;
     private final NativeJournal journal;
+    interface RecoveryGuard {void check()throws Exception;}
+    private RecoveryGuard recoveryGuard=()->{};
+    synchronized void recoveryGuard(RecoveryGuard guard){this.recoveryGuard=guard;}
     public NativeSession(Context context,NativeJournal journal)throws Exception{
         this.store=new SecureSessionStore(context);this.http=new NativePosHttp(store);this.journal=journal;
         custody(store.read());
@@ -83,7 +86,7 @@ public final class NativeSession {
         }catch(Exception error){throw new NativeAccessError("native_sign_out_pending");}
     }
     public synchronized JSONObject enrollCounter(String branchId,String name)throws Exception{
-        name=trimName(name);
+        recoveryGuard.check();name=trimName(name);
         if(branchId==null||!branchId.matches("[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}")||name==null||name.isEmpty()||name.length()>80||name.chars().anyMatch(Character::isISOControl))throw new NativeAccessError("native_access_unavailable");
         JSONObject access=getAccessState();
         if(!access.getString("status").equals("signed_in"))throw new NativeAccessError("native_session_expired");
@@ -125,10 +128,15 @@ public final class NativeSession {
     }
     synchronized JSONObject nativeRequest(String method,String path,JSONObject body)throws Exception{
         JSONObject current=store.read();custody(current);if(current.isNull("actorId")||current.getBoolean("logoutPending"))throw new NativeAccessError("native_session_expired");
+        if(!path.equals("/api/pos/native/pin-recovery")&&!path.equals("/api/pos/native/shift-close"))recoveryGuard.check();
         return http.request(method,path,body);
     }
     /** Historical signed evidence remains uploadable after sign-out or access revocation. */
     synchronized JSONObject historicalRequest(String path,JSONObject envelope)throws Exception{
+        if(path.equals("/api/pos/native/pin-recovery")){
+            if(envelope==null||envelope.length()!=2||!"lookup".equals(envelope.opt("mode"))||!(envelope.opt("proof") instanceof JSONObject))throw new NativeAccessError("native_access_unavailable");
+            return http.request("POST",path,envelope);
+        }
         if(!path.equals("/api/pos/offline/import")&&!path.equals("/api/pos/offline/seal")&&!path.equals("/api/pos/offline/bundle-recovery")&&!path.equals("/api/pos/offline/payment-freeze")&&!path.equals("/api/pos/offline/payment-resolution"))throw new NativeAccessError("native_access_unavailable");
         return http.request("POST",path,envelope);
     }

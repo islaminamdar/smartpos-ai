@@ -28,6 +28,9 @@ export type DeviceSnapshot = {
   checkedAt: string
 }
 interface NativeLedgerPlugin {
+  getPinRecoveryState(): Promise<unknown>
+  startPinRecovery(): Promise<unknown>
+  retryPinRecovery(input: { requestId: string }): Promise<unknown>
   getShiftCloseState(): Promise<unknown>
   checkShiftClose(): Promise<unknown>
   closeShift(input: { shiftId: string; countedCashFils: number }): Promise<unknown>
@@ -352,6 +355,7 @@ export function parseOfflineState(value: unknown): NativeOfflineState {
     typeof result.pinProvisioned !== 'boolean' ||
     (result.noticeCode !== null &&
       ![
+        'pin_recovery_pending',
         'offline_not_configured',
         'offline_permission_expired',
         'offline_allocation_finished',
@@ -407,6 +411,8 @@ export function nativeOfflineErrorCode(error: unknown): string {
 }
 export function nativeOfflineError(error: unknown): string {
   switch (nativeOfflineErrorCode(error)) {
+    case 'pin_recovery_pending':
+      return 'Finish the saved PIN recovery in Device setup before changing offline setup. Saved records are kept.'
     case 'offline_not_configured':
       return 'Offline preparation is not configured in this app build. Ask your manager for the approved app update. Saved records are kept.'
     case 'offline_allocation_finished':
@@ -1086,6 +1092,8 @@ export function quantityToMilli(value: string, unit: NativeCheckoutLine['unit'])
 }
 export function nativeCheckoutError(error: unknown): string {
   switch (nativeOfflineErrorCode(error)) {
+    case 'pin_recovery_pending':
+      return 'Finish the saved PIN recovery in Device setup before new payments or setup changes. Saved payment review remains available.'
     case 'native_shift_close_pending':
       return 'Check the original drawer-close request in This device before starting another sale. Keep saved bills and payment records.'
     case 'unsupported_text':
@@ -1196,7 +1204,7 @@ export function knownCheckoutReason(code: string | null): boolean {
     code === null ||
     [
       'native_checkout_not_enabled',
-      'native_shift_close_pending',
+      'pin_recovery_pending', 'native_shift_close_pending',
       'native_session_expired',
       'pin_unlock_required',
       'clock_expired',
@@ -1322,7 +1330,7 @@ export type NativeNextAllocationState = {
   reasonCode: string | null
   canContinue: boolean
 }
-const continuationReasons = new Set(['native_shift_close_pending', 'offline_allocation_active', 'offline_seal_confirmation_required',
+const continuationReasons = new Set(['pin_recovery_pending', 'native_shift_close_pending', 'offline_allocation_active', 'offline_seal_confirmation_required',
   'offline_upload_required', 'payment_reconciliation_required', 'previous_authority_unresolved',
   'offline_continuation_uncertain', 'offline_context_changed', 'pin_unlock_required',
   'native_session_expired', 'native_storage_unavailable', 'offline_not_configured', 'offline_preparation_uncertain'])
@@ -1378,7 +1386,7 @@ export type NativeShiftCloseState = {
 const shiftCloseReasons = new Set(['offline_allocation_active', 'payment_reconciliation_required', 'offline_upload_required',
   'shift_close_unavailable', 'shift_already_closed', 'offline_preparation_uncertain', 'native_shift_close_uncertain',
   'native_session_expired', 'offline_context_changed', 'native_storage_unavailable', 'pin_unlock_required',
-  'offline_not_configured', 'shift_close_cancelled', 'native_shift_close_pending'])
+  'offline_not_configured', 'shift_close_cancelled', 'pin_recovery_pending', 'native_shift_close_pending'])
 const countedShiftCash = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 && v <= 100_000_000
 export function parseNativeShiftCloseState(value: unknown): NativeShiftCloseState {
   const r = record(value, ['schemaVersion', 'status', 'shiftId', 'commandId', 'countedCashFils', 'result', 'pinRequired', 'canClose', 'canRetry', 'reasonCode'])
@@ -1423,5 +1431,56 @@ export async function retryNativeShiftClose(commandId: string): Promise<NativeSh
   if (!uuid(commandId)) throw new Error('invalid_native_input')
   const result = parseNativeShiftCloseState(await ledger.retryShiftClose({ commandId }))
   if (result.commandId !== commandId) invalidCheckout()
+  return result
+}
+
+
+export type NativePinRecoveryState = {
+  schemaVersion: 1
+  status: 'not_available' | 'ready' | 'pending' | 'approved' | 'completed' | 'blocked'
+  requestId: string | null
+  canStart: boolean
+  canRetry: boolean
+  passwordRequired: boolean
+  reasonCode: string | null
+}
+const pinRecoveryReasons = new Set([
+  'pin_not_provisioned', 'offline_not_configured', 'native_session_expired',
+  'clock_source_blocked', 'pin_recovery_pending', 'pin_recovery_approved',
+  'pin_recovery_completed', 'pin_recovery_uncertain', 'offline_context_changed',
+  'pin_recovery_invalid', 'pin_recovery_conflict', 'native_storage_unavailable',
+  'native_authentication_failed',
+])
+export function parseNativePinRecoveryState(value: unknown): NativePinRecoveryState {
+  const r = record(value, ['schemaVersion','status','requestId','canStart','canRetry','passwordRequired','reasonCode'])
+  if (r.schemaVersion !== 1 || !['not_available','ready','pending','approved','completed','blocked'].includes(String(r.status)) ||
+    (r.requestId !== null && !uuid(r.requestId)) ||
+    ['canStart','canRetry','passwordRequired'].some(k => typeof r[k] !== 'boolean') ||
+    (r.reasonCode !== null && !pinRecoveryReasons.has(String(r.reasonCode)))) invalidCheckout()
+  if ((['pending','approved','completed'].includes(String(r.status)) && r.requestId === null) ||
+    (['not_available','ready'].includes(String(r.status)) && r.requestId !== null) ||
+    (r.canStart && !['ready','completed'].includes(String(r.status))) ||
+    (r.status === 'ready' && !r.canStart) ||
+    (r.canRetry && !['pending','approved'].includes(String(r.status))) ||
+    (r.status === 'approved' && r.passwordRequired) ||
+    (r.status === 'completed' && r.canRetry) ||
+    (r.status === 'blocked' && (r.canStart || r.canRetry))) invalidCheckout()
+  return r as NativePinRecoveryState
+}
+export async function getNativePinRecoveryState(): Promise<NativePinRecoveryState> {
+  requireNativeAccess()
+  return parseNativePinRecoveryState(await ledger.getPinRecoveryState())
+}
+export async function startNativePinRecovery(): Promise<NativePinRecoveryState> {
+  requireNativeAccess()
+  const result = parseNativePinRecoveryState(await ledger.startPinRecovery())
+  if (result.requestId === null || !['pending','approved','completed','blocked'].includes(result.status)) invalidCheckout()
+  return result
+}
+export async function retryNativePinRecovery(requestId: string): Promise<NativePinRecoveryState> {
+  requireNativeAccess()
+  if (!uuid(requestId)) throw new Error('invalid_native_input')
+  const result = parseNativePinRecoveryState(await ledger.retryPinRecovery({ requestId }))
+  if (result.requestId !== requestId) invalidCheckout()
   return result
 }

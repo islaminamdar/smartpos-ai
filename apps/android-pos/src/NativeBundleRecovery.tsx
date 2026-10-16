@@ -227,8 +227,8 @@ export default function NativeBundleRecovery({
           )}
           {actionsBlocked && (
             <p className="access-note">
-              Check the saved payment in Counter first. Recovery cannot run while a payment needs
-              attention or its status is unverified.
+              Resolve the saved payment or setup request first. Missing-allocation recovery cannot
+              run while its status needs attention or is unverified.
             </p>
           )}
           {state?.status === 'available' && state.authorityId && (
