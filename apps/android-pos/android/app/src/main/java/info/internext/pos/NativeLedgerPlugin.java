@@ -19,6 +19,7 @@ import info.internext.pos.storage.NativeReconciliation;
 import info.internext.pos.storage.NativeCheckoutCoordinator;
 import info.internext.pos.storage.NativeBundleRecovery;
 import info.internext.pos.storage.NativePaymentRecovery;
+import info.internext.pos.storage.NativeShiftClose;
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -33,6 +34,7 @@ public final class NativeLedgerPlugin extends Plugin {
     private NativeCheckoutCoordinator checkout;
     private NativeBundleRecovery bundleRecovery;
     private NativePaymentRecovery paymentRecovery;
+    private volatile NativeShiftClose shiftClose;
     private volatile boolean foreground=true;
     private final java.util.concurrent.atomic.AtomicLong checkoutEpoch=new java.util.concurrent.atomic.AtomicLong();
     private AlertDialog credentials;
@@ -50,6 +52,50 @@ public final class NativeLedgerPlugin extends Plugin {
     private NativeCheckoutCoordinator checkout()throws Exception{if(checkout==null)checkout=new NativeCheckoutCoordinator(journal,offline());return checkout;}
     private NativeBundleRecovery bundleRecovery()throws Exception{if(bundleRecovery==null)bundleRecovery=new NativeBundleRecovery(getContext(),journal,session());return bundleRecovery;}
     private NativePaymentRecovery paymentRecovery()throws Exception{if(paymentRecovery==null)paymentRecovery=new NativePaymentRecovery(getContext(),journal,session());return paymentRecovery;}
+    private NativeShiftClose shiftClose()throws Exception{if(shiftClose==null)shiftClose=new NativeShiftClose(getContext(),journal,session(),offline());return shiftClose;}
+    @PluginMethod public void getShiftCloseState(PluginCall call){
+        if(call.getData().length()!=0){call.reject("Check this drawer's saved status.","offline_context_changed");return;}
+        final long epoch=checkoutEpoch.get();
+        execute(call,()->{requireCloseForeground(epoch);org.json.JSONObject result=shiftClose().getState();requireCloseForeground(epoch);return result;},true);
+    }
+    @PluginMethod public void checkShiftClose(PluginCall call){
+        if(call.getData().length()!=0){call.reject("Check this drawer's saved status.","offline_context_changed");return;}
+        confirmShiftClose(call,"check",null,0);
+    }
+    @PluginMethod public void closeShift(PluginCall call){
+        Object id=call.getData().opt("shiftId"),amount=call.getData().opt("countedCashFils");
+        if(call.getData().length()!=2||!closeId(id)||(!(amount instanceof Integer)&&!(amount instanceof Long))||((Number)amount).longValue()<0||((Number)amount).longValue()>100000000){call.reject("Enter the exact counted cash for this drawer.","offline_context_changed");return;}
+        confirmShiftClose(call,"close",(String)id,((Number)amount).longValue());
+    }
+    @PluginMethod public void retryShiftClose(PluginCall call){
+        Object id=call.getData().opt("commandId");
+        if(call.getData().length()!=1||!closeId(id)){call.reject("Select the original saved close request.","offline_context_changed");return;}
+        confirmShiftClose(call,"retry",(String)id,0);
+    }
+    private static boolean closeId(Object id){return id instanceof String&&((String)id).matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");}
+    private void requireCloseForeground(long epoch)throws NativeAccessError{if(destroyed||!foreground||epoch!=checkoutEpoch.get())throw new NativeAccessError("native_shift_close_uncertain");}
+    private void confirmShiftClose(PluginCall call,String operation,String id,long amount){
+        final long epoch=checkoutEpoch.get();
+        execute(call,()->{requireCloseForeground(epoch);boolean pinRequired=shiftClose().isPinRequired();requireCloseForeground(epoch);
+            getActivity().runOnUiThread(()->showShiftCloseDialog(call,operation,id,amount,pinRequired,epoch));return null;},true);
+    }
+    private void showShiftCloseDialog(PluginCall call,String operation,String id,long amount,boolean pinRequired,long epoch){
+        if(destroyed||!foreground||epoch!=checkoutEpoch.get()||getActivity().isFinishing()||credentials!=null){call.reject("Drawer confirmation is unavailable right now.","native_pin_cancelled");return;}
+        boolean closing="close".equals(operation),retrying="retry".equals(operation);
+        String message=closing?"Close drawer "+id+" with counted cash AED "+String.format(java.util.Locale.ROOT,"%d.%02d",amount/100,amount%100)+". This amount is saved with one original request; recovery will keep it unchanged.":retrying?"Check original close request "+id+" first, then retry that same request only if it was not saved on the server. The counted amount cannot change.":"Check this drawer and recover any saved close result. This does not submit a new close request.";
+        AlertDialog.Builder builder=new AlertDialog.Builder(getActivity()).setTitle(closing?"Confirm counted cash":retrying?"Recover original drawer close":"Check cash drawer").setMessage(message+(pinRequired?" Enter your original staff PIN.":" Confirm using your signed-in staff account on this counter."));
+        final EditText pin=pinRequired?pinField("Enter your PIN"):null;
+        if(pin!=null){LinearLayout layout=new LinearLayout(getActivity());layout.setOrientation(LinearLayout.VERTICAL);int padding=(int)(24*getContext().getResources().getDisplayMetrics().density);layout.setPadding(padding,8,padding,8);layout.addView(pin);builder.setView(layout);passwordField=pin;}
+        AlertDialog dialog=builder.setNegativeButton("Cancel",(d,w)->call.reject("Drawer confirmation cancelled.","native_pin_cancelled")).setPositiveButton(closing?"Close drawer":retrying?"Check and retry":"Check drawer",null).create();
+        credentials=dialog;dialog.setOnCancelListener(d->call.reject("Drawer confirmation cancelled.","native_pin_cancelled"));
+        dialog.setOnDismissListener(d->{if(pin!=null)pin.getText().clear();if(credentials==dialog){credentials=null;passwordField=null;}});
+        dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            if(pin!=null&&(pin.length()<8||pin.length()>12)){pin.setError("Use 8–12 digits");return;}
+            final char[] secret=pin==null?null:new char[pin.length()];if(pin!=null)android.text.TextUtils.getChars(pin.getText(),0,pin.length(),secret,0);
+            dialog.dismiss();if(!execute(call,()->{try{requireCloseForeground(epoch);org.json.JSONObject result=closing?shiftClose().closeWithPin(id,amount,secret):retrying?shiftClose().retryWithPin(id,secret):shiftClose().checkWithPin(secret);requireCloseForeground(epoch);return result;}finally{if(secret!=null)Arrays.fill(secret,'\0');}},true)&&secret!=null)Arrays.fill(secret,'\0');
+        }));
+        if(dialog.getWindow()!=null)dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);dialog.show();
+    }
     @PluginMethod public void getBundleRecoveryState(PluginCall call){
         if(call.getData().length()!=0){call.reject("Check the saved allocation.","offline_context_changed");return;}
         execute(call,()->bundleRecovery().getState(),true);
@@ -80,7 +126,7 @@ public final class NativeLedgerPlugin extends Plugin {
             return result;
         }catch(Exception error){throw new NativeAccessError(NativeCheckoutCoordinator.code(error));}},true);
     }
-    private void notifyCheckoutLocked(){checkoutEpoch.incrementAndGet();notifyListeners("nativeCheckoutLocked",new JSObject().put("schemaVersion",1),true);}
+    private void notifyCheckoutLocked(){checkoutEpoch.incrementAndGet();if(shiftClose!=null)shiftClose.invalidateCheck();notifyListeners("nativeCheckoutLocked",new JSObject().put("schemaVersion",1),true);}
     @PluginMethod public void getCheckoutState(PluginCall call){checkoutCall(call,()->checkout().getState());}
     @PluginMethod public void quoteBasket(PluginCall call){checkoutCall(call,()->checkout().quoteBasket(call.getData()),"authorityId","serviceType","customer","lines","tenderMode","cashTenderedFils","recordedCardFils");}
     @PluginMethod public void beginPaymentIntent(PluginCall call){checkoutCall(call,()->checkout().beginPaymentIntent(call.getData().getString("intentId"),call.getData().getJSONObject("request")),"intentId","request");}

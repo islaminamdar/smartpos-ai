@@ -134,6 +134,7 @@ export function NativeReceiptView({ receipt }: { receipt: NativeReceipt }) {
 type Props = {
   available: boolean
   ready: boolean
+  newSalesBlocked?: boolean
   revision: number
   operationLock: { current: boolean }
   onBusyChange: (busy: boolean) => void
@@ -144,6 +145,7 @@ type Props = {
 export default function NativeCounter({
   available,
   ready,
+  newSalesBlocked = false,
   revision,
   operationLock,
   onBusyChange,
@@ -443,7 +445,11 @@ export default function NativeCounter({
   const currentKey = currentInput ? quoteInputKey(currentInput) : null
   const validQuote = quote && quoteKey === currentKey ? quote : null
   const editsBlocked = !!busy || !ready || hold || !!intent?.receipt
+  useEffect(() => {
+    if (newSalesBlocked) setReceivedConsent(null)
+  }, [newSalesBlocked])
   const canBegin = !!(
+    !newSalesBlocked &&
     state?.canIssue &&
     knownCheckoutReason(state.reasonCode) &&
     state.reasonCode === null &&
@@ -613,6 +619,7 @@ export default function NativeCounter({
   async function retryBegin() {
     const original = uncertain
     if (
+      newSalesBlocked ||
       !original ||
       !retrySameBegin ||
       !beginUncertain.current ||
@@ -649,7 +656,11 @@ export default function NativeCounter({
       return
     const original = { intentId: visibleIntent.intentId, request: visibleIntent.request }
     const identity = `${original.intentId}:${checkoutRequestKey(original.request)}`
-    if (kind === 'confirm' && (!visibleIntent.canConfirm || receivedConsent !== identity)) return
+    if (
+      kind === 'confirm' &&
+      (newSalesBlocked || !visibleIntent.canConfirm || receivedConsent !== identity)
+    )
+      return
     if (
       kind === 'cancel' &&
       (!visibleIntent.canCancel || noMoneyConsent !== identity || !cancelReason.trim())
@@ -813,6 +824,12 @@ export default function NativeCounter({
           Check counter status
         </button>
       </div>
+      {newSalesBlocked && available && (
+        <p className="access-note">
+          A drawer close request needs checking. New payment collection and receipt confirmation are
+          paused; saved payment review remains available.
+        </p>
+      )}
       {!available ? (
         <p className="access-note">
           Open the installed Android app to access its saved menu, payments and receipts.
@@ -859,7 +876,7 @@ export default function NativeCounter({
                   {retrySameBegin && (
                     <button
                       className="secondary"
-                      disabled={!!busy || !ready || !listening}
+                      disabled={!!busy || !ready || !listening || newSalesBlocked}
                       onClick={() => void retryBegin()}
                     >
                       Retry saving this same payment step
@@ -921,6 +938,7 @@ export default function NativeCounter({
                       checked={receivedConsent === intentKey}
                       disabled={
                         !!busy ||
+                        newSalesBlocked ||
                         !visibleIntent.canConfirm ||
                         !knownCheckoutReason(visibleIntent.reasonCode)
                       }
@@ -932,6 +950,7 @@ export default function NativeCounter({
                     className="primary"
                     disabled={
                       !!busy ||
+                      newSalesBlocked ||
                       !visibleIntent.canConfirm ||
                       !knownCheckoutReason(visibleIntent.reasonCode) ||
                       receivedConsent !== intentKey

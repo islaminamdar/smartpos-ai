@@ -176,3 +176,12 @@ it('passes kitchen dispatch through middleware only in the online pilot', () => 
     vi.unstubAllEnvs()
   }
 })
+
+
+it('keeps only exact native drawer-close POST reachable for historical recovery',()=>{
+ for(const pilot of [true,false]){
+  expect(publicReleaseAccess('/api/pos/native/shift-close','POST',pilot)).toBe('allow')
+  for(const method of ['GET','PUT','PATCH','DELETE','OPTIONS'])expect(publicReleaseAccess('/api/pos/native/shift-close',method,pilot)).not.toBe('allow')
+  expect(publicReleaseAccess('/api/pos/native/shift-close/extra','POST',pilot)).not.toBe('allow')
+ }
+})

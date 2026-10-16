@@ -12,7 +12,7 @@ export function publicReleaseAccess(
     return read ? 'allow' : 'not_found'
   // Previously issued device evidence must remain recoverable when new selling is paused.
   if (path === '/api/pos/offline/import' || path === '/api/pos/offline/seal' || path === '/api/pos/offline/bundle-recovery' ||
-    path === '/api/pos/offline/payment-freeze' || path === '/api/pos/offline/payment-resolution')
+    path === '/api/pos/offline/payment-freeze' || path === '/api/pos/offline/payment-resolution' || path === '/api/pos/native/shift-close')
     return method === 'POST' ? 'allow' : 'not_found'
   if (onlinePilot) {
     if (

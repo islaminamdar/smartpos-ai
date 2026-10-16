@@ -873,3 +873,29 @@ it('keeps unlock disabled until the original payment metadata is known', async (
   expect(bridge.unlockNativeOffline).not.toHaveBeenCalled()
   expect(bridge.unlockNativeHistoricalPayment).not.toHaveBeenCalled()
 })
+
+it('blocks a new payment while a drawer close needs recovery', async () => {
+  render(<NativeCounter {...props()} newSalesBlocked />)
+  await screen.findByRole('heading', { name: 'Choose items' })
+  fireEvent.change(screen.getByLabelText('QA Milk cake weight in kg'), { target: { value: '1' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Review bill' }))
+  await screen.findByRole('button', { name: 'Save payment step before collection' })
+  expect(screen.getByRole('button', { name: 'Save payment step before collection' })).toBeDisabled()
+  expect(bridge.beginNativePaymentIntent).not.toHaveBeenCalled()
+})
+it('blocks receipt confirmation during drawer-close recovery but retains no-money review', async () => {
+  bridge.readNativeCheckout.mockResolvedValue({
+    ...state,
+    canIssue: false,
+    pendingIntentId: intent.intentId,
+    unresolvedIntent: intent,
+    reasonCode: 'payment_reconciliation_required',
+  })
+  render(<NativeCounter {...props()} newSalesBlocked />)
+  await screen.findByRole('heading', { name: 'Review the saved payment' })
+  expect(
+    screen.getByRole('button', { name: 'Confirm received payment & save receipt' })
+  ).toBeDisabled()
+  expect(screen.getByText('No money was received')).toBeVisible()
+  expect(bridge.confirmNativePaymentIntent).not.toHaveBeenCalled()
+})

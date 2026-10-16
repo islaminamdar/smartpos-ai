@@ -28,6 +28,10 @@ export type DeviceSnapshot = {
   checkedAt: string
 }
 interface NativeLedgerPlugin {
+  getShiftCloseState(): Promise<unknown>
+  checkShiftClose(): Promise<unknown>
+  closeShift(input: { shiftId: string; countedCashFils: number }): Promise<unknown>
+  retryShiftClose(input: { commandId: string }): Promise<unknown>
   getNextAllocationState(): Promise<unknown>
   continueAfterAllocation(input: { previousAuthorityId: string }): Promise<unknown>
   unlockHistoricalPayment(input: { intentId: string }): Promise<unknown>
@@ -1082,6 +1086,8 @@ export function quantityToMilli(value: string, unit: NativeCheckoutLine['unit'])
 }
 export function nativeCheckoutError(error: unknown): string {
   switch (nativeOfflineErrorCode(error)) {
+    case 'native_shift_close_pending':
+      return 'Check the original drawer-close request in This device before starting another sale. Keep saved bills and payment records.'
     case 'unsupported_text':
       return 'Buyer details contain an unsupported hidden character. New billing cannot continue. Keep any saved payment for manager review and do not collect again.'
     case 'payment_frozen':
@@ -1190,6 +1196,7 @@ export function knownCheckoutReason(code: string | null): boolean {
     code === null ||
     [
       'native_checkout_not_enabled',
+      'native_shift_close_pending',
       'native_session_expired',
       'pin_unlock_required',
       'clock_expired',
@@ -1315,7 +1322,7 @@ export type NativeNextAllocationState = {
   reasonCode: string | null
   canContinue: boolean
 }
-const continuationReasons = new Set(['offline_allocation_active', 'offline_seal_confirmation_required',
+const continuationReasons = new Set(['native_shift_close_pending', 'offline_allocation_active', 'offline_seal_confirmation_required',
   'offline_upload_required', 'payment_reconciliation_required', 'previous_authority_unresolved',
   'offline_continuation_uncertain', 'offline_context_changed', 'pin_unlock_required',
   'native_session_expired', 'native_storage_unavailable', 'offline_not_configured', 'offline_preparation_uncertain'])
@@ -1349,5 +1356,72 @@ export async function unlockNativeHistoricalPayment(intentId: string): Promise<N
   if (!uuid(intentId)) throw new Error('invalid_native_input')
   const result = parseNativeIntent(await ledger.unlockHistoricalPayment({ intentId }))
   if (result.intentId !== intentId) invalidCheckout()
+  return result
+}
+
+
+export type NativeShiftCloseResult = {
+  commandId: string; shiftId: string; countedCashFils: number; expectedCashFils: number; cashDifferenceFils: number; closedAt: string
+}
+export type NativeShiftCloseState = {
+  schemaVersion: 1
+  status: 'not_available' | 'needs_check' | 'ready' | 'pending' | 'closed' | 'blocked'
+  shiftId: string | null
+  commandId: string | null
+  countedCashFils: number | null
+  result: NativeShiftCloseResult | null
+  pinRequired: boolean
+  canClose: boolean
+  canRetry: boolean
+  reasonCode: string | null
+}
+const shiftCloseReasons = new Set(['offline_allocation_active', 'payment_reconciliation_required', 'offline_upload_required',
+  'shift_close_unavailable', 'shift_already_closed', 'offline_preparation_uncertain', 'native_shift_close_uncertain',
+  'native_session_expired', 'offline_context_changed', 'native_storage_unavailable', 'pin_unlock_required',
+  'offline_not_configured', 'shift_close_cancelled', 'native_shift_close_pending'])
+const countedShiftCash = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 && v <= 100_000_000
+export function parseNativeShiftCloseState(value: unknown): NativeShiftCloseState {
+  const r = record(value, ['schemaVersion', 'status', 'shiftId', 'commandId', 'countedCashFils', 'result', 'pinRequired', 'canClose', 'canRetry', 'reasonCode'])
+  if (r.schemaVersion !== 1 || !['not_available', 'needs_check', 'ready', 'pending', 'closed', 'blocked'].includes(String(r.status)) ||
+    ['shiftId','commandId'].some(k => r[k] !== null && !uuid(r[k])) ||
+    (r.reasonCode !== null && !shiftCloseReasons.has(String(r.reasonCode))) ||
+    ['pinRequired','canClose','canRetry'].some(k => typeof r[k] !== 'boolean') ||
+    (r.countedCashFils !== null && !countedShiftCash(r.countedCashFils))) invalidCheckout()
+  if ((r.commandId !== null && r.shiftId === null) || (r.countedCashFils !== null && r.commandId === null) ||
+    (r.canClose && (r.status !== 'ready' || r.shiftId === null || r.commandId !== null || r.reasonCode !== null)) ||
+    (r.status === 'ready' && !r.canClose) ||
+    (r.canRetry && (r.status !== 'pending' || r.commandId === null || r.countedCashFils === null)) ||
+    (r.status === 'pending' && r.commandId === null) ||
+    (r.status === 'blocked' && r.reasonCode === null)) invalidCheckout()
+  if (r.result !== null) {
+    const result = record(r.result, ['commandId','shiftId','countedCashFils','expectedCashFils','cashDifferenceFils','closedAt'])
+    if (r.status !== 'closed' || !uuid(result.commandId) || !uuid(result.shiftId) || result.commandId !== r.commandId || result.shiftId !== r.shiftId ||
+      !countedShiftCash(result.countedCashFils) || result.countedCashFils !== r.countedCashFils ||
+      typeof result.expectedCashFils !== 'number' || !Number.isSafeInteger(result.expectedCashFils) ||
+      typeof result.cashDifferenceFils !== 'number' || !Number.isSafeInteger(result.cashDifferenceFils) ||
+      !Number.isSafeInteger(result.countedCashFils - result.expectedCashFils) || result.cashDifferenceFils !== result.countedCashFils - result.expectedCashFils ||
+      typeof result.closedAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(result.closedAt) ||
+      !Number.isFinite(Date.parse(result.closedAt)) || new Date(result.closedAt).toISOString() !== result.closedAt) invalidCheckout()
+  }
+  return r as NativeShiftCloseState
+}
+export async function getNativeShiftCloseState(): Promise<NativeShiftCloseState> {
+  requireNativeAccess(); return parseNativeShiftCloseState(await ledger.getShiftCloseState())
+}
+export async function checkNativeShiftClose(): Promise<NativeShiftCloseState> {
+  requireNativeAccess(); return parseNativeShiftCloseState(await ledger.checkShiftClose())
+}
+export async function closeNativeShift(shiftId: string, countedCashFils: number): Promise<NativeShiftCloseState> {
+  requireNativeAccess()
+  if (!uuid(shiftId) || !countedShiftCash(countedCashFils)) throw new Error('invalid_native_input')
+  const result = parseNativeShiftCloseState(await ledger.closeShift({ shiftId, countedCashFils }))
+  if (result.shiftId !== shiftId || result.commandId === null || (result.countedCashFils !== null && result.countedCashFils !== countedCashFils)) invalidCheckout()
+  return result
+}
+export async function retryNativeShiftClose(commandId: string): Promise<NativeShiftCloseState> {
+  requireNativeAccess()
+  if (!uuid(commandId)) throw new Error('invalid_native_input')
+  const result = parseNativeShiftCloseState(await ledger.retryShiftClose({ commandId }))
+  if (result.commandId !== commandId) invalidCheckout()
   return result
 }

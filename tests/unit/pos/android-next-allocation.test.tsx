@@ -61,7 +61,7 @@ describe('controlled next allocation setup', () => {
     const p = props()
     render(<NativeNextAllocation {...p} />)
     expect(bridge.getNativeNextAllocationState).not.toHaveBeenCalled()
-    expect(screen.getByText(/Closing this Android cash drawer is not available/)).toBeVisible()
+    expect(screen.getByText(/Use Close this cash drawer above/)).toBeVisible()
     expect(screen.queryByText(/use the online web counter with your manager/)).toBeNull()
     await check()
     expect(screen.getByRole('button', { name: 'Continue setup' })).toBeDisabled()
@@ -132,6 +132,7 @@ describe('controlled next allocation setup', () => {
     'offline_seal_confirmation_required',
     'offline_upload_required',
     'payment_reconciliation_required',
+    'native_shift_close_pending',
     'future_unknown',
   ])('keeps %s blocked and does not trust aggregate counts', async (reasonCode) => {
     bridge.getNativeNextAllocationState.mockResolvedValue({
@@ -146,6 +147,9 @@ describe('controlled next allocation setup', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Check next setup' }))
     await screen.findByText('Original setup needs confirmation')
+    if (reasonCode === 'native_shift_close_pending') {
+      expect(screen.getByText(/Check the saved drawer close result before continuing setup/)).toBeVisible()
+    }
     expect(screen.queryByRole('checkbox')).toBeNull()
     expect(bridge.continueNativeAfterAllocation).not.toHaveBeenCalled()
   })

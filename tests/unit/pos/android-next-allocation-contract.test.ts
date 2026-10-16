@@ -37,3 +37,8 @@ it('validates historical PIN readback and rejects an intent from a different pay
   m.unlockHistoricalPayment.mockResolvedValue({ ...intent, intentId: id(44) })
   await expect(unlockNativeHistoricalPayment(intent.intentId)).rejects.toThrow()
 })
+
+it('recognizes a pending native drawer close without permitting continuation',()=>{
+ const blocked={...ready,status:'blocked',canContinue:false,reasonCode:'native_shift_close_pending'}
+ expect(parseNativeNextAllocationState(blocked)).toEqual(blocked)
+})

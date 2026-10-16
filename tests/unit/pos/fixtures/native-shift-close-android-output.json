@@ -1,0 +1,83 @@
+{
+  "states": {
+    "needsCheck": {
+      "schemaVersion": 1,
+      "status": "needs_check",
+      "shiftId": "4c0d244d-13cf-48a0-954d-bff555ed4289",
+      "commandId": null,
+      "countedCashFils": null,
+      "result": null,
+      "pinRequired": false,
+      "canClose": false,
+      "canRetry": false,
+      "reasonCode": null
+    },
+    "ready": {
+      "schemaVersion": 1,
+      "status": "ready",
+      "shiftId": "4c0d244d-13cf-48a0-954d-bff555ed4289",
+      "commandId": null,
+      "countedCashFils": null,
+      "result": null,
+      "pinRequired": false,
+      "canClose": true,
+      "canRetry": false,
+      "reasonCode": null
+    },
+    "pending": {
+      "schemaVersion": 1,
+      "status": "pending",
+      "shiftId": "4c0d244d-13cf-48a0-954d-bff555ed4289",
+      "commandId": "d0371ff4-f5a6-4367-bbf9-786d3c61cd74",
+      "countedCashFils": 900,
+      "result": null,
+      "pinRequired": false,
+      "canClose": false,
+      "canRetry": false,
+      "reasonCode": "native_shift_close_uncertain"
+    },
+    "retryReady": {
+      "schemaVersion": 1,
+      "status": "pending",
+      "shiftId": "4c0d244d-13cf-48a0-954d-bff555ed4289",
+      "commandId": "d0371ff4-f5a6-4367-bbf9-786d3c61cd74",
+      "countedCashFils": 900,
+      "result": null,
+      "pinRequired": false,
+      "canClose": false,
+      "canRetry": true,
+      "reasonCode": "native_shift_close_uncertain"
+    },
+    "closed": {
+      "schemaVersion": 1,
+      "status": "closed",
+      "shiftId": "4c0d244d-13cf-48a0-954d-bff555ed4289",
+      "commandId": "d0371ff4-f5a6-4367-bbf9-786d3c61cd74",
+      "countedCashFils": 900,
+      "result": {
+        "cashDifferenceFils": -100,
+        "closedAt": "2026-10-16T06:30:00.000Z",
+        "commandId": "d0371ff4-f5a6-4367-bbf9-786d3c61cd74",
+        "countedCashFils": 900,
+        "expectedCashFils": 1000,
+        "shiftId": "4c0d244d-13cf-48a0-954d-bff555ed4289"
+      },
+      "pinRequired": false,
+      "canClose": false,
+      "canRetry": false,
+      "reasonCode": null
+    },
+    "signedOut": {
+      "schemaVersion": 1,
+      "status": "pending",
+      "shiftId": "4c0d244d-13cf-48a0-954d-bff555ed4289",
+      "commandId": "d0371ff4-f5a6-4367-bbf9-786d3c61cd74",
+      "countedCashFils": null,
+      "result": null,
+      "pinRequired": true,
+      "canClose": false,
+      "canRetry": false,
+      "reasonCode": "native_session_expired"
+    }
+  }
+}

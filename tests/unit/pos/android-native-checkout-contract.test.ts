@@ -158,3 +158,9 @@ describe('accepted native manager outcome boundary', () => {
     ]) expect(() => parseNativeCheckoutState(value)).toThrow()
   })
 })
+
+it('keeps new sales blocked for a native drawer-close request',()=>{
+ const blocked={...state,canIssue:false,reasonCode:'native_shift_close_pending'}
+ expect(knownCheckoutReason(blocked.reasonCode)).toBe(true)
+ expect(parseNativeCheckoutState(blocked)).toEqual(blocked)
+})

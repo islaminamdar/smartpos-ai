@@ -25,6 +25,8 @@ const messages: Record<string, string> = {
     'The finished allocation still needs server confirmation. Use Upload saved records, then check next setup again.',
   offline_upload_required:
     'Saved records still need uploading. Use Upload saved records before continuing setup.',
+  native_shift_close_pending:
+    'Check the saved drawer close result before continuing setup. Do not start another close request.',
   payment_reconciliation_required:
     'Check the saved payment in Counter. Setup cannot continue while that payment needs attention.',
   previous_authority_unresolved:
@@ -288,7 +290,7 @@ export default function NativeNextAllocation({
         confirmed. Previous bills and payment records stay on this device.
       </p>
       <p className="help">
-        Closing this Android cash drawer is not available in this version. Continuing setup can
+        Use Close this cash drawer above to check and close the original shift. Continuing setup can
         reuse the same open shift; starting a new shift requires the original drawer to be closed.
         This handoff does not prepare a new allocation. New sales remain paused.
       </p>

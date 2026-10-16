@@ -29,6 +29,7 @@ import {
 import NativeCounter from './NativeCounter'
 import NativeBundleRecovery from './NativeBundleRecovery'
 import NativeNextAllocation from './NativeNextAllocation'
+import NativeShiftClose from './NativeShiftClose'
 import './app.css'
 
 const date = (value: string) =>
@@ -678,6 +679,7 @@ function NativeAccess({
   externalBusy,
   financialHold,
   onSetupState,
+  onClosePendingChange,
 }: {
   available: boolean
   onRecordsChanged: () => void
@@ -685,6 +687,7 @@ function NativeAccess({
   externalBusy: boolean
   financialHold: boolean
   onSetupState: (ready: boolean, revision: number) => void
+  onClosePendingChange: (pending: boolean) => void
 }) {
   const [access, setAccess] = useState<NativeAccessState | null>(null)
   const [fresh, setFresh] = useState(false)
@@ -695,6 +698,16 @@ function NativeAccess({
   const [offlineBusy, setOfflineBusy] = useState(false)
   const [reconciliationBusy, setReconciliationBusy] = useState(false)
   const [recoveryBusy, setRecoveryBusy] = useState(false)
+  const [closeBusy, setCloseBusy] = useState(false)
+  const [closePending, setClosePending] = useState(true)
+  const [closeCheckedVersion, setCloseCheckedVersion] = useState(-1)
+  const reportClosePending = useCallback(
+    (pending: boolean) => {
+      setClosePending(pending)
+      onClosePendingChange(pending)
+    },
+    [onClosePendingChange]
+  )
   const [nextAllocationBusy, setNextAllocationBusy] = useState(false)
   const [nextAllocationPending, setNextAllocationPending] = useState(false)
   const [reconciliationCheckedVersion, setReconciliationCheckedVersion] = useState(-1)
@@ -763,7 +776,7 @@ function NativeAccess({
       reconciliationCheckedVersion !== accessVersion
     )
       return
-    if (kind !== 'signin' && (financialHold || nextAllocationPending)) return
+    if (kind !== 'signin' && (financialHold || nextAllocationPending || closePending)) return
     if (kind === 'signin' && (access.status !== 'signed_out' || pendingLogout)) return
     if (
       kind !== 'signin' &&
@@ -839,6 +852,8 @@ function NativeAccess({
     !reconciliationBusy &&
     !recoveryBusy &&
     !nextAllocationBusy &&
+    !closeBusy &&
+    closeCheckedVersion === accessVersion &&
     offlineCheckedVersion === accessVersion &&
     reconciliationCheckedVersion === accessVersion
   useEffect(() => {
@@ -851,6 +866,7 @@ function NativeAccess({
     reconciliationBusy ||
     recoveryBusy ||
     nextAllocationBusy ||
+    closeBusy ||
     !fresh ||
     offlineCheckedVersion !== accessVersion ||
     reconciliationCheckedVersion !== accessVersion
@@ -949,7 +965,7 @@ function NativeAccess({
                     <select
                       value={branchId}
                       onChange={(event) => setBranchId(event.target.value)}
-                      disabled={paused || nextAllocationPending || financialHold}
+                      disabled={paused || closePending || nextAllocationPending || financialHold}
                     >
                       <option value="">Select your branch</option>
                       {access.branches.map((item) => (
@@ -980,7 +996,13 @@ function NativeAccess({
                           maxLength={80}
                           autoComplete="off"
                           placeholder="For example, Front counter"
-                          disabled={paused || nextAllocationPending || financialHold || !branch}
+                          disabled={
+                            paused ||
+                            closePending ||
+                            nextAllocationPending ||
+                            financialHold ||
+                            !branch
+                          }
                         />
                       </label>
                       <button
@@ -988,6 +1010,7 @@ function NativeAccess({
                         disabled={
                           paused ||
                           nextAllocationPending ||
+                          closePending ||
                           financialHold ||
                           !branch ||
                           !name.trim()
@@ -1006,7 +1029,7 @@ function NativeAccess({
               )}
               <button
                 className="secondary signout"
-                disabled={paused || nextAllocationPending || financialHold}
+                disabled={paused || closePending || nextAllocationPending || financialHold}
                 onClick={() => void change('signout')}
               >
                 Sign out of this app
@@ -1018,7 +1041,9 @@ function NativeAccess({
               <p>New sign-in is paused until server sign-out is confirmed.</p>
               <button
                 className="secondary"
-                disabled={paused || nextAllocationPending || financialHold || !access}
+                disabled={
+                  paused || closePending || nextAllocationPending || financialHold || !access
+                }
                 onClick={() => void change('signout')}
               >
                 Finish sign-out
@@ -1030,6 +1055,7 @@ function NativeAccess({
             disabled={
               externalBusy ||
               nextAllocationBusy ||
+              closeBusy ||
               recoveryBusy ||
               !!busy ||
               offlineBusy ||
@@ -1050,7 +1076,12 @@ function NativeAccess({
       <OfflinePreparation
         available={available}
         accessBusy={
-          !!busy || !accessInitialized || reconciliationBusy || recoveryBusy || nextAllocationBusy
+          !!busy ||
+          !accessInitialized ||
+          reconciliationBusy ||
+          recoveryBusy ||
+          nextAllocationBusy ||
+          closeBusy
         }
         accessVersion={accessVersion}
         operationLock={locked}
@@ -1060,6 +1091,7 @@ function NativeAccess({
         actionsBlocked={
           financialHold ||
           nextAllocationPending ||
+          closePending ||
           externalBusy ||
           reconciliationCheckedVersion !== accessVersion
         }
@@ -1072,6 +1104,7 @@ function NativeAccess({
           !offlineBusy &&
           !recoveryBusy &&
           !nextAllocationBusy &&
+          !closeBusy &&
           offlineCheckedVersion === accessVersion
         }
         revision={accessVersion}
@@ -1087,6 +1120,28 @@ function NativeAccess({
         onCheckedVersion={setReconciliationCheckedVersion}
         onChanged={refreshPreparation}
       />
+      <NativeShiftClose
+        available={available}
+        ready={
+          accessInitialized &&
+          !busy &&
+          !offlineBusy &&
+          !reconciliationBusy &&
+          !recoveryBusy &&
+          !nextAllocationBusy &&
+          !externalBusy &&
+          offlineCheckedVersion === accessVersion &&
+          reconciliationCheckedVersion === accessVersion
+        }
+        revision={accessVersion}
+        actorId={fresh && access?.status === 'signed_in' ? access.actorId : null}
+        actionsBlocked={financialHold || nextAllocationPending || !!preparation?.pendingAction}
+        operationLock={locked}
+        onBusyChange={setCloseBusy}
+        onPendingChange={reportClosePending}
+        onCheckedVersion={setCloseCheckedVersion}
+        onChanged={refreshPreparation}
+      />
       <NativeNextAllocation
         available={available}
         ready={
@@ -1095,13 +1150,14 @@ function NativeAccess({
           !offlineBusy &&
           !reconciliationBusy &&
           !recoveryBusy &&
+          !closeBusy &&
           !externalBusy &&
           offlineCheckedVersion === accessVersion &&
           reconciliationCheckedVersion === accessVersion
         }
         revision={accessVersion}
         actorId={fresh && access?.status === 'signed_in' ? access.actorId : null}
-        actionsBlocked={financialHold || !!preparation?.pendingAction}
+        actionsBlocked={financialHold || closePending || !!preparation?.pendingAction}
         operationLock={locked}
         onBusyChange={setNextAllocationBusy}
         onPendingChange={setNextAllocationPending}
@@ -1111,7 +1167,7 @@ function NativeAccess({
         available={available}
         ready={setupReady && !externalBusy}
         revision={accessVersion}
-        actionsBlocked={financialHold || nextAllocationPending}
+        actionsBlocked={financialHold || closePending || nextAllocationPending}
         operationLock={locked}
         onBusyChange={setRecoveryBusy}
         onChanged={refreshPreparation}
@@ -1143,6 +1199,7 @@ export default function App() {
   const operationLock = useRef(false)
   const [counterBusy, setCounterBusy] = useState(false)
   const [financialHold, setFinancialHold] = useState(true)
+  const [closePending, setClosePending] = useState(true)
   const [setup, setSetup] = useState({ ready: false, revision: 0 })
   const onSetupState = useCallback(
     (ready: boolean, revision: number) =>
@@ -1277,6 +1334,7 @@ export default function App() {
             <NativeCounter
               available={native}
               ready={setup.ready}
+              newSalesBlocked={closePending}
               revision={setup.revision}
               operationLock={operationLock}
               onBusyChange={setCounterBusy}
@@ -1293,6 +1351,7 @@ export default function App() {
               externalBusy={counterBusy}
               financialHold={financialHold}
               onSetupState={onSetupState}
+              onClosePendingChange={setClosePending}
             />
             <section className="records-panel" aria-labelledby="records-heading">
               <h2 id="records-heading">Records on this device</h2>

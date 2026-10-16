@@ -67,6 +67,11 @@ public final class NativeStaffUnlock implements NativeCheckoutEngine.UnlockGuard
     boolean isProvisioned(OfflineBundle.Binding binding) throws Exception {
         assertDevice(binding);synchronized(NativeStaffUnlock.class){return load(store.getReadableDatabase(),scope(binding))!=null;}
     }
+    /** Verified credential-presence check for an empty pre-enrollment drawer. No reset/fallback. */
+    boolean hasAnyProvisionedCredentials()throws Exception{
+        synchronized(NativeStaffUnlock.class){SQLiteDatabase db=store.getReadableDatabase();load(db,"absent-probe");
+            try(Cursor c=db.rawQuery("SELECT scope FROM credentials",null)){boolean found=false;while(c.moveToNext()){if(load(db,c.getString(0))==null)throw failure("pin_state_missing");found=true;}return found;}}
+    }
     /** One-time provisioning ONLY. Same-actor retries do not replace an existing PIN. */
     void provisionVerifiedStaff(OfflineBundle.Binding binding,char[] pin) throws Exception {
         try {

@@ -241,6 +241,7 @@ public final class NativeCheckoutEngine {
                     }
                 }
                 if(!recoveryOnly)unlock.requireUnlocked(binding);
+                if(!retainExpired&&!recoveryOnly){NativeShiftCloseJournal.requireNoPending(journal,serverKeys);NativeShiftCloseJournal.requireNoCloseForShift(db,bundle.shiftId);}
                 if (exists(db, "SELECT 1 FROM offline_authority_state WHERE seal_envelope IS NULL OR blocked=1") || hasUncertain(db)) throw invalid("previous_authority_unresolved");
                 NativeAllocationLifecycle lifecycle=new NativeAllocationLifecycle(journal,serverKeys,deviceKey);
                 // Terminal-only custody retention grants no selling capability. Keep outstanding
@@ -289,7 +290,8 @@ public final class NativeCheckoutEngine {
                     }
                 }
                 if (hasUncertain(db)) throw invalid("payment_reconciliation_required");
-                OfflineBundle bundle = bundle(db, authorityId); unlock.requireUnlocked(binding);
+                NativeShiftCloseJournal.requireNoPending(journal,serverKeys);
+                OfflineBundle bundle = bundle(db, authorityId);NativeShiftCloseJournal.requireNoCloseForShift(db,bundle.shiftId); unlock.requireUnlocked(binding);
                 requireStorableCustomer(request);
                 OfflineCalculator.Calculation calculation = calculate(bundle, request);
                 State state = state(db, authorityId); checkBudget(bundle, state, calculation.grossFils);
@@ -316,6 +318,7 @@ public final class NativeCheckoutEngine {
                 if ("frozen_for_manager".equals(intent.getString("state")) || "manager_resolved".equals(intent.getString("state"))) throw invalid("payment_frozen");
                 if(hasUncertainPayments(journal,serverKeys,deviceKey,intentId))throw invalid("payment_reconciliation_required");
                 JSONObject request = intent.getJSONObject("request"); OfflineBundle bundle = bundle(db, request.getString("authorityId"));
+                NativeShiftCloseJournal.requireNoPending(journal,serverKeys);NativeShiftCloseJournal.requireNoCloseForShift(db,bundle.shiftId);
                 unlock.requireUnlocked(binding); requireStorableCustomer(request);
                 OfflineCalculator.Calculation calculation = calculate(bundle, request);
                 State state = state(db, bundle.authorityId); checkBudget(bundle, state, calculation.grossFils);
@@ -513,6 +516,7 @@ public final class NativeCheckoutEngine {
     void requireReady(String authorityId,JSONObject request)throws Exception{
         synchronized(journal){SQLiteDatabase db=journal.getWritableDatabase();db.beginTransaction();try{
             OfflineBundle b=bundle(db,authorityId);unlock.requireUnlocked(binding);
+            NativeShiftCloseJournal.requireNoPending(journal,serverKeys);NativeShiftCloseJournal.requireNoCloseForShift(db,b.shiftId);
             if(request!=null)requireStorableCustomer(request);
             long gross=request==null?1:calculate(b,request).grossFils;State state=state(db,authorityId);
             checkBudget(b,state,gross);OfflineClock.Tick tick=advance(db,b,state);saveClock(db,authorityId,tick);db.setTransactionSuccessful();

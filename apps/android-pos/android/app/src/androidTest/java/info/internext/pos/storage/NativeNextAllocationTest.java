@@ -259,7 +259,7 @@ public class NativeNextAllocationTest {
             try(Cursor c=old.rawQuery("SELECT name FROM sqlite_master WHERE name LIKE 'offline_preparation_%'",null)){assertEquals(0,c.getCount());}old.setVersion(5);assertEquals(5,old.getVersion());
         }
         try(NativeJournal upgraded=new NativeJournal(context,historical,()->{})){
-            assertEquals(6,upgraded.getReadableDatabase().getVersion());assertEquals(journal.installationId(),upgraded.installationId());assertEquals(deviceIdentity.getString("deviceKeySha256"),identity.readOrCreate(upgraded).getString("deviceKeySha256"));
+            assertEquals(7,upgraded.getReadableDatabase().getVersion());assertEquals(journal.installationId(),upgraded.installationId());assertEquals(deviceIdentity.getString("deviceKeySha256"),identity.readOrCreate(upgraded).getString("deviceKeySha256"));
             for(String table:tables)assertEquals(table,expected.get(table),rows(upgraded.getReadableDatabase(),table));assertEquals("[]",rows(upgraded.getReadableDatabase(),"offline_preparation_transitions"));assertEquals("[]",rows(upgraded.getReadableDatabase(),"offline_preparation_shift_closures"));
             NativeCheckoutEngine historicalEngine=NativeCheckoutEngine.forHistorical(upgraded,Collections.singletonMap("synthetic-server",server.getPublic()),publicKey(),identity::sign,intent);assertEquals("manager_resolved",historicalEngine.getIntent(intent).getString("state"));assertEquals(proof,historicalEngine.paymentResolutionRequest(intent,nonce()).getJSONObject("freezeEnvelope").toString());
             for(String table:tables)assertEquals(table,expected.get(table),rows(upgraded.getReadableDatabase(),table));

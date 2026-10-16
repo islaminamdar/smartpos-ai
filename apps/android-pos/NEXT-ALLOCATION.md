@@ -1,6 +1,6 @@
 # Continue after a finished allocation
 
-Candidate only. Production Android sale issuance remains disabled. SQL017–022 and the matching server configuration are not deployed to the online pilot. This increment does not release a customer APK.
+Candidate only. Production Android sale issuance remains disabled. SQL017–023 and the matching server configuration are not deployed to the online pilot. This increment does not release a customer APK.
 
 ## Explicit handoff
 
@@ -22,7 +22,9 @@ An explicit later check can confirm that the retained original shift has since c
 
 ## Operator limits
 
-**Closing the Android-bound cash drawer is not implemented in this version.** A separate browser device cannot substitute for the Android binding. This increment supports continuation on the same open shift and recognizes an original shift already closed on the server; it is not a complete cashier next-shift workflow. Counted cash, durable close request and recovery after a lost response remain required.
+Subsequent candidate update: SQL023/SQLite v7 adds the explicit native drawer-close workflow described in [SHIFT-CLOSE.md](SHIFT-CLOSE.md). The missing-close statement below records this document’s earlier SQL022 checkpoint; it is superseded for candidate source only, not production/customer release.
+
+The separate [native drawer-close candidate](SHIFT-CLOSE.md) records counted cash and retains an exact original request through a lost response. A separate browser device cannot substitute for the Android binding. Close the drawer explicitly, then use this continuation for its finished allocation. Controlled access recovery, complete two-device acceptance and physical-counter acceptance remain pending before release.
 
 Historical pending/resolved payment detail can be unlocked through its exact original intent ID and original shift PIN scope. Unlocking a newer shift does not authorize older payment details. This does not yet provide a separate historical-receipt unlock across shifts.
 

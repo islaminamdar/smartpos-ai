@@ -127,4 +127,27 @@ public class NativePinDialogTest {
         }
     }
 
+    private static AlertDialog showClose(MainActivity activity,Call call,boolean pin){
+        try{NativeLedgerPlugin p=plugin(activity);Field epoch=NativeLedgerPlugin.class.getDeclaredField("checkoutEpoch");epoch.setAccessible(true);long value=((java.util.concurrent.atomic.AtomicLong)epoch.get(p)).get();Method m=NativeLedgerPlugin.class.getDeclaredMethod("showShiftCloseDialog",PluginCall.class,String.class,String.class,long.class,boolean.class,long.class);m.setAccessible(true);m.invoke(p,call,"close","00000000-0000-4000-8000-000000000001",1234L,pin,value);AlertDialog dialog=currentDialog(p);assertNotNull(dialog);assertTrue(dialog.isShowing());return dialog;}catch(Exception e){throw new AssertionError(e);}
+    }
+    private static void closeDialogCancelled(boolean pinRequired,boolean background){
+        AtomicReference<Call> call=new AtomicReference<>();AtomicReference<AlertDialog> dialog=new AtomicReference<>();AtomicReference<List<EditText>> inputs=new AtomicReference<>();
+        try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
+            scenario.onActivity(a->{Call c=new Call();call.set(c);AlertDialog d=showClose(a,c,pinRequired);dialog.set(d);assertTrue((d.getWindow().getAttributes().flags&WindowManager.LayoutParams.FLAG_SECURE)!=0);assertTrue(containsText(d.getWindow().getDecorView(),"Confirm counted cash"));assertEquals("Close drawer",d.getButton(AlertDialog.BUTTON_POSITIVE).getText().toString());
+                String message="Close drawer 00000000-0000-4000-8000-000000000001 with counted cash AED 12.34. This amount is saved with one original request; recovery will keep it unchanged."+(pinRequired?" Enter your original staff PIN.":" Confirm using your signed-in staff account on this counter.");assertTrue(containsText(d.getWindow().getDecorView(),message));inputs.set(fields(d.getWindow().getDecorView()));assertEquals(pinRequired?1:0,inputs.get().size());
+                if(pinRequired){EditText input=inputs.get().get(0);assertEquals(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD,input.getInputType());assertFalse(input.isSaveEnabled());assertEquals(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS,input.getImportantForAutofill());input.setText("12345678");}assertNull(c.code);
+            });InstrumentationRegistry.getInstrumentation().waitForIdleSync();if(background)scenario.moveToState(Lifecycle.State.CREATED);else scenario.onActivity(a->dialog.get().getButton(AlertDialog.BUTTON_NEGATIVE).performClick());InstrumentationRegistry.getInstrumentation().waitForIdleSync();assertEquals("native_pin_cancelled",call.get().code);assertEquals(1,call.get().rejected);assertFalse(dialog.get().isShowing());for(EditText input:inputs.get())assertEquals(0,input.length());if(background)scenario.moveToState(Lifecycle.State.RESUMED);scenario.onActivity(a->assertNull(currentDialog(plugin(a))));
+        }
+    }
+    @Test public void closeDrawerOriginalPinIsSecureMaskedAndCancelWipes(){closeDialogCancelled(true,false);}
+    @Test public void neverProvisionedDrawerStillRequiresExplicitCountedCashConsent(){closeDialogCancelled(false,false);}
+    @Test public void backgroundCancelsDrawerConsentAndWipesOriginalPin(){closeDialogCancelled(true,true);}
+    @Test public void drawerBridgesRejectExtraFieldsWrongIdentitiesAndNonintegerCashBeforeDialog(){
+        try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){
+            scenario.onActivity(a->{NativeLedgerPlugin p=plugin(a);String id="00000000-0000-4000-8000-000000000001";List<JSObject> invalid=new ArrayList<>();invalid.add(new JSObject());invalid.add(new JSObject().put("shiftId",id));invalid.add(new JSObject().put("shiftId",1).put("countedCashFils",0));invalid.add(new JSObject().put("shiftId","not-a-uuid").put("countedCashFils",0));for(Object cash:new Object[]{-1,100000001,1.0,"1",org.json.JSONObject.NULL})invalid.add(new JSObject().put("shiftId",id).put("countedCashFils",cash));invalid.add(new JSObject().put("shiftId",id).put("countedCashFils",0).put("pin","12345678"));for(JSObject data:invalid){Call c=new Call(data);p.closeShift(c);assertEquals("offline_context_changed",c.code);assertEquals(1,c.rejected);assertNull(currentDialog(p));}
+                for(JSObject data:new JSObject[]{new JSObject(),new JSObject().put("commandId",123),new JSObject().put("commandId",id).put("extra",true)}){Call c=new Call(data);p.retryShiftClose(c);assertEquals("offline_context_changed",c.code);assertNull(currentDialog(p));}for(boolean check:new boolean[]{true,false}){Call c=new Call(new JSObject().put("extra",true));if(check)p.checkShiftClose(c);else p.getShiftCloseState(c);assertEquals("offline_context_changed",c.code);assertNull(currentDialog(p));}
+            });
+        }
+    }
+
 }

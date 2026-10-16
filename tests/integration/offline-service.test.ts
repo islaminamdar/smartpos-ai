@@ -6,10 +6,11 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { readFile, readdir } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
-const m=vi.hoisted(()=>({rpc:vi.fn(),auth:vi.fn(),password:vi.fn(),revoke:vi.fn(),nativeAccess:vi.fn(),device:vi.fn()}))
+const m=vi.hoisted(()=>({rpc:vi.fn(),auth:vi.fn(),password:vi.fn(),revoke:vi.fn(),nativeAccess:vi.fn(),device:vi.fn(),recovery:vi.fn()}))
 vi.mock('@/lib/pos/server/client',async original=>({...await original<typeof import('@/lib/pos/server/client')>(),authenticatedPosClient:m.auth,posClient:()=>({rpc:m.rpc,auth:{signInWithPassword:m.password,admin:{signOut:m.revoke}}})}))
 vi.mock('@/lib/pos/server/native-access',()=>({nativeAccess:m.nativeAccess}))
-vi.mock('@/lib/pos/server/live-access',async original=>({...await original<typeof import('@/lib/pos/server/live-access')>(),requireDevice:m.device}))
+vi.mock('@/lib/pos/server/live-access',async original=>({...await original<typeof import('@/lib/pos/server/live-access')>(),requireDevice:m.device,recoveryBinding:m.recovery}))
+import { nativeShiftClose, nativeShiftCloseContextSchema, nativeShiftCloseOutcomeSchema } from '@/lib/pos/offline/native-shift-close'
 import { nativeOfflineContinuation, nativeContinuationSchema } from '@/lib/pos/offline/native-continuation'
 import { OfflineEnrollmentProofExpired, enrollOfflineDevice, reserveOfflineAuthority, importOfflineReceipt, sealOfflineAuthority } from '@/lib/pos/offline/server'
 import { encodeBase64Url, decodeBase64Url, parseCanonicalPayload, sha256Hex, canonicalBytes } from '@/lib/pos/offline/canonical'
@@ -435,4 +436,38 @@ it('verifies real signed continuation for the same open or exact closed drawer a
   await admin(()=>db.query("update public.pos_shifts set status='closed',closed_at=clock_timestamp() where id=$1",[nextShift]))
   await expect(nativeOfflineContinuation(request)).rejects.toMatchObject({code:'offline_continuation_blocked'})
   expect(await admin(()=>scalar('select seal_evidence from public.pos_offline_authorities where id=$1',[reservation.requestId]))).toEqual(envelope)
+})
+
+
+it('closes an actual empty drawer once and recovers its signed original result after revocation',async()=>{
+ const f=await enrollmentFixture(),deviceId=f.request.deviceId,shiftId=randomUUID(),binding='c'.repeat(64)
+ await admin(()=>db.query(`update public.pos_staff set active=true where user_id=$1`,[ids.actor]))
+ await admin(()=>db.query(`insert into public.pos_device_bindings(token_hash,user_id,organization_id,branch_id,device_id) values($1,$2,$3,$4,$5)`,[binding,ids.actor,ids.org,ids.branch,deviceId]))
+ await admin(()=>db.query(`insert into public.pos_shifts(id,organization_id,branch_id,device_id,opened_by,opening_cash_fils) values($1,$2,$3,$4,$5,12500)`,[shiftId,ids.org,ids.branch,deviceId,ids.actor]))
+ const names:string[]=[];let loseLookup=false
+ const rpc=async(name:string,args:Record<string,unknown>)=>{
+  expect(['pos_native_shift_close_context','pos_native_shift_close_lookup','pos_execute_live_command']).toContain(name);names.push(name)
+  if(loseLookup&&name==='pos_native_shift_close_lookup'){loseLookup=false;return {data:null,error:{message:'Synthetic lost readback'}}}
+  await db.exec('reset role');await db.query("select set_config('app.user_id',$1,false)",[ids.actor]);await db.exec('set role authenticated')
+  try{const entries=Object.entries(args);return {data:await scalar(`select public.${name}(${entries.map(([key],i)=>`${key} => $${i+1}`).join(',')})`,entries.map(([,v])=>typeof v==='object'?JSON.stringify(v):v)),error:null}}
+  catch(e){return {data:null,error:{message:(e as Error).message}}}finally{await db.exec('reset role;set role service_role')}
+ }
+ m.auth.mockResolvedValue({user:{id:ids.actor},client:{rpc}});m.device.mockResolvedValue(binding);m.recovery.mockResolvedValue(binding)
+ for(const flag of ['POS_ONLINE_PILOT','POS_LIVE_SALES_ENABLED'])vi.stubEnv(flag,'true')
+ vi.stubEnv('POS_OFFLINE_ISSUANCE_ENABLED','false')
+ const context=await nativeShiftClose({mode:'context',challenge:'a'.repeat(64),branchId:ids.branch,deviceId,shiftId})
+ expect((await verifySignedEnvelope(context.handoff,nativeShiftCloseContextSchema,{'synthetic-server':f.server.publicKey})).payload).toMatchObject({canClose:true,status:'open',shiftId})
+ const command={id:randomUUID(),type:'shift.close',branchId:ids.branch,deviceId,shiftId,countedCashFils:12345}
+ const request={mode:'execute',challenge:'b'.repeat(64),command}
+ loseLookup=true;await expect(nativeShiftClose(request)).rejects.toMatchObject({code:'native_shift_close_unavailable'})
+ expect(await admin(()=>scalar('select count(*)::int from public.pos_command_receipts where id=$1',[command.id]))).toBe(1)
+ for(const flag of ['POS_ONLINE_PILOT','POS_LIVE_SALES_ENABLED'])vi.stubEnv(flag,'false')
+ await admin(()=>db.query('update public.pos_device_bindings set revoked_at=now() where token_hash=$1',[binding]));await admin(()=>db.query('update public.pos_devices set active=false where id=$1',[deviceId]));await admin(()=>db.query('update public.pos_staff set active=false where user_id=$1',[ids.actor]))
+ const recovered=await nativeShiftClose({...request,mode:'lookup',challenge:'d'.repeat(64)})
+ const payload=(await verifySignedEnvelope(recovered.handoff,nativeShiftCloseOutcomeSchema,{'synthetic-server':f.server.publicKey})).payload
+ expect(payload).toMatchObject({status:'applied',commandId:command.id,requestSha256:await sha256Hex(canonicalBytes(command)),result:{commandId:command.id,shiftId,countedCashFils:12345,expectedCashFils:12500,cashDifferenceFils:-155}})
+ expect(names.filter(n=>n==='pos_execute_live_command')).toHaveLength(1)
+ expect(await admin(()=>scalar('select count(*)::int from public.pos_offline_key_epochs where device_id=$1',[deviceId]))).toBe(0)
+ expect(await admin(()=>scalar('select count(*)::int from public.pos_request_cancellations where request_id=$1',[command.id]))).toBe(0)
+ await expect(nativeShiftClose({...request,mode:'lookup',command:{...command,countedCashFils:12346}})).rejects.toMatchObject({status:409,code:'native_shift_close_pending'})
 })

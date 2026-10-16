@@ -33,6 +33,10 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
         this.journal=journal;this.session=session;this.identity=identity;this.clock=clock;this.unlock=unlock;this.keys=Collections.unmodifiableMap(new java.util.HashMap<>(keys));
         this.deviceIdentity=identity.readOrCreate(journal);this.publicKey=SignedProtocol.publicKey(SignedProtocol.decode(deviceIdentity.getString("publicKeySpkiBase64Url"),256));
     }
+    Map<String,PublicKey> shiftCloseKeys(){return keys;}
+    NativeClockSource shiftCloseClock(){return clock;}
+    NativeStaffUnlock shiftCloseUnlock(){return unlock;}
+    PublicKey shiftCloseDeviceKey(){return publicKey;}
     public synchronized JSONObject getState()throws Exception{
         JSONObject state=session.nativeState(),offline=state.optJSONObject("offline");
         JSONObject display=new JSONObject().put("schemaVersion",1).put("status","not_prepared").put("stage","sign_in").put("canIssue",false).put("shiftId",JSONObject.NULL).put("authority",JSONObject.NULL).put("pinProvisioned",false).put("noticeCode",JSONObject.NULL).put("pendingAction",JSONObject.NULL).put("pendingOpeningCashFils",JSONObject.NULL);
@@ -65,6 +69,7 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
     }
     /** Native worker step before showing a PIN dialog. Does not reserve invoice numbers. */
     public synchronized JSONObject beginPreparation()throws Exception{
+        NativeShiftCloseJournal.requireNoPending(journal,keys);
         JSONObject access=requireAccess(),offline=ensureScope(access);NativeHandoff.Context context=freshContext(offline);
         reconcileShift(offline,context.shiftId);session.saveOffline(offline);
         if(context.shiftId==null)return getState();
@@ -95,7 +100,9 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
      * PINs cannot be replaced. Password/PIN arrays are consumed on every path. */
     public synchronized JSONObject prepareWithPin(char[] pin,char[] confirmation)throws Exception{
         try{
-            JSONObject access=requireAccess(),offline=ensureScope(access);OfflineBundle.Binding binding=binding(offline);
+            JSONObject access=requireAccess(),offline=ensureScope(access);NativeShiftCloseJournal.requireNoPending(journal,keys);
+            synchronized(journal){NativeShiftCloseJournal.requireNoCloseForShift(journal.getReadableDatabase(),offline.getString("shiftId"));}
+            OfflineBundle.Binding binding=binding(offline);
             if(!unlock.isProvisioned(binding)){
                 if(pin==null||confirmation==null||!Arrays.equals(pin,confirmation))throw fail("pin_confirmation_mismatch");
                 char[] provision=pin.clone();unlock.provisionVerifiedStaff(binding,provision);
@@ -122,6 +129,7 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
         }catch(Exception error){unlock.lock();throw error;}finally{if(pin!=null)Arrays.fill(pin,'\0');if(confirmation!=null)Arrays.fill(confirmation,'\0');}
     }
     public synchronized JSONObject openShift(long openingCashFils)throws Exception{
+        NativeShiftCloseJournal.requireNoPending(journal,keys);
         if(openingCashFils<0||openingCashFils>100000000)throw fail("native_access_unavailable");
         JSONObject access=requireAccess(),offline=ensureScope(access),request=offline.optJSONObject("shiftRequest");
         if(request!=null&&request.getLong("openingCashFils")!=openingCashFils)throw fail("offline_context_changed");
@@ -160,8 +168,10 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
             if(state.isNull("actorId")||state.getBoolean("logoutPending"))return nextState("blocked",null,null,null,"native_session_expired",false);
             if(keys.isEmpty())return nextState("blocked",null,null,null,"offline_not_configured",false);
             if(offline==null)return nextState("not_available",null,null,null,null,false);checkStoredScope(state,offline);
+            NativeShiftCloseJournal.requireNoPending(journal,keys);
             JSONObject reservation=offline.optJSONObject("reservation");
             if(reservation==null){
+                if(offline.has("nativeShiftClosureId"))return nextState("not_available",null,null,null,null,false);
                 if(offline.has("preparationTransitionId")){
                     synchronized(journal){NativePreparationTransition t=transitionForMarker(offline);checkTransitionScope(state,t);NativePreparationTransition.Closure closure=NativePreparationTransition.readClosure(journal,lifecycle(),keys,t);
                         if(offline.has("preparationClosureId")&&(closure==null||!t.id.equals(offline.getString("preparationClosureId"))))throw fail("offline_context_changed");
@@ -188,7 +198,7 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
     /** Explicit current-staff/PIN transition. Journal archive commits before the encrypted pointer. */
     public synchronized JSONObject continueAfterAllocationWithPin(String prior,char[] pin)throws Exception{
         try{
-            uuid(prior);JSONObject access=requireAccess();JSONObject current=session.nativeState(),offline=current.optJSONObject("offline");
+            uuid(prior);NativeShiftCloseJournal.requireNoPending(journal,keys);JSONObject access=requireAccess();JSONObject current=session.nativeState(),offline=current.optJSONObject("offline");
             if(offline==null)throw fail("offline_context_changed");checkStoredScope(current,offline);
             NativePreparationTransition saved;OfflineBundle b;
             synchronized(journal){b=lifecycle().bundle(prior);requireScope(offline,b);saved=NativePreparationTransition.read(journal,lifecycle(),keys,prior);}
@@ -303,7 +313,7 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
     }
     private static String continuationCode(Exception error){
         String code=error instanceof NativeAccessError?((NativeAccessError)error).code:error.getMessage();
-        return Arrays.asList("offline_allocation_active","offline_seal_confirmation_required","offline_upload_required","payment_reconciliation_required","previous_authority_unresolved","offline_continuation_uncertain","offline_context_changed","pin_unlock_required","native_session_expired","native_storage_unavailable","offline_not_configured","offline_preparation_uncertain").contains(code)?code:"native_storage_unavailable";
+        return Arrays.asList("native_shift_close_pending","offline_allocation_active","offline_seal_confirmation_required","offline_upload_required","payment_reconciliation_required","previous_authority_unresolved","offline_continuation_uncertain","offline_context_changed","pin_unlock_required","native_session_expired","native_storage_unavailable","offline_not_configured","offline_preparation_uncertain").contains(code)?code:"native_storage_unavailable";
     }
 
     public synchronized void lock(){unlock.lock();}
@@ -339,7 +349,7 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
     private void reconcileShift(JSONObject offline,String shift)throws Exception{
         String prior=offline.isNull("shiftId")?null:offline.getString("shiftId");
         if(prior!=null&&!prior.equals(shift))throw fail("offline_context_changed");
-        if(prior==null&&shift!=null&&offline.has("preparationTransitionId")&&offline.isNull("shiftRequest"))throw fail("offline_context_changed");
+        if(prior==null&&shift!=null&&(offline.has("preparationTransitionId")||offline.has("nativeShiftClosureId"))&&offline.isNull("shiftRequest"))throw fail("offline_context_changed");
         JSONObject pending=offline.optJSONObject("shiftRequest");if(pending!=null&&!offline.getBoolean("shiftAcknowledged")){if(shift!=null&&!shift.equals(pending.getString("shiftId")))throw fail("offline_context_changed");throw fail("offline_preparation_uncertain");}
         offline.put("shiftId",shift==null?JSONObject.NULL:shift);
     }

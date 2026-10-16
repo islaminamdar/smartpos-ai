@@ -2,6 +2,10 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../../../apps/android-pos/node_modules/react', async () => await import('react'))
 const bridge = vi.hoisted(() => ({
+  getNativeShiftCloseState: vi.fn(),
+  checkNativeShiftClose: vi.fn(),
+  closeNativeShift: vi.fn(),
+  retryNativeShiftClose: vi.fn(),
   getNativeNextAllocationState: vi.fn(),
   continueNativeAfterAllocation: vi.fn(),
   readNativeBundleRecovery: vi.fn(),
@@ -106,6 +110,18 @@ const reconciliation = {
   noticeCode: null,
 }
 beforeEach(() => {
+  bridge.getNativeShiftCloseState.mockResolvedValue({
+    schemaVersion: 1,
+    status: 'not_available',
+    shiftId: null,
+    commandId: null,
+    countedCashFils: null,
+    result: null,
+    pinRequired: false,
+    canClose: false,
+    canRetry: false,
+    reasonCode: null,
+  })
   bridge.getNativeNextAllocationState.mockResolvedValue({
     schemaVersion: 1,
     status: 'not_available',
@@ -900,4 +916,119 @@ describe('integrated next allocation setup', () => {
     expect(bridge.getNativeNextAllocationState).toHaveBeenCalledTimes(2)
     expect(bridge.continueNativeAfterAllocation).toHaveBeenCalledTimes(1)
   })
+})
+
+describe('integrated Android drawer close recovery', () => {
+  const closePending = {
+    schemaVersion: 1,
+    status: 'pending',
+    shiftId: branchId,
+    commandId: '10000000-0000-4000-8000-000000000011',
+    countedCashFils: 12345,
+    result: null,
+    pinRequired: true,
+    canClose: false,
+    canRetry: false,
+    reasonCode: 'native_shift_close_pending',
+  }
+  it('discovers pending close before enabling new setup, blocks account changes, and leaves historical upload available', async () => {
+    bridge.readAccessState.mockResolvedValue(enrolled)
+    bridge.readOfflineState.mockResolvedValue({ ...offline, stage: 'prepare', shiftId: branchId })
+    bridge.getNativeShiftCloseState.mockResolvedValue(closePending)
+    render(<App />)
+    await screen.findByText('Original close request needs confirmation')
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Upload saved records' })).toBeEnabled()
+    )
+    expect(screen.getByRole('button', { name: 'Sign out of this app' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Prepare this counter' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: /^Counter/ }))
+    expect(screen.getByText(/A drawer close request needs checking/)).toBeVisible()
+    expect(bridge.closeNativeShift).not.toHaveBeenCalled()
+  })
+  it('fails closed after a local close-state read error and recovers via explicit online check', async () => {
+    bridge.readAccessState.mockResolvedValue(enrolled)
+    bridge.readOfflineState.mockResolvedValue({ ...offline, stage: 'prepare', shiftId: branchId })
+    bridge.getNativeShiftCloseState.mockRejectedValue(new Error('native_storage_unavailable'))
+    bridge.checkNativeShiftClose.mockResolvedValue({
+      ...closePending,
+      status: 'not_available',
+      shiftId: null,
+      commandId: null,
+      countedCashFils: null,
+      pinRequired: false,
+      reasonCode: null,
+    })
+    render(<App />)
+    await screen.findByText(/saved drawer record could not be read/)
+    expect(screen.getByRole('button', { name: 'Prepare this counter' })).toBeDisabled()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Check drawer for closing' })).toBeEnabled()
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Check drawer for closing' }))
+    await screen.findByText('No drawer is available to close')
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Prepare this counter' })).toBeEnabled()
+    )
+    expect(bridge.closeNativeShift).not.toHaveBeenCalled()
+  })
+})
+
+it('keeps verified cash closing totals visible after setup refresh and does not open the next shift', async () => {
+  const readyClose = {
+    schemaVersion: 1,
+    status: 'ready',
+    shiftId: branchId,
+    commandId: null,
+    countedCashFils: null,
+    result: null,
+    pinRequired: false,
+    canClose: true,
+    canRetry: false,
+    reasonCode: null,
+  }
+  const commandId = '10000000-0000-4000-8000-000000000012'
+  const closed = {
+    ...readyClose,
+    status: 'closed',
+    commandId,
+    countedCashFils: 12345,
+    canClose: false,
+    result: {
+      commandId,
+      shiftId: branchId,
+      countedCashFils: 12345,
+      expectedCashFils: 12500,
+      cashDifferenceFils: -155,
+      closedAt: '2026-10-16T07:00:00.000Z',
+    },
+  }
+  bridge.readAccessState.mockResolvedValue(enrolled)
+  bridge.readOfflineState.mockResolvedValue({ ...offline, stage: 'prepare', shiftId: branchId })
+  bridge.getNativeShiftCloseState.mockResolvedValue({
+    ...readyClose,
+    status: 'needs_check',
+    canClose: false,
+  })
+  bridge.checkNativeShiftClose.mockResolvedValue(readyClose)
+  bridge.closeNativeShift.mockImplementation(async () => {
+    bridge.getNativeShiftCloseState.mockResolvedValue(closed)
+    bridge.readOfflineState.mockResolvedValue({ ...offline, stage: 'open_shift' })
+    return closed
+  })
+  render(<App />)
+  const check = await screen.findByRole('button', { name: 'Check drawer for closing' })
+  await waitFor(() => expect(check).toBeEnabled())
+  fireEvent.click(check)
+  const count = await screen.findByLabelText('Actual cash counted (AED)')
+  fireEvent.change(count, { target: { value: '123.45' } })
+  await waitFor(() => expect(screen.getByRole('checkbox')).toBeEnabled())
+  fireEvent.click(screen.getByRole('checkbox'))
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm cash count and close drawer' }))
+  await screen.findByText('Original drawer closed')
+  await screen.findByRole('button', { name: 'Open counter shift' })
+  expect(screen.getByText('AED 125.00')).toBeVisible()
+  expect(screen.getByText('AED -1.55')).toBeVisible()
+  expect(bridge.closeNativeShift).toHaveBeenCalledExactlyOnceWith(branchId, 12345)
+  expect(bridge.openNativeOfflineShift).not.toHaveBeenCalled()
 })
