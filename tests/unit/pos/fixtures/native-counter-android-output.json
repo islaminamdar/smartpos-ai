@@ -1,0 +1,562 @@
+{
+  "schemaVersion": 1,
+  "provenance": "Actual isolated Android NativeCheckoutCoordinator with synthetic merchant, ephemeral server key and package-private enabled test seam; production remains disabled",
+  "samples": {
+    "initialState": {
+      "schemaVersion": 1,
+      "canIssue": true,
+      "reasonCode": null,
+      "context": {
+        "authorityId": "8c93ddf2-e50f-4745-a162-5ab6e8f9a59c",
+        "actorId": "8d545efa-c1cd-451d-a9b9-0131a787495b",
+        "branchId": "9b31880c-be5b-4034-a0b6-ad892f5aa831",
+        "deviceId": "c438c7a4-3879-4bfb-81dd-914117fa1438",
+        "shiftId": "28782c5d-76e7-4bc0-8fba-8a143846a699",
+        "branchName": "First",
+        "snapshotId": "ab6b547f-29b8-44f5-927e-faba2735135b",
+        "snapshotCreatedAt": "2026-10-16T06:30:00.000Z",
+        "expiresAt": "2026-10-16T07:30:00.000Z",
+        "permissions": {
+          "cash": true,
+          "recordedCard": true,
+          "mixedTender": true
+        },
+        "products": [
+          {
+            "id": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+            "name": "Synthetic product",
+            "category": "Test",
+            "unit": "piece",
+            "unitPriceFils": 1000
+          },
+          {
+            "id": "97f0b5b8-6ad9-4580-b91b-ae074afd3251",
+            "name": "Synthetic weighted",
+            "category": "Test",
+            "unit": "kg",
+            "unitPriceFils": 1001
+          }
+        ]
+      },
+      "pendingIntentId": null,
+      "lastReceiptId": null,
+      "unresolvedIntent": null,
+      "lastReceipt": null
+    },
+    "quote": {
+      "schemaVersion": 1,
+      "authorityId": "8c93ddf2-e50f-4745-a162-5ab6e8f9a59c",
+      "request": {
+        "authorityId": "8c93ddf2-e50f-4745-a162-5ab6e8f9a59c",
+        "cashTenderedFils": 1000,
+        "customer": null,
+        "lines": [
+          {
+            "productId": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+            "quantityMilli": 1000
+          }
+        ],
+        "presentedTotalFils": 1000,
+        "recordedCardFils": 0,
+        "serviceType": "takeaway"
+      },
+      "lines": [
+        {
+          "lineNumber": 1,
+          "productId": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+          "name": "Synthetic product",
+          "unit": "piece",
+          "quantityMilli": 1000,
+          "unitPriceFils": 1000,
+          "taxRateBps": 500,
+          "grossFils": 1000,
+          "netFils": 952,
+          "taxFils": 48
+        }
+      ],
+      "totals": {
+        "grossFils": 1000,
+        "netFils": 952,
+        "taxFils": 48
+      },
+      "payments": [
+        {
+          "method": "cash",
+          "amountFils": 1000
+        }
+      ],
+      "cashTenderedFils": 1000,
+      "changeFils": 0,
+      "requiresBuyerDetails": false
+    },
+    "pendingIntent": {
+      "schemaVersion": 1,
+      "intentId": "20fcd617-5541-4c80-a2e0-7ff66f9f103a",
+      "state": "payment_confirmation_required",
+      "createdAt": "2026-10-16T06:30:00.000Z",
+      "request": {
+        "authorityId": "8c93ddf2-e50f-4745-a162-5ab6e8f9a59c",
+        "cashTenderedFils": 1000,
+        "customer": null,
+        "lines": [
+          {
+            "productId": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+            "quantityMilli": 1000
+          }
+        ],
+        "presentedTotalFils": 1000,
+        "recordedCardFils": 0,
+        "serviceType": "takeaway"
+      },
+      "quote": {
+        "schemaVersion": 1,
+        "authorityId": "8c93ddf2-e50f-4745-a162-5ab6e8f9a59c",
+        "request": {
+          "authorityId": "8c93ddf2-e50f-4745-a162-5ab6e8f9a59c",
+          "cashTenderedFils": 1000,
+          "customer": null,
+          "lines": [
+            {
+              "productId": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+              "quantityMilli": 1000
+            }
+          ],
+          "presentedTotalFils": 1000,
+          "recordedCardFils": 0,
+          "serviceType": "takeaway"
+        },
+        "lines": [
+          {
+            "lineNumber": 1,
+            "productId": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+            "name": "Synthetic product",
+            "unit": "piece",
+            "quantityMilli": 1000,
+            "unitPriceFils": 1000,
+            "taxRateBps": 500,
+            "grossFils": 1000,
+            "netFils": 952,
+            "taxFils": 48
+          }
+        ],
+        "totals": {
+          "grossFils": 1000,
+          "netFils": 952,
+          "taxFils": 48
+        },
+        "payments": [
+          {
+            "method": "cash",
+            "amountFils": 1000
+          }
+        ],
+        "cashTenderedFils": 1000,
+        "changeFils": 0,
+        "requiresBuyerDetails": false
+      },
+      "canConfirm": true,
+      "canCancel": true,
+      "reasonCode": null,
+      "receipt": null
+    },
+    "pendingState": {
+      "schemaVersion": 1,
+      "canIssue": false,
+      "reasonCode": "payment_reconciliation_required",
+      "context": {
+        "authorityId": "8c93ddf2-e50f-4745-a162-5ab6e8f9a59c",
+        "actorId": "8d545efa-c1cd-451d-a9b9-0131a787495b",
+        "branchId": "9b31880c-be5b-4034-a0b6-ad892f5aa831",
+        "deviceId": "c438c7a4-3879-4bfb-81dd-914117fa1438",
+        "shiftId": "28782c5d-76e7-4bc0-8fba-8a143846a699",
+        "branchName": "First",
+        "snapshotId": "ab6b547f-29b8-44f5-927e-faba2735135b",
+        "snapshotCreatedAt": "2026-10-16T06:30:00.000Z",
+        "expiresAt": "2026-10-16T07:30:00.000Z",
+        "permissions": {
+          "cash": true,
+          "recordedCard": true,
+          "mixedTender": true
+        },
+        "products": [
+          {
+            "id": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+            "name": "Synthetic product",
+            "category": "Test",
+            "unit": "piece",
+            "unitPriceFils": 1000
+          },
+          {
+            "id": "97f0b5b8-6ad9-4580-b91b-ae074afd3251",
+            "name": "Synthetic weighted",
+            "category": "Test",
+            "unit": "kg",
+            "unitPriceFils": 1001
+          }
+        ]
+      },
+      "pendingIntentId": "20fcd617-5541-4c80-a2e0-7ff66f9f103a",
+      "lastReceiptId": null,
+      "unresolvedIntent": {
+        "schemaVersion": 1,
+        "intentId": "20fcd617-5541-4c80-a2e0-7ff66f9f103a",
+        "state": "payment_confirmation_required",
+        "createdAt": "2026-10-16T06:30:00.000Z",
+        "request": {
+          "authorityId": "8c93ddf2-e50f-4745-a162-5ab6e8f9a59c",
+          "cashTenderedFils": 1000,
+          "customer": null,
+          "lines": [
+            {
+              "productId": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+              "quantityMilli": 1000
+            }
+          ],
+          "presentedTotalFils": 1000,
+          "recordedCardFils": 0,
+          "serviceType": "takeaway"
+        },
+        "quote": {
+          "schemaVersion": 1,
+          "authorityId": "8c93ddf2-e50f-4745-a162-5ab6e8f9a59c",
+          "request": {
+            "authorityId": "8c93ddf2-e50f-4745-a162-5ab6e8f9a59c",
+            "cashTenderedFils": 1000,
+            "customer": null,
+            "lines": [
+              {
+                "productId": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+                "quantityMilli": 1000
+              }
+            ],
+            "presentedTotalFils": 1000,
+            "recordedCardFils": 0,
+            "serviceType": "takeaway"
+          },
+          "lines": [
+            {
+              "lineNumber": 1,
+              "productId": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+              "name": "Synthetic product",
+              "unit": "piece",
+              "quantityMilli": 1000,
+              "unitPriceFils": 1000,
+              "taxRateBps": 500,
+              "grossFils": 1000,
+              "netFils": 952,
+              "taxFils": 48
+            }
+          ],
+          "totals": {
+            "grossFils": 1000,
+            "netFils": 952,
+            "taxFils": 48
+          },
+          "payments": [
+            {
+              "method": "cash",
+              "amountFils": 1000
+            }
+          ],
+          "cashTenderedFils": 1000,
+          "changeFils": 0,
+          "requiresBuyerDetails": false
+        },
+        "canConfirm": true,
+        "canCancel": true,
+        "reasonCode": null,
+        "receipt": null
+      },
+      "lastReceipt": null
+    },
+    "committedIntent": {
+      "schemaVersion": 1,
+      "intentId": "20fcd617-5541-4c80-a2e0-7ff66f9f103a",
+      "state": "committed",
+      "createdAt": "2026-10-16T06:30:00.000Z",
+      "request": {
+        "authorityId": "8c93ddf2-e50f-4745-a162-5ab6e8f9a59c",
+        "cashTenderedFils": 1000,
+        "customer": null,
+        "lines": [
+          {
+            "productId": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+            "quantityMilli": 1000
+          }
+        ],
+        "presentedTotalFils": 1000,
+        "recordedCardFils": 0,
+        "serviceType": "takeaway"
+      },
+      "quote": {
+        "schemaVersion": 1,
+        "authorityId": "8c93ddf2-e50f-4745-a162-5ab6e8f9a59c",
+        "request": {
+          "authorityId": "8c93ddf2-e50f-4745-a162-5ab6e8f9a59c",
+          "cashTenderedFils": 1000,
+          "customer": null,
+          "lines": [
+            {
+              "productId": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+              "quantityMilli": 1000
+            }
+          ],
+          "presentedTotalFils": 1000,
+          "recordedCardFils": 0,
+          "serviceType": "takeaway"
+        },
+        "lines": [
+          {
+            "lineNumber": 1,
+            "productId": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+            "name": "Synthetic product",
+            "unit": "piece",
+            "quantityMilli": 1000,
+            "unitPriceFils": 1000,
+            "taxRateBps": 500,
+            "grossFils": 1000,
+            "netFils": 952,
+            "taxFils": 48
+          }
+        ],
+        "totals": {
+          "grossFils": 1000,
+          "netFils": 952,
+          "taxFils": 48
+        },
+        "payments": [
+          {
+            "method": "cash",
+            "amountFils": 1000
+          }
+        ],
+        "cashTenderedFils": 1000,
+        "changeFils": 0,
+        "requiresBuyerDetails": false
+      },
+      "canConfirm": false,
+      "canCancel": false,
+      "reasonCode": null,
+      "receipt": {
+        "schemaVersion": 1,
+        "id": "6b863f14-0c95-496a-ba46-17365b8d803c",
+        "merchant": {
+          "legalName": "Synthetic legal",
+          "branchName": "First",
+          "address": "Synthetic address",
+          "phone": "Synthetic phone",
+          "trn": "100000000000001"
+        },
+        "syncState": "pending",
+        "documentNumber": "TEST-INV-0000000001",
+        "issuedAt": "2026-10-16T06:30:00.000Z",
+        "serviceType": "takeaway",
+        "customer": null,
+        "lines": [
+          {
+            "grossFils": 1000,
+            "lineNumber": 1,
+            "name": "Synthetic product",
+            "netFils": 952,
+            "productId": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+            "quantityMilli": 1000,
+            "taxFils": 48,
+            "taxRateBps": 500,
+            "unit": "piece",
+            "unitPriceFils": 1000
+          }
+        ],
+        "totals": {
+          "grossFils": 1000,
+          "netFils": 952,
+          "taxFils": 48
+        },
+        "payments": [
+          {
+            "amountFils": 1000,
+            "method": "cash"
+          }
+        ],
+        "cashTenderedFils": 1000,
+        "changeFils": 0
+      }
+    },
+    "receipt": {
+      "schemaVersion": 1,
+      "id": "6b863f14-0c95-496a-ba46-17365b8d803c",
+      "merchant": {
+        "legalName": "Synthetic legal",
+        "branchName": "First",
+        "address": "Synthetic address",
+        "phone": "Synthetic phone",
+        "trn": "100000000000001"
+      },
+      "syncState": "pending",
+      "documentNumber": "TEST-INV-0000000001",
+      "issuedAt": "2026-10-16T06:30:00.000Z",
+      "serviceType": "takeaway",
+      "customer": null,
+      "lines": [
+        {
+          "grossFils": 1000,
+          "lineNumber": 1,
+          "name": "Synthetic product",
+          "netFils": 952,
+          "productId": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+          "quantityMilli": 1000,
+          "taxFils": 48,
+          "taxRateBps": 500,
+          "unit": "piece",
+          "unitPriceFils": 1000
+        }
+      ],
+      "totals": {
+        "grossFils": 1000,
+        "netFils": 952,
+        "taxFils": 48
+      },
+      "payments": [
+        {
+          "amountFils": 1000,
+          "method": "cash"
+        }
+      ],
+      "cashTenderedFils": 1000,
+      "changeFils": 0
+    },
+    "committedState": {
+      "schemaVersion": 1,
+      "canIssue": true,
+      "reasonCode": null,
+      "context": {
+        "authorityId": "8c93ddf2-e50f-4745-a162-5ab6e8f9a59c",
+        "actorId": "8d545efa-c1cd-451d-a9b9-0131a787495b",
+        "branchId": "9b31880c-be5b-4034-a0b6-ad892f5aa831",
+        "deviceId": "c438c7a4-3879-4bfb-81dd-914117fa1438",
+        "shiftId": "28782c5d-76e7-4bc0-8fba-8a143846a699",
+        "branchName": "First",
+        "snapshotId": "ab6b547f-29b8-44f5-927e-faba2735135b",
+        "snapshotCreatedAt": "2026-10-16T06:30:00.000Z",
+        "expiresAt": "2026-10-16T07:30:00.000Z",
+        "permissions": {
+          "cash": true,
+          "recordedCard": true,
+          "mixedTender": true
+        },
+        "products": [
+          {
+            "id": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+            "name": "Synthetic product",
+            "category": "Test",
+            "unit": "piece",
+            "unitPriceFils": 1000
+          },
+          {
+            "id": "97f0b5b8-6ad9-4580-b91b-ae074afd3251",
+            "name": "Synthetic weighted",
+            "category": "Test",
+            "unit": "kg",
+            "unitPriceFils": 1001
+          }
+        ]
+      },
+      "pendingIntentId": null,
+      "lastReceiptId": "6b863f14-0c95-496a-ba46-17365b8d803c",
+      "unresolvedIntent": null,
+      "lastReceipt": {
+        "schemaVersion": 1,
+        "id": "6b863f14-0c95-496a-ba46-17365b8d803c",
+        "merchant": {
+          "legalName": "Synthetic legal",
+          "branchName": "First",
+          "address": "Synthetic address",
+          "phone": "Synthetic phone",
+          "trn": "100000000000001"
+        },
+        "syncState": "pending",
+        "documentNumber": "TEST-INV-0000000001",
+        "issuedAt": "2026-10-16T06:30:00.000Z",
+        "serviceType": "takeaway",
+        "customer": null,
+        "lines": [
+          {
+            "grossFils": 1000,
+            "lineNumber": 1,
+            "name": "Synthetic product",
+            "netFils": 952,
+            "productId": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+            "quantityMilli": 1000,
+            "taxFils": 48,
+            "taxRateBps": 500,
+            "unit": "piece",
+            "unitPriceFils": 1000
+          }
+        ],
+        "totals": {
+          "grossFils": 1000,
+          "netFils": 952,
+          "taxFils": 48
+        },
+        "payments": [
+          {
+            "amountFils": 1000,
+            "method": "cash"
+          }
+        ],
+        "cashTenderedFils": 1000,
+        "changeFils": 0
+      }
+    },
+    "lockedState": {
+      "schemaVersion": 1,
+      "canIssue": false,
+      "reasonCode": "pin_unlock_required",
+      "context": {
+        "authorityId": "8c93ddf2-e50f-4745-a162-5ab6e8f9a59c",
+        "actorId": "8d545efa-c1cd-451d-a9b9-0131a787495b",
+        "branchId": "9b31880c-be5b-4034-a0b6-ad892f5aa831",
+        "deviceId": "c438c7a4-3879-4bfb-81dd-914117fa1438",
+        "shiftId": "28782c5d-76e7-4bc0-8fba-8a143846a699",
+        "branchName": "First",
+        "snapshotId": "ab6b547f-29b8-44f5-927e-faba2735135b",
+        "snapshotCreatedAt": "2026-10-16T06:30:00.000Z",
+        "expiresAt": "2026-10-16T07:30:00.000Z",
+        "permissions": {
+          "cash": true,
+          "recordedCard": true,
+          "mixedTender": true
+        },
+        "products": [
+          {
+            "id": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+            "name": "Synthetic product",
+            "category": "Test",
+            "unit": "piece",
+            "unitPriceFils": 1000
+          },
+          {
+            "id": "97f0b5b8-6ad9-4580-b91b-ae074afd3251",
+            "name": "Synthetic weighted",
+            "category": "Test",
+            "unit": "kg",
+            "unitPriceFils": 1001
+          }
+        ]
+      },
+      "pendingIntentId": null,
+      "lastReceiptId": "6b863f14-0c95-496a-ba46-17365b8d803c",
+      "unresolvedIntent": null,
+      "lastReceipt": null
+    },
+    "signedOutState": {
+      "schemaVersion": 1,
+      "canIssue": false,
+      "reasonCode": "native_session_expired",
+      "context": null,
+      "pendingIntentId": null,
+      "lastReceiptId": "6b863f14-0c95-496a-ba46-17365b8d803c",
+      "unresolvedIntent": null,
+      "lastReceipt": null
+    }
+  }
+}

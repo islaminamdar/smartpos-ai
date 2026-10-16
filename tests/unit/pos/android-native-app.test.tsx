@@ -2,6 +2,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../../../apps/android-pos/node_modules/react', async () => await import('react'))
 const bridge = vi.hoisted(() => ({
+  subscribeNativeCheckoutLock: vi.fn(),
+  readNativeCheckout: vi.fn(),
   readNativeReconciliation: vi.fn(),
   reconcileNativeOffline: vi.fn(),
   finishNativeOfflineAuthority: vi.fn(),
@@ -100,6 +102,19 @@ const reconciliation = {
   noticeCode: null,
 }
 beforeEach(() => {
+  bridge.subscribeNativeCheckoutLock.mockResolvedValue({
+    remove: vi.fn().mockResolvedValue(undefined),
+  })
+  bridge.readNativeCheckout.mockResolvedValue({
+    schemaVersion: 1,
+    canIssue: false,
+    reasonCode: 'native_checkout_not_enabled',
+    context: null,
+    pendingIntentId: null,
+    lastReceiptId: null,
+    unresolvedIntent: null,
+    lastReceipt: null,
+  })
   bridge.readNativeReconciliation.mockResolvedValue(reconciliation)
   bridge.reconcileNativeOffline.mockResolvedValue({
     ...reconciliation,
@@ -597,9 +612,16 @@ describe('Native historical reconciliation', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Check offline status' }))
     await screen.findAllByText('201–300')
+    await waitFor(() => expect(screen.getByRole('checkbox')).toBeEnabled())
     expect(screen.getByRole('checkbox')).not.toBeChecked()
     expect(screen.getByRole('button', { name: 'Finish offline allocation' })).toBeDisabled()
     fireEvent.click(screen.getByRole('checkbox'))
+    expect(screen.getByRole('checkbox')).toBeChecked()
+    // Refreshing offline status also refreshes the counter's payment hold. Consent
+    // remains scoped, but finishing stays disabled until that native read settles.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Finish offline allocation' })).toBeEnabled()
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Finish offline allocation' }))
     await waitFor(() =>
       expect(bridge.finishNativeOfflineAuthority).toHaveBeenCalledExactlyOnceWith(
@@ -684,5 +706,35 @@ describe('Native historical reconciliation', () => {
     fireEvent.click(upload)
     expect(bridge.reconcileNativeOffline).toHaveBeenCalledTimes(1)
     await act(async () => finish(reconciliation))
+  })
+})
+
+describe('Native payment custody across app navigation', () => {
+  it('blocks setup/sign-out/finish for a locked payment while retaining saved-record upload', async () => {
+    bridge.readAccessState.mockResolvedValue(enrolled)
+    bridge.readOfflineState.mockResolvedValue(offlinePrepared)
+    bridge.readNativeCheckout.mockResolvedValue({
+      schemaVersion: 1,
+      canIssue: false,
+      reasonCode: 'pin_unlock_required',
+      context: null,
+      pendingIntentId: '10000000-0000-4000-8000-000000000008',
+      lastReceiptId: null,
+      unresolvedIntent: null,
+      lastReceipt: null,
+    })
+    render(<App />)
+    await waitFor(() => expect(bridge.readNativeCheckout).toHaveBeenCalled())
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Upload saved records' })).toBeEnabled()
+    )
+    expect(screen.getByRole('button', { name: 'Sign out of this app' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Finish offline allocation' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Counter · check payment' }))
+    await screen.findByRole('heading', { name: 'Saved payment needs checking' })
+    fireEvent.click(screen.getByRole('button', { name: 'This device' }))
+    expect(screen.getByRole('button', { name: 'Sign out of this app' })).toBeDisabled()
+    expect(bridge.signOutNative).not.toHaveBeenCalled()
+    expect(bridge.finishNativeOfflineAuthority).not.toHaveBeenCalled()
   })
 })

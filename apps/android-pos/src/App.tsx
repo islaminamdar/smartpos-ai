@@ -26,6 +26,7 @@ import {
   nativeOfflineErrorCode,
   openingCashToFils,
 } from './native'
+import NativeCounter from './NativeCounter'
 import './app.css'
 
 const date = (value: string) =>
@@ -42,6 +43,7 @@ function ReconciliationPanel({
   operationLock,
   actorId,
   authority,
+  finishBlocked,
   onBusyChange,
   onCheckedVersion,
   onChanged,
@@ -52,6 +54,7 @@ function ReconciliationPanel({
   operationLock: { current: boolean }
   actorId: string | null
   authority: NativeOfflineState['authority']
+  finishBlocked: boolean
   onBusyChange: (busy: boolean) => void
   onCheckedVersion: (version: number) => void
   onChanged: () => void
@@ -123,7 +126,11 @@ function ReconciliationPanel({
     state.noticeCode !== 'offline_reconciliation_required'
   async function run(action: 'upload' | 'finish') {
     if (paused || operationLock.current || lock.current) return
-    if (action === 'finish' && (!mayFinish || !scope || consent !== scope || !authority)) return
+    if (
+      action === 'finish' &&
+      (finishBlocked || !mayFinish || !scope || consent !== scope || !authority)
+    )
+      return
     const selectedAuthority = authority?.id
     operationLock.current = true
     lock.current = true
@@ -269,7 +276,7 @@ function ReconciliationPanel({
               <label className="cash-confirm">
                 <input
                   type="checkbox"
-                  disabled={paused}
+                  disabled={paused || finishBlocked}
                   checked={!!scope && consent === scope}
                   onChange={(event) => setConsent(event.target.checked ? scope : null)}
                 />
@@ -280,7 +287,7 @@ function ReconciliationPanel({
               </label>
               <button
                 className="secondary"
-                disabled={paused || !scope || consent !== scope}
+                disabled={paused || finishBlocked || !scope || consent !== scope}
                 onClick={() => void run('finish')}
               >
                 Finish offline allocation
@@ -665,9 +672,17 @@ function OfflinePreparation({
 function NativeAccess({
   available,
   onRecordsChanged,
+  operationLock,
+  externalBusy,
+  financialHold,
+  onSetupState,
 }: {
   available: boolean
   onRecordsChanged: () => void
+  operationLock: { current: boolean }
+  externalBusy: boolean
+  financialHold: boolean
+  onSetupState: (ready: boolean, revision: number) => void
 }) {
   const [access, setAccess] = useState<NativeAccessState | null>(null)
   const [fresh, setFresh] = useState(false)
@@ -688,7 +703,7 @@ function NativeAccess({
   const [offlineCheckedVersion, setOfflineCheckedVersion] = useState(-1)
   const [branchId, setBranchId] = useState('')
   const [name, setName] = useState('')
-  const locked = useRef(false)
+  const locked = operationLock
   const mounted = useRef(false)
   const apply = useCallback((next: NativeAccessState) => {
     setAccessVersion((version) => version + 1)
@@ -724,7 +739,7 @@ function NativeAccess({
         setAccessInitialized(true)
       }
     }
-  }, [available, apply])
+  }, [available, apply, locked])
   useEffect(() => {
     mounted.current = true
     void check()
@@ -743,6 +758,7 @@ function NativeAccess({
       reconciliationCheckedVersion !== accessVersion
     )
       return
+    if (kind !== 'signin' && financialHold) return
     if (kind === 'signin' && (access.status !== 'signed_out' || pendingLogout)) return
     if (
       kind !== 'signin' &&
@@ -811,7 +827,18 @@ function NativeAccess({
       if (mounted.current) setBusy(null)
     }
   }
+  const setupReady =
+    accessInitialized &&
+    !busy &&
+    !offlineBusy &&
+    !reconciliationBusy &&
+    offlineCheckedVersion === accessVersion &&
+    reconciliationCheckedVersion === accessVersion
+  useEffect(() => {
+    onSetupState(setupReady, accessVersion)
+  }, [setupReady, accessVersion, onSetupState])
   const paused =
+    externalBusy ||
     !!busy ||
     offlineBusy ||
     reconciliationBusy ||
@@ -913,7 +940,7 @@ function NativeAccess({
                     <select
                       value={branchId}
                       onChange={(event) => setBranchId(event.target.value)}
-                      disabled={paused}
+                      disabled={paused || financialHold}
                     >
                       <option value="">Select your branch</option>
                       {access.branches.map((item) => (
@@ -944,12 +971,12 @@ function NativeAccess({
                           maxLength={80}
                           autoComplete="off"
                           placeholder="For example, Front counter"
-                          disabled={paused || !branch}
+                          disabled={paused || financialHold || !branch}
                         />
                       </label>
                       <button
                         className="primary"
-                        disabled={paused || !branch || !name.trim()}
+                        disabled={paused || financialHold || !branch || !name.trim()}
                         onClick={() => void change('enroll')}
                       >
                         Enroll this counter
@@ -964,7 +991,7 @@ function NativeAccess({
               )}
               <button
                 className="secondary signout"
-                disabled={paused}
+                disabled={paused || financialHold}
                 onClick={() => void change('signout')}
               >
                 Sign out of this app
@@ -976,7 +1003,7 @@ function NativeAccess({
               <p>New sign-in is paused until server sign-out is confirmed.</p>
               <button
                 className="secondary"
-                disabled={paused || !access}
+                disabled={paused || financialHold || !access}
                 onClick={() => void change('signout')}
               >
                 Finish sign-out
@@ -985,12 +1012,18 @@ function NativeAccess({
           )}
           <button
             className="secondary access-refresh"
-            disabled={!!busy || offlineBusy || reconciliationBusy}
+            disabled={externalBusy || !!busy || offlineBusy || reconciliationBusy}
             onClick={() => void check()}
           >
             {busy === 'check' ? 'Checking access…' : 'Check access'}
           </button>
         </>
+      )}
+      {financialHold && available && (
+        <p className="access-note">
+          Check the saved payment in Counter before changing account, counter setup or finishing an
+          allocation. Saved-record upload remains available.
+        </p>
       )}
       <OfflinePreparation
         available={available}
@@ -1000,7 +1033,9 @@ function NativeAccess({
         onBusyChange={setOfflineBusy}
         onCheckedVersion={setOfflineCheckedVersion}
         onStateRead={setPreparation}
-        actionsBlocked={reconciliationCheckedVersion !== accessVersion}
+        actionsBlocked={
+          financialHold || externalBusy || reconciliationCheckedVersion !== accessVersion
+        }
       />
       <ReconciliationPanel
         available={available}
@@ -1010,6 +1045,7 @@ function NativeAccess({
         revision={accessVersion}
         operationLock={locked}
         actorId={fresh && access?.status === 'signed_in' ? access.actorId : null}
+        finishBlocked={financialHold || externalBusy}
         authority={
           preparation?.noticeCode === 'offline_allocation_finished'
             ? null
@@ -1036,13 +1072,25 @@ function NativeAccess({
 }
 
 export default function App() {
-  const [view, setView] = useState<'device' | 'receipts'>('device')
+  const [view, setView] = useState<'device' | 'receipts' | 'counter'>('device')
   const [snapshot, setSnapshot] = useState<DeviceSnapshot | null>(null)
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
   const inFlight = useRef(false)
   const mounted = useRef(false)
   const native = hasNativeLedger()
+  const operationLock = useRef(false)
+  const [counterBusy, setCounterBusy] = useState(false)
+  const [financialHold, setFinancialHold] = useState(true)
+  const [setup, setSetup] = useState({ ready: false, revision: 0 })
+  const onSetupState = useCallback(
+    (ready: boolean, revision: number) =>
+      setSetup((previous) =>
+        previous.ready === ready && previous.revision === revision ? previous : { ready, revision }
+      ),
+    []
+  )
+  const goToDevice = useCallback(() => setView('device'), [])
   const refresh = useCallback(async () => {
     if (inFlight.current || !native) return
     inFlight.current = true
@@ -1088,6 +1136,12 @@ export default function App() {
       <div className="workspace">
         <nav className="navigation" aria-label="App navigation">
           <button
+            aria-current={view === 'counter' ? 'page' : undefined}
+            onClick={() => setView('counter')}
+          >
+            Counter{financialHold && native ? ' · check payment' : ''}
+          </button>
+          <button
             aria-current={view === 'device' ? 'page' : undefined}
             onClick={() => setView('device')}
           >
@@ -1103,8 +1157,20 @@ export default function App() {
         <main id="main" tabIndex={-1}>
           <div className="page-heading">
             <div>
-              <p className="eyebrow">{view === 'device' ? 'Device setup' : 'Local history'}</p>
-              <h1>{view === 'device' ? 'Get this counter ready.' : 'Saved receipts'}</h1>
+              <p className="eyebrow">
+                {view === 'device'
+                  ? 'Device setup'
+                  : view === 'counter'
+                    ? 'Local selling & payment review'
+                    : 'Local history'}
+              </p>
+              <h1>
+                {view === 'device'
+                  ? 'Get this counter ready.'
+                  : view === 'counter'
+                    ? 'Counter'
+                    : 'Saved receipts'}
+              </h1>
             </div>
             {native && (
               <button className="secondary" onClick={() => void refresh()} disabled={busy}>
@@ -1146,8 +1212,27 @@ export default function App() {
               and cannot make this device ready for offline selling.
             </p>
           )}
+          <div hidden={view !== 'counter'}>
+            <NativeCounter
+              available={native}
+              ready={setup.ready}
+              revision={setup.revision}
+              operationLock={operationLock}
+              onBusyChange={setCounterBusy}
+              onHoldChange={setFinancialHold}
+              onRecordsChanged={refresh}
+              onGoToDevice={goToDevice}
+            />
+          </div>
           <div className="device-layout" hidden={view !== 'device'}>
-            <NativeAccess available={native} onRecordsChanged={refresh} />
+            <NativeAccess
+              available={native}
+              onRecordsChanged={refresh}
+              operationLock={operationLock}
+              externalBusy={counterBusy}
+              financialHold={financialHold}
+              onSetupState={onSetupState}
+            />
             <section className="records-panel" aria-labelledby="records-heading">
               <h2 id="records-heading">Records on this device</h2>
               <dl className="record-values">

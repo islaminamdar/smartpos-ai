@@ -1,4 +1,4 @@
-import { Capacitor, registerPlugin } from '@capacitor/core'
+import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core'
 
 export type NativeIdentity = {
   installationId: string
@@ -28,6 +28,17 @@ export type DeviceSnapshot = {
   checkedAt: string
 }
 interface NativeLedgerPlugin {
+  addListener(
+    eventName: 'nativeCheckoutLocked',
+    listener: (event: unknown) => void
+  ): Promise<PluginListenerHandle>
+  getReceipt(input: { id: string }): Promise<unknown>
+  getCheckoutState(): Promise<unknown>
+  quoteBasket(input: NativeQuoteInput): Promise<unknown>
+  beginPaymentIntent(input: { intentId: string; request: NativeCheckoutRequest }): Promise<unknown>
+  getPaymentIntent(input: { intentId: string }): Promise<unknown>
+  confirmPaymentIntent(input: { intentId: string }): Promise<unknown>
+  cancelUncollectedIntent(input: { intentId: string; reason: string }): Promise<unknown>
   getReconciliationState(): Promise<unknown>
   reconcileOffline(): Promise<unknown>
   finishOfflineAuthority(input: { authorityId: string }): Promise<unknown>
@@ -526,4 +537,622 @@ export async function finishNativeOfflineAuthority(
   requireNativeAccess()
   if (!uuid(authorityId)) throw new Error('invalid_native_input')
   return parseReconciliationState(await ledger.finishOfflineAuthority({ authorityId }))
+}
+
+export type NativeCustomer = { name: string; address: string; trn: string | null }
+export type NativeCheckoutRequest = {
+  authorityId: string
+  serviceType: 'dine_in' | 'takeaway' | 'delivery'
+  customer: NativeCustomer | null
+  lines: { productId: string; quantityMilli: number }[]
+  cashTenderedFils: number
+  recordedCardFils: number
+  presentedTotalFils: number
+}
+export type NativeQuoteInput = Omit<
+  NativeCheckoutRequest,
+  'cashTenderedFils' | 'recordedCardFils' | 'presentedTotalFils'
+> & {
+  tenderMode: 'cash' | 'card' | 'mixed'
+  cashTenderedFils: number | null
+  recordedCardFils: number | null
+}
+export type NativeCheckoutLine = {
+  lineNumber: number
+  productId: string
+  name: string
+  unit: 'piece' | 'pack' | 'kg'
+  quantityMilli: number
+  unitPriceFils: number
+  taxRateBps: number
+  grossFils: number
+  netFils: number
+  taxFils: number
+}
+export type NativeQuote = {
+  schemaVersion: 1
+  authorityId: string
+  request: NativeCheckoutRequest
+  lines: NativeCheckoutLine[]
+  totals: { grossFils: number; netFils: number; taxFils: number }
+  payments: { method: 'cash' | 'card'; amountFils: number }[]
+  cashTenderedFils: number
+  changeFils: number
+  requiresBuyerDetails: boolean
+}
+export type NativeReceipt = Omit<
+  NativeQuote,
+  'authorityId' | 'request' | 'requiresBuyerDetails'
+> & {
+  id: string
+  documentNumber: string
+  issuedAt: string
+  serviceType: NativeCheckoutRequest['serviceType']
+  customer: NativeCustomer | null
+  merchant: { legalName: string; branchName: string; address: string; phone: string; trn: string }
+  syncState: 'pending' | 'acknowledged'
+}
+export type NativeIntent = {
+  schemaVersion: 1
+  intentId: string
+  state: 'payment_confirmation_required' | 'committed' | 'cancelled'
+  createdAt: string
+  request: NativeCheckoutRequest
+  quote: NativeQuote
+  canConfirm: boolean
+  canCancel: boolean
+  reasonCode: string | null
+  receipt: NativeReceipt | null
+}
+export type NativeCheckoutContext = {
+  authorityId: string
+  actorId: string
+  branchId: string
+  deviceId: string
+  shiftId: string
+  branchName: string
+  snapshotId: string
+  snapshotCreatedAt: string
+  expiresAt: string
+  permissions: { cash: boolean; recordedCard: boolean; mixedTender: boolean }
+  products: {
+    id: string
+    name: string
+    category: string
+    unit: NativeCheckoutLine['unit']
+    unitPriceFils: number
+  }[]
+}
+export type NativeCheckoutState = {
+  schemaVersion: 1
+  canIssue: boolean
+  reasonCode: string | null
+  context: NativeCheckoutContext | null
+  pendingIntentId: string | null
+  lastReceiptId: string | null
+  unresolvedIntent: NativeIntent | null
+  lastReceipt: NativeReceipt | null
+}
+const amountValue = (value: unknown, min = 0, max = 100000000): value is number =>
+  Number.isSafeInteger(value) && Number(value) >= min && Number(value) <= max
+const boundedText = (value: unknown, max: number): value is string =>
+  typeof value === 'string' && value.length > 0 && value.length <= max && value.trim() === value
+const timestamp = (value: unknown): value is string =>
+  typeof value === 'string' &&
+  /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(value) &&
+  Number.isFinite(Date.parse(value))
+const reasonCode = (value: unknown): boolean =>
+  value === null || (typeof value === 'string' && /^[a-z_]{1,100}$/.test(value))
+const serviceType = (value: unknown): boolean =>
+  ['dine_in', 'takeaway', 'delivery'].includes(String(value))
+const unitType = (value: unknown): boolean => ['piece', 'pack', 'kg'].includes(String(value))
+function invalidCheckout(): never {
+  throw new Error('invalid_native_response')
+}
+function parseCustomer(value: unknown): NativeCustomer | null {
+  if (value === null) return null
+  const c = record(value, ['name', 'address', 'trn'])
+  if (
+    !boundedText(c.name, 200) ||
+    !boundedText(c.address, 400) ||
+    (c.trn !== null && (typeof c.trn !== 'string' || !/^\d{15}$/.test(c.trn)))
+  )
+    invalidCheckout()
+  return c as NativeCustomer
+}
+export function parseCheckoutRequest(value: unknown): NativeCheckoutRequest {
+  const r = record(value, [
+    'authorityId',
+    'serviceType',
+    'customer',
+    'lines',
+    'cashTenderedFils',
+    'recordedCardFils',
+    'presentedTotalFils',
+  ])
+  if (
+    !uuid(r.authorityId) ||
+    !serviceType(r.serviceType) ||
+    !Array.isArray(r.lines) ||
+    r.lines.length < 1 ||
+    r.lines.length > 200 ||
+    !amountValue(r.cashTenderedFils) ||
+    !amountValue(r.recordedCardFils) ||
+    !amountValue(r.presentedTotalFils, 1)
+  )
+    invalidCheckout()
+  parseCustomer(r.customer)
+  const ids = new Set<string>()
+  for (const value of r.lines) {
+    const line = record(value, ['productId', 'quantityMilli'])
+    if (
+      !uuid(line.productId) ||
+      ids.has(line.productId) ||
+      !amountValue(line.quantityMilli, 1, 1000000)
+    )
+      invalidCheckout()
+    ids.add(line.productId)
+  }
+  return r as NativeCheckoutRequest
+}
+export function checkoutRequestKey(request: NativeCheckoutRequest): string {
+  return JSON.stringify([
+    request.authorityId,
+    request.serviceType,
+    request.customer && [request.customer.name, request.customer.address, request.customer.trn],
+    request.lines.map((line) => [line.productId, line.quantityMilli]),
+    request.cashTenderedFils,
+    request.recordedCardFils,
+    request.presentedTotalFils,
+  ])
+}
+export function quoteInputKey(input: NativeQuoteInput): string {
+  return JSON.stringify([
+    input.authorityId,
+    input.serviceType,
+    input.customer && [input.customer.name, input.customer.address, input.customer.trn],
+    input.lines.map((line) => [line.productId, line.quantityMilli]),
+    input.tenderMode,
+    input.cashTenderedFils,
+    input.recordedCardFils,
+  ])
+}
+function parseFinancialFields(r: Record<string, unknown>) {
+  if (
+    !Array.isArray(r.lines) ||
+    r.lines.length < 1 ||
+    r.lines.length > 200 ||
+    !Array.isArray(r.payments) ||
+    r.payments.length < 1 ||
+    r.payments.length > 2 ||
+    !amountValue(r.cashTenderedFils) ||
+    !amountValue(r.changeFils)
+  )
+    invalidCheckout()
+  const ids = new Set<string>()
+  for (let i = 0; i < r.lines.length; i++) {
+    const line = record(r.lines[i], [
+      'lineNumber',
+      'productId',
+      'name',
+      'unit',
+      'quantityMilli',
+      'unitPriceFils',
+      'taxRateBps',
+      'grossFils',
+      'netFils',
+      'taxFils',
+    ])
+    if (
+      line.lineNumber !== i + 1 ||
+      !uuid(line.productId) ||
+      ids.has(line.productId) ||
+      !boundedText(line.name, 240) ||
+      !unitType(line.unit) ||
+      !amountValue(line.quantityMilli, 1, 1000000) ||
+      (line.unit !== 'kg' && Number(line.quantityMilli) % 1000 !== 0) ||
+      !amountValue(line.unitPriceFils) ||
+      !amountValue(line.taxRateBps, 0, 10000) ||
+      !amountValue(line.grossFils) ||
+      !amountValue(line.netFils) ||
+      !amountValue(line.taxFils) ||
+      Number(line.netFils) + Number(line.taxFils) !== line.grossFils
+    )
+      invalidCheckout()
+    ids.add(line.productId)
+  }
+  const totals = record(r.totals, ['grossFils', 'netFils', 'taxFils'])
+  if (
+    !amountValue(totals.grossFils, 1) ||
+    !amountValue(totals.netFils) ||
+    !amountValue(totals.taxFils) ||
+    Number(totals.netFils) + Number(totals.taxFils) !== totals.grossFils
+  )
+    invalidCheckout()
+  const typedLines = r.lines as NativeCheckoutLine[]
+  if (
+    typedLines.reduce((sum, line) => sum + line.grossFils, 0) !== totals.grossFils ||
+    typedLines.reduce((sum, line) => sum + line.netFils, 0) !== totals.netFils ||
+    typedLines.reduce((sum, line) => sum + line.taxFils, 0) !== totals.taxFils
+  )
+    invalidCheckout()
+  const methods = new Set<string>()
+  let applied = 0
+  for (const value of r.payments) {
+    const payment = record(value, ['method', 'amountFils'])
+    if (
+      !['cash', 'card'].includes(String(payment.method)) ||
+      methods.has(String(payment.method)) ||
+      !amountValue(payment.amountFils, 1)
+    )
+      invalidCheckout()
+    methods.add(String(payment.method))
+    applied += Number(payment.amountFils)
+  }
+  if (applied !== totals.grossFils) invalidCheckout()
+  const cashApplied =
+    (r.payments as NativeQuote['payments']).find((p) => p.method === 'cash')?.amountFils ?? 0
+  if (Number(r.cashTenderedFils) - cashApplied !== r.changeFils) invalidCheckout()
+}
+export function parseNativeQuote(value: unknown): NativeQuote {
+  const r = record(value, [
+    'schemaVersion',
+    'authorityId',
+    'request',
+    'lines',
+    'totals',
+    'payments',
+    'cashTenderedFils',
+    'changeFils',
+    'requiresBuyerDetails',
+  ])
+  if (r.schemaVersion !== 1 || !uuid(r.authorityId) || typeof r.requiresBuyerDetails !== 'boolean')
+    invalidCheckout()
+  const request = parseCheckoutRequest(r.request)
+  parseFinancialFields(r)
+  if (
+    request.authorityId !== r.authorityId ||
+    request.presentedTotalFils !== (r.totals as NativeQuote['totals']).grossFils ||
+    request.cashTenderedFils !== r.cashTenderedFils ||
+    request.recordedCardFils !==
+      ((r.payments as NativeQuote['payments']).find((p) => p.method === 'card')?.amountFils ?? 0) ||
+    request.lines.length !== (r.lines as NativeCheckoutLine[]).length ||
+    request.lines.some(
+      (line, i) =>
+        line.productId !== (r.lines as NativeCheckoutLine[])[i].productId ||
+        line.quantityMilli !== (r.lines as NativeCheckoutLine[])[i].quantityMilli
+    )
+  )
+    invalidCheckout()
+  return r as NativeQuote
+}
+export function parseNativeReceipt(value: unknown): NativeReceipt {
+  const r = record(value, [
+    'schemaVersion',
+    'id',
+    'documentNumber',
+    'issuedAt',
+    'serviceType',
+    'customer',
+    'merchant',
+    'lines',
+    'totals',
+    'payments',
+    'cashTenderedFils',
+    'changeFils',
+    'syncState',
+  ])
+  if (
+    r.schemaVersion !== 1 ||
+    !uuid(r.id) ||
+    !boundedText(r.documentNumber, 160) ||
+    !timestamp(r.issuedAt) ||
+    !serviceType(r.serviceType) ||
+    !['pending', 'acknowledged'].includes(String(r.syncState))
+  )
+    invalidCheckout()
+  parseCustomer(r.customer)
+  parseFinancialFields(r)
+  const merchant = record(r.merchant, ['legalName', 'branchName', 'address', 'phone', 'trn'])
+  if (
+    !boundedText(merchant.legalName, 200) ||
+    !boundedText(merchant.branchName, 120) ||
+    !boundedText(merchant.address, 400) ||
+    !boundedText(merchant.phone, 30) ||
+    typeof merchant.trn !== 'string' ||
+    !/^\d{15}$/.test(merchant.trn)
+  )
+    invalidCheckout()
+  return r as NativeReceipt
+}
+export function parseNativeIntent(value: unknown): NativeIntent {
+  const r = record(value, [
+    'schemaVersion',
+    'intentId',
+    'state',
+    'createdAt',
+    'request',
+    'quote',
+    'canConfirm',
+    'canCancel',
+    'reasonCode',
+    'receipt',
+  ])
+  if (
+    r.schemaVersion !== 1 ||
+    !uuid(r.intentId) ||
+    !['payment_confirmation_required', 'committed', 'cancelled'].includes(String(r.state)) ||
+    !timestamp(r.createdAt) ||
+    typeof r.canConfirm !== 'boolean' ||
+    typeof r.canCancel !== 'boolean' ||
+    !reasonCode(r.reasonCode)
+  )
+    invalidCheckout()
+  const request = parseCheckoutRequest(r.request)
+  const quote = parseNativeQuote(r.quote)
+  if (
+    checkoutRequestKey(request) !== checkoutRequestKey(quote.request) ||
+    (r.state === 'committed' ? r.receipt === null : r.receipt !== null) ||
+    (r.state !== 'payment_confirmation_required' && (r.canConfirm || r.canCancel))
+  )
+    invalidCheckout()
+  if (r.receipt !== null) {
+    const receipt = parseNativeReceipt(r.receipt)
+    if (
+      receipt.totals.grossFils !== quote.totals.grossFils ||
+      receipt.serviceType !== request.serviceType ||
+      JSON.stringify([receipt.customer?.name, receipt.customer?.address, receipt.customer?.trn]) !==
+        JSON.stringify([
+          request.customer?.name,
+          request.customer?.address,
+          request.customer?.trn,
+        ]) ||
+      receipt.cashTenderedFils !== quote.cashTenderedFils ||
+      receipt.changeFils !== quote.changeFils ||
+      JSON.stringify(
+        receipt.lines.map((l) => [
+          l.lineNumber,
+          l.productId,
+          l.name,
+          l.unit,
+          l.quantityMilli,
+          l.unitPriceFils,
+          l.taxRateBps,
+          l.grossFils,
+          l.netFils,
+          l.taxFils,
+        ])
+      ) !==
+        JSON.stringify(
+          quote.lines.map((l) => [
+            l.lineNumber,
+            l.productId,
+            l.name,
+            l.unit,
+            l.quantityMilli,
+            l.unitPriceFils,
+            l.taxRateBps,
+            l.grossFils,
+            l.netFils,
+            l.taxFils,
+          ])
+        ) ||
+      JSON.stringify(receipt.payments.map((p) => [p.method, p.amountFils])) !==
+        JSON.stringify(quote.payments.map((p) => [p.method, p.amountFils]))
+    )
+      invalidCheckout()
+  }
+  return r as NativeIntent
+}
+export function parseNativeCheckoutState(value: unknown): NativeCheckoutState {
+  const r = record(value, [
+    'schemaVersion',
+    'canIssue',
+    'reasonCode',
+    'context',
+    'pendingIntentId',
+    'lastReceiptId',
+    'unresolvedIntent',
+    'lastReceipt',
+  ])
+  if (r.schemaVersion !== 1 || typeof r.canIssue !== 'boolean' || !reasonCode(r.reasonCode))
+    invalidCheckout()
+  if (
+    (r.pendingIntentId !== null && !uuid(r.pendingIntentId)) ||
+    (r.lastReceiptId !== null && !uuid(r.lastReceiptId))
+  )
+    invalidCheckout()
+  if (r.context !== null) {
+    const c = record(r.context, [
+      'authorityId',
+      'actorId',
+      'branchId',
+      'deviceId',
+      'shiftId',
+      'branchName',
+      'snapshotId',
+      'snapshotCreatedAt',
+      'expiresAt',
+      'permissions',
+      'products',
+    ])
+    if (
+      ['authorityId', 'actorId', 'branchId', 'deviceId', 'shiftId', 'snapshotId'].some(
+        (key) => !uuid(c[key])
+      ) ||
+      !boundedText(c.branchName, 120) ||
+      !timestamp(c.snapshotCreatedAt) ||
+      !timestamp(c.expiresAt) ||
+      !Array.isArray(c.products) ||
+      c.products.length < 1 ||
+      c.products.length > 2000
+    )
+      invalidCheckout()
+    const permissions = record(c.permissions, ['cash', 'recordedCard', 'mixedTender'])
+    if (Object.values(permissions).some((v) => typeof v !== 'boolean')) invalidCheckout()
+    const ids = new Set<string>()
+    for (const value of c.products) {
+      const product = record(value, ['id', 'name', 'category', 'unit', 'unitPriceFils'])
+      if (
+        !uuid(product.id) ||
+        ids.has(product.id) ||
+        !boundedText(product.name, 240) ||
+        !boundedText(product.category, 120) ||
+        !unitType(product.unit) ||
+        !amountValue(product.unitPriceFils)
+      )
+        invalidCheckout()
+      ids.add(product.id)
+    }
+  }
+  if (
+    r.unresolvedIntent !== null &&
+    parseNativeIntent(r.unresolvedIntent).state !== 'payment_confirmation_required'
+  )
+    invalidCheckout()
+  if (
+    r.unresolvedIntent !== null &&
+    parseNativeIntent(r.unresolvedIntent).intentId !== r.pendingIntentId
+  )
+    invalidCheckout()
+  if (r.lastReceipt !== null && parseNativeReceipt(r.lastReceipt).id !== r.lastReceiptId)
+    invalidCheckout()
+  if (r.canIssue && (r.context === null || r.pendingIntentId !== null || r.reasonCode !== null))
+    invalidCheckout()
+  return r as NativeCheckoutState
+}
+export function quantityToMilli(value: string, unit: NativeCheckoutLine['unit']): number | null {
+  if (!/^\d{1,4}(?:\.\d{1,3})?$/.test(value.trim())) return null
+  const [whole, fraction = ''] = value.trim().split('.')
+  const result = Number(whole) * 1000 + Number(fraction.padEnd(3, '0'))
+  return amountValue(result, 1, 1000000) && (unit === 'kg' || result % 1000 === 0) ? result : null
+}
+export function nativeCheckoutError(error: unknown): string {
+  switch (nativeOfflineErrorCode(error)) {
+    case 'native_session_expired':
+      return 'Sign in with the original staff account to review this payment. Saved records remain on this device.'
+    case 'pin_unlock_required':
+      return 'Unlock payment review using the Android PIN dialog. Do not collect payment again.'
+    case 'clock_expired':
+      return 'The saved permission has expired. New collection is paused. If money was already received, keep the original payment and contact your manager.'
+    case 'clock_source_blocked':
+      return 'Device time could not be verified. Keep the original payment and contact your manager; do not collect payment again.'
+    case 'authority_closed':
+      return 'This allocation is finished. Review saved payments and receipts; do not start another collection with it.'
+    case 'payment_reconciliation_required':
+      return 'A saved payment needs checking. Resolve that original payment before starting another sale.'
+    case 'presented_total_changed':
+      return 'The bill total no longer matches the saved menu. Review a fresh native quote before collecting payment.'
+    case 'authority_exhausted':
+      return 'This allocation has reached its limit. New payments are paused; keep saved records and contact your manager.'
+    case 'buyer_details_required':
+      return 'Buyer name and address are required for this bill. Complete them before saving the payment step.'
+    case 'tender_not_authorized':
+      return 'This payment method is not permitted by the current offline allocation.'
+    case 'intent_conflict':
+      return 'The saved payment does not match this request. Keep its original identity and ask your manager to reconcile it.'
+    case 'intent_missing':
+      return 'No saved payment was returned for this reference. Do not collect payment or start a replacement until the device state has been checked.'
+    case 'native_checkout_not_enabled':
+    case 'offline_checkout_disabled':
+      return 'New sales are not enabled in this app build. Saved payments and receipts remain available for review.'
+    default:
+      return 'The payment step could not be confirmed. Keep the original record. If money may have been collected, check it before doing anything else.'
+  }
+}
+export async function readNativeCheckout(): Promise<NativeCheckoutState> {
+  requireNativeAccess()
+  return parseNativeCheckoutState(await ledger.getCheckoutState())
+}
+export async function quoteNativeBasket(input: NativeQuoteInput): Promise<NativeQuote> {
+  requireNativeAccess()
+  const result = parseNativeQuote(await ledger.quoteBasket(input))
+  const req = result.request
+  if (
+    req.authorityId !== input.authorityId ||
+    req.serviceType !== input.serviceType ||
+    JSON.stringify([req.customer?.name, req.customer?.address, req.customer?.trn]) !==
+      JSON.stringify([input.customer?.name, input.customer?.address, input.customer?.trn]) ||
+    JSON.stringify(req.lines.map((l) => [l.productId, l.quantityMilli])) !==
+      JSON.stringify(input.lines.map((l) => [l.productId, l.quantityMilli])) ||
+    (input.cashTenderedFils !== null && req.cashTenderedFils !== input.cashTenderedFils) ||
+    (input.recordedCardFils !== null && req.recordedCardFils !== input.recordedCardFils) ||
+    (input.tenderMode === 'cash' && req.recordedCardFils !== 0) ||
+    (input.tenderMode === 'card' &&
+      (req.cashTenderedFils !== 0 || req.recordedCardFils !== req.presentedTotalFils)) ||
+    (input.tenderMode === 'mixed' &&
+      (req.recordedCardFils < 1 || req.recordedCardFils >= req.presentedTotalFils))
+  )
+    invalidCheckout()
+  return result
+}
+export async function beginNativePaymentIntent(
+  intentId: string,
+  request: NativeCheckoutRequest
+): Promise<NativeIntent> {
+  requireNativeAccess()
+  if (!uuid(intentId)) throw new Error('invalid_native_input')
+  parseCheckoutRequest(request)
+  const result = parseNativeIntent(await ledger.beginPaymentIntent({ intentId, request }))
+  if (
+    result.intentId !== intentId ||
+    checkoutRequestKey(result.request) !== checkoutRequestKey(request)
+  )
+    invalidCheckout()
+  return result
+}
+export async function readNativePaymentIntent(intentId: string): Promise<NativeIntent> {
+  requireNativeAccess()
+  if (!uuid(intentId)) throw new Error('invalid_native_input')
+  const result = parseNativeIntent(await ledger.getPaymentIntent({ intentId }))
+  if (result.intentId !== intentId) invalidCheckout()
+  return result
+}
+export async function confirmNativePaymentIntent(intentId: string): Promise<NativeIntent> {
+  requireNativeAccess()
+  if (!uuid(intentId)) throw new Error('invalid_native_input')
+  const result = parseNativeIntent(await ledger.confirmPaymentIntent({ intentId }))
+  if (result.intentId !== intentId || result.state !== 'committed') invalidCheckout()
+  return result
+}
+export async function cancelNativeUncollectedIntent(
+  intentId: string,
+  reason: string
+): Promise<NativeIntent> {
+  requireNativeAccess()
+  if (!uuid(intentId) || !boundedText(reason, 240)) throw new Error('invalid_native_input')
+  const result = parseNativeIntent(await ledger.cancelUncollectedIntent({ intentId, reason }))
+  if (result.intentId !== intentId) invalidCheckout()
+  return result
+}
+
+export function knownCheckoutReason(code: string | null): boolean {
+  return (
+    code === null ||
+    [
+      'native_checkout_not_enabled',
+      'native_session_expired',
+      'pin_unlock_required',
+      'clock_expired',
+      'clock_source_blocked',
+      'authority_closed',
+      'authority_exhausted',
+      'payment_reconciliation_required',
+    ].includes(code)
+  )
+}
+
+export async function readNativeReceipt(id: string): Promise<NativeReceipt> {
+  requireNativeAccess()
+  if (!uuid(id)) throw new Error('invalid_native_input')
+  const result = parseNativeReceipt(await ledger.getReceipt({ id }))
+  if (result.id !== id) invalidCheckout()
+  return result
+}
+
+export async function subscribeNativeCheckoutLock(
+  onLock: () => void
+): Promise<PluginListenerHandle> {
+  requireNativeAccess()
+  return ledger.addListener('nativeCheckoutLocked', () => onLock())
 }

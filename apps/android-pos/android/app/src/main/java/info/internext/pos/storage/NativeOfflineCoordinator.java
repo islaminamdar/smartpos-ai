@@ -151,6 +151,17 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
         }finally{unlock.lock();if(pin!=null)Arrays.fill(pin,'\0');}
     }
     public synchronized void lock(){unlock.lock();}
+    /** Local-only counter boundary. Retained custody alone never authenticates a reader. */
+    synchronized NativeCheckoutCoordinator.CheckoutContext checkoutContext(boolean requireUnlocked)throws Exception{
+        JSONObject state=session.nativeState(),offline=state.optJSONObject("offline");
+        if(state.isNull("actorId")||state.getBoolean("logoutPending"))throw fail("native_session_expired");
+        if(offline==null||state.isNull("counter")||offline.isNull("keyEpoch"))throw fail("offline_context_changed");
+        checkStoredScope(state,offline);JSONObject reservation=offline.optJSONObject("reservation");
+        if(reservation==null)throw fail("offline_preparation_uncertain");
+        OfflineBundle bundle=storedBundle(offline,reservation.getString("requestId"));if(bundle==null)throw fail("offline_preparation_uncertain");
+        OfflineBundle.Binding bound=binding(offline);if(requireUnlocked)unlock.requireUnlocked(bound);
+        return new NativeCheckoutCoordinator.CheckoutContext(bundle,engine(bound));
+    }
     @Override public synchronized void close(){unlock.close();clock.close();}
     private JSONObject requireAccess()throws Exception{
         if(keys.isEmpty())throw fail("offline_not_configured");JSONObject access=session.getAccessState();if(!"signed_in".equals(access.getString("status")))throw fail("native_session_expired");if(access.isNull("device"))throw fail("offline_context_changed");return access;

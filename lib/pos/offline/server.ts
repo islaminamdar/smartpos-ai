@@ -72,7 +72,12 @@ const readerSchema = z.object({
 }).strict()
 async function verifiedReader(raw: unknown, keys: OfflineServerKeys) {
   try {
-    const row = storage(readerSchema, raw)
+    const row = readerSchema.parse(raw)
+    // The reader duplicates decoded payloads and base64 envelopes. Bound and compare
+    // each payload independently; a valid reader can exceed the payload byte limit.
+    const original = raw as Record<string, unknown>
+    if (canonicalJson(row.snapshot) !== canonicalJson(original.snapshot) ||
+      canonicalJson(row.authority) !== canonicalJson(original.authority)) throw new Error()
     const bundle = await verifyOfflineBundle(row.snapshotEnvelope, row.authorityEnvelope, keys.publicKeys)
     const deviceKey = await importOfflinePublicKey(row.publicKeySpki)
     if (canonicalJson(bundle.snapshot) !== canonicalJson(row.snapshot) || canonicalJson(bundle.authority) !== canonicalJson(row.authority) ||

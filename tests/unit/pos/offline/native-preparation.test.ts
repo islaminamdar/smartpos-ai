@@ -135,3 +135,31 @@ it('bounds server time to the native year-9999 ceiling',()=>{
   expect(nativeOfflineContextSchema.safeParse(valid).success).toBe(true)
   expect(nativeOfflineContextSchema.safeParse({...valid,serverTimeMs:253402300800000}).success).toBe(false)
 })
+
+
+it('prepares a valid large menu whose signed envelope and duplicated authority reader exceed one MiB',async()=>{
+  snapshot.products=Array.from({length:1800},(_,index)=>({
+    id:`${(index+1).toString(16).padStart(8,'0')}-0000-4000-8000-000000000001`,
+    name:'n'.repeat(220),category:'c'.repeat(100),unit:'piece',unitPriceFils:1000,taxRateBps:500,revision:1,
+  }))
+  expect(canonicalBytes(snapshot).length).toBeLessThanOrEqual(1_048_576)
+  snapshotEnvelope=await signEnvelope(snapshot,'test-server',key)
+  authorityEnvelope=await signEnvelope({...authority,snapshotSha256:await sha256Hex(canonicalBytes(snapshot))},'test-server',key)
+  expect(JSON.stringify(snapshotEnvelope).length).toBeGreaterThan(1_048_576)
+  const result=await prepareNativeOffline(prepareRequest)
+  const bundle=await verifyOfflineBundle(result.snapshotEnvelope,result.authorityEnvelope,trusted)
+  const {payload}=await verifySignedEnvelope(result.handoff,nativeOfflinePreparedSchema,trusted)
+  expect(bundle.snapshot.products).toEqual(snapshot.products)
+  expect(payload.snapshotSha256).toBe(bundle.snapshotSha256)
+  expect(payload.authoritySha256).toBe(bundle.authoritySha256)
+  expect(m.serviceRpc.mock.calls.map(([name])=>name)).toEqual(['pos_offline_reserve','pos_offline_attach'])
+})
+
+it('rejects storage normalization and extra reader fields even when signed payloads remain valid',async()=>{
+  const bundle=await verifyOfflineBundle(snapshotEnvelope,authorityEnvelope,trusted)
+  const row={...bundle,snapshotEnvelope,authorityEnvelope,publicKeySpki:deviceSpki,keyEpoch:authority.keyEpoch,deviceId:authority.deviceId}
+  for(const data of [{...row,unexpected:true},{...row,snapshot:{...bundle.snapshot,profile:{...bundle.snapshot.profile,legalName:` ${bundle.snapshot.profile.legalName} `}}}]){
+    m.serviceRpc.mockImplementation(async(name)=>({data:name==='pos_offline_reserve'?{snapshot,authority}:data,error:null}))
+    await expect(prepareNativeOffline(prepareRequest)).rejects.toMatchObject({code:'offline_storage_unavailable'})
+  }
+})

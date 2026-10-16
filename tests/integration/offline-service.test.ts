@@ -9,6 +9,7 @@ vi.mock('@/lib/pos/server/client',async original=>({...await original<typeof imp
 import { OfflineEnrollmentProofExpired, enrollOfflineDevice, reserveOfflineAuthority, importOfflineReceipt, sealOfflineAuthority } from '@/lib/pos/offline/server'
 import { encodeBase64Url, decodeBase64Url, parseCanonicalPayload, sha256Hex, canonicalBytes } from '@/lib/pos/offline/canonical'
 import { publicKeyFingerprint, signEnvelope, verifyOfflineBundle, verifySignedEnvelope } from '@/lib/pos/offline/authority'
+import { recoverOfflineBundle, nativeOfflineRecoveredSchema } from '@/lib/pos/offline/bundle-recovery'
 import { offlineAckSchema } from '@/lib/pos/offline/server-contracts'
 import type { OfflineIssuance } from '@/lib/pos/offline/contracts'
 
@@ -134,8 +135,38 @@ it('enrolls two real device keys, reserves disjoint numbers, recovers out-of-ord
   }
   const first=sale(1,null,1),firstHash=await sha256Hex(canonicalBytes(first)),second=sale(2,firstHash,2)
   const signedFirst=await signEnvelope(first,firstDevice.fingerprint,firstDevice.pair.privateKey),signedSecond=await signEnvelope(second,firstDevice.fingerprint,firstDevice.pair.privateKey)
+  // Reserve a third device's authority, then simulate process death before signing/attach.
+  // It must be recoverable using historical possession alone after current access is revoked.
+  const pendingDevice=randomUUID(),pendingShift=randomUUID(),pendingId=randomUUID()
+  await admin(()=>db.exec(`insert into public.pos_devices(id,organization_id,branch_id,name) values('${pendingDevice}','${ids.org}','${ids.branch}','Synthetic interrupted attachment');insert into public.pos_shifts(id,organization_id,branch_id,device_id,opened_by,opening_cash_fils) values('${pendingShift}','${ids.org}','${ids.branch}','${pendingDevice}','${ids.actor}',0);`))
+  const pendingKey=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']),pendingFingerprint=await publicKeyFingerprint(pendingKey.publicKey),enrollmentId=randomUUID()
+  const pendingEpoch=await enrollOfflineDevice({requestId:enrollmentId,branchId:ids.branch,deviceId:pendingDevice,deviceKeySha256:pendingFingerprint,publicKeySpki:encodeBase64Url(new Uint8Array(await crypto.subtle.exportKey('spki',pendingKey.publicKey))),proof:await signEnvelope({kind:'offline-enrollment',schemaVersion:1,requestId:enrollmentId,branchId:ids.branch,deviceId:pendingDevice,actorId:ids.actor,deviceKeySha256:pendingFingerprint,issuedAt:new Date().toISOString()},pendingFingerprint,pendingKey.privateKey)})
+  const pendingReservation={requestId:pendingId,branchId:ids.branch,deviceId:pendingDevice,shiftId:pendingShift,count:2,lifetimeSeconds:60,maxInvoiceTotalFils:100000,maxGrossFils:200000,permissions:{cash:true,recordedCard:false,mixedTender:false}}
+  const reserved=await m.rpc('pos_offline_reserve',{p_actor:ids.actor,p_request:pendingReservation});expect(reserved.error).toBeNull()
+  const counterBeforeRecovery=await admin(()=>scalar("select last_number from public.pos_document_counters where branch_id=$1 and kind='tax_invoice'",[ids.branch]))
+  const originalAttached=await scalar('select public.pos_offline_authority($1)',[a.id]) as Record<string,unknown>
   await admin(()=>db.exec(`update public.pos_products set unit_price_fils=2500,active=false,revision=2 where id='${ids.product}';update public.pos_staff set active=false where user_id='${ids.actor}';update public.pos_devices set active=false where id='${ids.device}';update public.pos_offline_branch_policy set enabled=false;`))
   vi.stubEnv('POS_ONLINE_PILOT','false');vi.stubEnv('POS_LIVE_SALES_ENABLED','false');vi.stubEnv('POS_OFFLINE_ISSUANCE_ENABLED','false');m.auth.mockRejectedValue(new Error('revoked'))
+  await admin(()=>db.query('update public.pos_devices set active=false where id=$1',[pendingDevice]))
+  const historicalProof={kind:'offline-bundle-recovery',schemaVersion:1,authorityId:a.id,keyEpoch:a.keyEpoch,deviceId:a.deviceId,challenge:'a'.repeat(64)}
+  const recoveredOriginal=await recoverOfflineBundle(await signEnvelope(historicalProof,firstDevice.fingerprint,firstDevice.pair.privateKey))
+  expect(recoveredOriginal.snapshotEnvelope).toEqual(originalAttached.snapshotEnvelope);expect(recoveredOriginal.authorityEnvelope).toEqual(originalAttached.authorityEnvelope)
+  const pendingProof={...historicalProof,authorityId:pendingId,keyEpoch:pendingEpoch.keyEpoch,deviceId:pendingDevice}
+  await expect(recoverOfflineBundle(await signEnvelope(pendingProof,pendingFingerprint,firstDevice.pair.privateKey))).rejects.toMatchObject({code:'offline_device_proof_invalid'})
+  await expect(recoverOfflineBundle(await signEnvelope({...pendingProof,keyEpoch:a.keyEpoch},pendingFingerprint,pendingKey.privateKey))).rejects.toMatchObject({code:'offline_device_proof_invalid'})
+  expect(await admin(()=>scalar('select count(*)::int from public.pos_offline_signed_bundles where authority_id=$1',[pendingId]))).toBe(0)
+  const recovered=await recoverOfflineBundle(await signEnvelope(pendingProof,pendingFingerprint,pendingKey.privateKey))
+  const recoveredBundle=await verifyOfflineBundle(recovered.snapshotEnvelope,recovered.authorityEnvelope,{'synthetic-server':server.publicKey})
+  expect(recoveredBundle.snapshot).toEqual(reserved.data.snapshot)
+  expect(recoveredBundle.authority).toEqual({...reserved.data.authority,snapshotSha256:recoveredBundle.snapshotSha256})
+  expect(recoveredBundle.authority.expiresAt).toBe(reserved.data.authority.expiresAt)
+  const handoff=(await verifySignedEnvelope(recovered.handoff,nativeOfflineRecoveredSchema,{'synthetic-server':server.publicKey})).payload
+  expect(handoff).toMatchObject({purpose:'reconciliation-only',kind:'native-offline-recovered',challenge:pendingProof.challenge,authorityId:pendingId,keyEpoch:pendingEpoch.keyEpoch,deviceId:pendingDevice,snapshotSha256:recoveredBundle.snapshotSha256,authoritySha256:recoveredBundle.authoritySha256})
+  const recoveredRetry=await recoverOfflineBundle(await signEnvelope({...pendingProof,challenge:'b'.repeat(64)},pendingFingerprint,pendingKey.privateKey))
+  expect(recoveredRetry.snapshotEnvelope).toEqual(recovered.snapshotEnvelope);expect(recoveredRetry.authorityEnvelope).toEqual(recovered.authorityEnvelope)
+  expect(await admin(()=>scalar('select count(*)::int from public.pos_offline_signed_bundles where authority_id=$1',[pendingId]))).toBe(1)
+  expect(await admin(()=>scalar("select last_number from public.pos_document_counters where branch_id=$1 and kind='tax_invoice'",[ids.branch]))).toBe(counterBeforeRecovery)
+  expect(await admin(()=>scalar('select count(*)::int from public.pos_offline_authorities where id=$1',[pendingId]))).toBe(1)
   const gap=await importOfflineReceipt(signedSecond);expect(gap).toMatchObject({status:'reconciliation_required',code:'chain'})
   const accepted=await importOfflineReceipt(signedFirst),acceptedSecond=await importOfflineReceipt(signedSecond)
   expect(accepted).toMatchObject({status:'accepted',replayed:false,receipt:first.document});expect(acceptedSecond).toMatchObject({status:'accepted',replayed:false})

@@ -20,8 +20,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
-/** Internal native checkout. No WebView write bridge is exposed until enrollment, local unlock,
- * fresh server-time handoff and two-device acceptance are integrated. All money is recalculated
+/** Internal native checkout. The coordinator independently gates the WebView write bridge
+ * until recovery and two-device acceptance are complete. All money is recalculated
  * from signed snapshots; the caller can supply quantities and recorded tender only. */
 public final class NativeCheckoutEngine {
     interface UnlockGuard { void requireUnlocked(OfflineBundle.Binding binding) throws Exception; }
@@ -262,6 +262,61 @@ public final class NativeCheckoutEngine {
     public JSONObject getIntent(String intentId) throws Exception {
         uuid(intentId); synchronized (journal) { return intentState(journal.getReadableDatabase(), intentId); }
     }
+    /** Quote only: no invoice numbers, intent, payment, or clock state is changed. */
+    JSONObject quoteBasket(JSONObject input) throws Exception {
+        JSONObject draft=object(CanonicalJson.parse(CanonicalJson.bytes(input)));
+        fields(draft,"authorityId","serviceType","customer","lines","tenderMode","cashTenderedFils","recordedCardFils");
+        String mode=string(draft,"tenderMode");
+        if(!java.util.Arrays.asList("cash","card","mixed").contains(mode))throw invalid("invalid_tender");
+        Long cash=draft.isNull("cashTenderedFils")?null:integer(draft,"cashTenderedFils",0,OfflineCalculator.MAX_FILS);
+        Long card=draft.isNull("recordedCardFils")?null:integer(draft,"recordedCardFils",0,OfflineCalculator.MAX_FILS);
+        JSONObject request=new JSONObject().put("authorityId",draft.get("authorityId")).put("serviceType",draft.get("serviceType"))
+            .put("customer",draft.get("customer")).put("lines",draft.get("lines")).put("cashTenderedFils",0).put("recordedCardFils",0).put("presentedTotalFils",1);
+        checkedRequest(request);
+        synchronized(journal){
+            OfflineBundle bundle=bundle(journal.getReadableDatabase(),request.getString("authorityId"));
+            // Preliminary arithmetic uses sufficient hypothetical tender only to obtain gross.
+            // It is never persisted or exposed; the final quote uses the actual planned tender.
+            long gross=OfflineCalculator.calculate(OfflineCalculator.VERSION,true,inputs(bundle,request),OfflineCalculator.MAX_FILS,0).grossFils;
+            long finalCard,finalCash;
+            if(mode.equals("cash")){if(card!=null&&card!=0)throw invalid("invalid_tender");finalCard=0;finalCash=cash==null?gross:cash;}
+            else if(mode.equals("card")){if((cash!=null&&cash!=0)||(card!=null&&card!=gross))throw invalid("invalid_tender");finalCard=gross;finalCash=0;}
+            else{if(card==null||card<=0||card>=gross)throw invalid("invalid_tender");finalCard=card;finalCash=cash==null?gross-card:cash;}
+            request.put("cashTenderedFils",finalCash).put("recordedCardFils",finalCard).put("presentedTotalFils",gross);
+            return quote(bundle,request,calculate(bundle,request,false));
+        }
+    }
+    JSONObject quoteRequest(JSONObject request)throws Exception{
+        synchronized(journal){OfflineBundle b=bundle(journal.getReadableDatabase(),string(request,"authorityId"));return quote(b,request,calculate(b,request,false));}
+    }
+    /** Recheck native unlock, current clock and budget without reserving or issuing anything. */
+    void requireReady(String authorityId,JSONObject request)throws Exception{
+        synchronized(journal){SQLiteDatabase db=journal.getWritableDatabase();db.beginTransaction();try{
+            OfflineBundle b=bundle(db,authorityId);unlock.requireUnlocked(binding);
+            long gross=request==null?1:calculate(b,request).grossFils;State state=state(db,authorityId);
+            checkBudget(b,state,gross);OfflineClock.Tick tick=advance(db,b,state);saveClock(db,authorityId,tick);db.setTransactionSuccessful();
+        }finally{db.endTransaction();}}
+    }
+    JSONObject receiptForDisplay(String id)throws Exception{
+        uuid(id);synchronized(journal){SQLiteDatabase db=journal.getReadableDatabase();
+            String envelope=receiptEnvelope(db,id);
+            JSONObject payload=object(SignedProtocol.verify(envelope,Collections.singletonMap(SignedProtocol.fingerprint(deviceKey),deviceKey)).payload());
+            OfflineBundle b=bundle(db,payload.getString("authorityId"));unlock.requireUnlocked(binding);
+            JSONObject intent=intentState(db,payload.getString("paymentIntentId"));JSONObject request=intent.getJSONObject("request");
+            JSONObject doc=payload.getJSONObject("document");
+            if(!id.equals(payload.getString("id"))||!id.equals(intent.getString("orderId"))||!"committed".equals(intent.getString("state"))
+                ||!b.authorityId.equals(request.getString("authorityId"))||!b.snapshotSha256.equals(payload.getString("snapshotSha256"))||!b.authoritySha256.equals(payload.getString("authoritySha256")))throw invalid("receipt_integrity_failed");
+            JSONObject expected=document(b,request,calculate(b,request),id,intent.getString("documentId"),doc.getString("documentNumber"),doc.getString("issuedAt"));
+            if(!canonical(expected).equals(canonical(doc)))throw invalid("receipt_integrity_failed");
+            return doc;
+        }
+    }
+    private static JSONObject quote(OfflineBundle b,JSONObject request,OfflineCalculator.Calculation c)throws Exception{
+        JSONObject doc=document(b,request,c,"","","","");
+        return new JSONObject().put("schemaVersion",1).put("authorityId",b.authorityId).put("request",object(CanonicalJson.parse(CanonicalJson.bytes(request))))
+            .put("lines",doc.get("lines")).put("totals",doc.get("totals")).put("payments",doc.get("payments"))
+            .put("cashTenderedFils",c.cashTenderedFils).put("changeFils",c.changeFils).put("requiresBuyerDetails",c.requiresBuyerDetails);
+    }
     public JSONArray listPendingIssuances() throws Exception {
         synchronized (journal) {
             JSONArray result = new JSONArray();
@@ -343,13 +398,18 @@ public final class NativeCheckoutEngine {
         integer(r,"cashTenderedFils",0,100_000_000);integer(r,"recordedCardFils",0,100_000_000);integer(r,"presentedTotalFils",1,100_000_000);return r;
     }
     private static OfflineCalculator.Calculation calculate(OfflineBundle bundle,JSONObject request) throws Exception {
-        checkedRequest(request); List<OfflineCalculator.InputLine> inputs=new ArrayList<>();JSONArray lines=request.getJSONArray("lines");
-        for(int i=0;i<lines.length();i++){JSONObject line=lines.getJSONObject(i);OfflineBundle.Product product=bundle.product(line.getString("productId"));if(product==null)throw invalid("product_unavailable");inputs.add(product.calculatorInput(line.getLong("quantityMilli")));}
-        OfflineCalculator.Calculation c=OfflineCalculator.calculate(OfflineCalculator.VERSION,true,inputs,request.getLong("cashTenderedFils"),request.getLong("recordedCardFils"));
+        return calculate(bundle,request,true);
+    }
+    private static List<OfflineCalculator.InputLine> inputs(OfflineBundle bundle,JSONObject request)throws Exception{
+        checkedRequest(request);List<OfflineCalculator.InputLine> inputs=new ArrayList<>();JSONArray lines=request.getJSONArray("lines");
+        for(int i=0;i<lines.length();i++){JSONObject line=lines.getJSONObject(i);OfflineBundle.Product product=bundle.product(line.getString("productId"));inputs.add(product.calculatorInput(line.getLong("quantityMilli")));}return inputs;
+    }
+    private static OfflineCalculator.Calculation calculate(OfflineBundle bundle,JSONObject request,boolean requireBuyer) throws Exception {
+        OfflineCalculator.Calculation c=OfflineCalculator.calculate(OfflineCalculator.VERSION,true,inputs(bundle,request),request.getLong("cashTenderedFils"),request.getLong("recordedCardFils"));
         if(c.grossFils!=request.getLong("presentedTotalFils"))throw invalid("presented_total_changed");
         boolean cash=false,card=false;for(OfflineCalculator.Payment p:c.payments){cash|="cash".equals(p.method);card|="card".equals(p.method);}
         if((cash&&!bundle.cashAllowed)||(card&&!bundle.recordedCardAllowed)||(cash&&card&&!bundle.mixedTenderAllowed))throw invalid("tender_not_authorized");
-        if(c.requiresBuyerDetails&&request.isNull("customer"))throw invalid("buyer_details_required");return c;
+        if(requireBuyer&&c.requiresBuyerDetails&&request.isNull("customer"))throw invalid("buyer_details_required");return c;
     }
     private static JSONObject document(OfflineBundle bundle,JSONObject request,OfflineCalculator.Calculation c,String orderId,String documentId,String number,String issuedAt)throws Exception{
         JSONArray lines=new JSONArray(),payments=new JSONArray();

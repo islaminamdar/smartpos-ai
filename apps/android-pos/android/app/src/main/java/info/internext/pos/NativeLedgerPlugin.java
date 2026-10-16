@@ -16,6 +16,7 @@ import info.internext.pos.storage.NativeJournal;
 import info.internext.pos.storage.NativeSession;
 import info.internext.pos.storage.NativeOfflineCoordinator;
 import info.internext.pos.storage.NativeReconciliation;
+import info.internext.pos.storage.NativeCheckoutCoordinator;
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -27,7 +28,9 @@ public final class NativeLedgerPlugin extends Plugin {
     private NativeSession session;
     private NativeOfflineCoordinator offline;
     private NativeReconciliation reconciliation;
+    private NativeCheckoutCoordinator checkout;
     private volatile boolean foreground=true;
+    private final java.util.concurrent.atomic.AtomicLong checkoutEpoch=new java.util.concurrent.atomic.AtomicLong();
     private AlertDialog credentials;
     private EditText passwordField;
     private volatile boolean destroyed;
@@ -40,6 +43,28 @@ public final class NativeLedgerPlugin extends Plugin {
     }
     private NativeOfflineCoordinator offline()throws Exception{if(offline==null)offline=new NativeOfflineCoordinator(getContext(),journal,session());return offline;}
     private NativeReconciliation reconciliation()throws Exception{if(reconciliation==null)reconciliation=new NativeReconciliation(getContext(),journal,session());return reconciliation;}
+    private NativeCheckoutCoordinator checkout()throws Exception{if(checkout==null)checkout=new NativeCheckoutCoordinator(journal,offline());return checkout;}
+    private void checkoutCall(PluginCall call,ReadOperation operation,String... fields){
+        if(call.getData().length()!=fields.length){call.reject("Check the saved payment details.","native_checkout_unavailable");return;}
+        for(String field:fields)if(!call.getData().has(field)){call.reject("Check the saved payment details.","native_checkout_unavailable");return;}
+        final long epoch=checkoutEpoch.get();
+        execute(call,()->{try{
+            if(!foreground||epoch!=checkoutEpoch.get())throw new NativeAccessError("pin_unlock_required");
+            org.json.JSONObject result=operation.read();
+            // A pause/resume while the worker runs must not return customer data to a stale UI.
+            // The ledger operation may already have committed: callers recover its original ID.
+            if(!foreground||epoch!=checkoutEpoch.get())throw new NativeAccessError("pin_unlock_required");
+            return result;
+        }catch(Exception error){throw new NativeAccessError(NativeCheckoutCoordinator.code(error));}},true);
+    }
+    private void notifyCheckoutLocked(){checkoutEpoch.incrementAndGet();notifyListeners("nativeCheckoutLocked",new JSObject().put("schemaVersion",1),true);}
+    @PluginMethod public void getCheckoutState(PluginCall call){checkoutCall(call,()->checkout().getState());}
+    @PluginMethod public void quoteBasket(PluginCall call){checkoutCall(call,()->checkout().quoteBasket(call.getData()),"authorityId","serviceType","customer","lines","tenderMode","cashTenderedFils","recordedCardFils");}
+    @PluginMethod public void beginPaymentIntent(PluginCall call){checkoutCall(call,()->checkout().beginPaymentIntent(call.getData().getString("intentId"),call.getData().getJSONObject("request")),"intentId","request");}
+    @PluginMethod public void getPaymentIntent(PluginCall call){checkoutCall(call,()->checkout().getPaymentIntent(call.getData().getString("intentId")),"intentId");}
+    @PluginMethod public void confirmPaymentIntent(PluginCall call){checkoutCall(call,()->checkout().confirmPaymentIntent(call.getData().getString("intentId")),"intentId");}
+    @PluginMethod public void cancelUncollectedIntent(PluginCall call){checkoutCall(call,()->checkout().cancelUncollectedIntent(call.getData().getString("intentId"),call.getData().getString("reason")),"intentId","reason");}
+    @PluginMethod public void getReceipt(PluginCall call){checkoutCall(call,()->checkout().getReceipt(call.getData().getString("id")),"id");}
     @PluginMethod public void getReconciliationState(PluginCall call){execute(call,()->reconciliation().getState(),true);}
     @PluginMethod public void reconcileOffline(PluginCall call){execute(call,()->reconciliation().reconcile(),true);}
     @PluginMethod public void finishOfflineAuthority(PluginCall call){
@@ -68,7 +93,7 @@ public final class NativeLedgerPlugin extends Plugin {
     @PluginMethod public void getStatus(PluginCall call) { read(call, () -> journal.status()); }
     @PluginMethod public void listReceipts(PluginCall call) { read(call, () -> journal.listReceipts()); }
     @PluginMethod public void getAccessState(PluginCall call){execute(call,()->session().getAccessState(),true);}
-    @PluginMethod public void signOut(PluginCall call){execute(call,()->{if(offline!=null)offline.lock();return session().signOut();},true);}
+    @PluginMethod public void signOut(PluginCall call){notifyCheckoutLocked();execute(call,()->{if(offline!=null)offline.lock();return session().signOut();},true);}
     @PluginMethod public void enrollCounter(PluginCall call){
         String branch=call.getString("branchId"),name=call.getString("name");
         execute(call,()->session().enrollCounter(branch,name),true);
@@ -85,7 +110,7 @@ public final class NativeLedgerPlugin extends Plugin {
             showPinDialog(call,!state.getBoolean("pinProvisioned"),false);return null;},true);
     }
     @PluginMethod public void unlockOffline(PluginCall call){showPinDialog(call,false,true);}
-    @PluginMethod public void lockOffline(PluginCall call){execute(call,()->{offline().lock();return offline().getState();},true);}
+    @PluginMethod public void lockOffline(PluginCall call){notifyCheckoutLocked();execute(call,()->{offline().lock();return offline().getState();},true);}
     private void showPinDialog(PluginCall call,boolean create,boolean unlockOnly){showPinDialog(call,create,unlockOnly,null);}
     private void showPinDialog(PluginCall call,boolean create,boolean unlockOnly,String finishAuthorityId){
         getActivity().runOnUiThread(()->{
@@ -127,7 +152,7 @@ public final class NativeLedgerPlugin extends Plugin {
             dialog.show();
         });
     }
-    @Override protected void handleOnPause(){foreground=false;if(credentials!=null)credentials.cancel();try{storage.execute(()->{if(offline!=null)offline.lock();});}catch(java.util.concurrent.RejectedExecutionException ignored){}super.handleOnPause();}
+    @Override protected void handleOnPause(){foreground=false;notifyCheckoutLocked();if(credentials!=null)credentials.cancel();try{storage.execute(()->{if(offline!=null)offline.lock();});}catch(java.util.concurrent.RejectedExecutionException ignored){}super.handleOnPause();}
     @Override protected void handleOnResume(){foreground=true;super.handleOnResume();}
     @Override protected void handleOnDestroy() {
         destroyed=true;
