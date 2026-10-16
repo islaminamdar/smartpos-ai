@@ -368,8 +368,14 @@ export default function NativeCounter({
     setReceivedConsent(null)
     action()
   }
+  const buyerInputErrors = {
+    name: customerName.includes('\u0000'),
+    address: customerAddress.includes('\u0000'),
+    trn: customerTrn.includes('\u0000'),
+  }
+  const invalidBuyerInput = Object.values(buyerInputErrors).some(Boolean)
   function input(): NativeQuoteInput | null {
-    if (!context) return null
+    if (!context || invalidBuyerInput) return null
     const lines = []
     for (const product of context.products) {
       const value = quantities[product.id]
@@ -1057,30 +1063,60 @@ export default function NativeCounter({
                       Customer name
                       <input
                         value={customerName}
+                        aria-invalid={buyerInputErrors.name || undefined}
+                        aria-describedby={
+                          buyerInputErrors.name ? 'native-buyer-name-error' : undefined
+                        }
                         maxLength={200}
                         disabled={editsBlocked}
                         onChange={(e) => dirty(() => setCustomerName(e.target.value))}
                       />
                     </label>
+                    {buyerInputErrors.name && (
+                      <p className="error" role="alert" id="native-buyer-name-error">
+                        Customer name contains an unsupported hidden character. Remove it or retype
+                        this field.
+                      </p>
+                    )}
                     <label>
                       Customer address
                       <textarea
                         value={customerAddress}
+                        aria-invalid={buyerInputErrors.address || undefined}
+                        aria-describedby={
+                          buyerInputErrors.address ? 'native-buyer-address-error' : undefined
+                        }
                         maxLength={400}
                         disabled={editsBlocked}
                         onChange={(e) => dirty(() => setCustomerAddress(e.target.value))}
                       />
                     </label>
+                    {buyerInputErrors.address && (
+                      <p className="error" role="alert" id="native-buyer-address-error">
+                        Customer address contains an unsupported hidden character. Remove it or
+                        retype this field.
+                      </p>
+                    )}
                     <label>
                       Customer TRN (optional)
                       <input
                         value={customerTrn}
+                        aria-invalid={buyerInputErrors.trn || undefined}
+                        aria-describedby={
+                          buyerInputErrors.trn ? 'native-buyer-trn-error' : undefined
+                        }
                         maxLength={15}
                         inputMode="numeric"
                         disabled={editsBlocked}
                         onChange={(e) => dirty(() => setCustomerTrn(e.target.value))}
                       />
                     </label>
+                    {buyerInputErrors.trn && (
+                      <p className="error" role="alert" id="native-buyer-trn-error">
+                        Customer TRN contains an unsupported hidden character. Remove it or retype
+                        this field.
+                      </p>
+                    )}
                   </details>
                   <label>
                     Payment method

@@ -62,6 +62,17 @@ export const liveOrderSchema = z
       }),
   })
   .strict()
+// New online submissions only. Keep the historical/recovery schema above unchanged.
+export const newLiveOrderSchema = liveOrderSchema.superRefine(({ order }, ctx) => {
+  for (const field of ['name', 'address', 'trn'] as const) {
+    if (order.customer?.[field]?.includes('\u0000'))
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['order', 'customer', field],
+        message: 'Remove the unsupported hidden character or retype this customer field.',
+      })
+  }
+})
 const uuid = z.string().uuid()
 const device = { id: uuid, branchId: uuid, deviceId: uuid, shiftId: uuid }
 const fils = z.number().int().min(0).max(100_000_000)

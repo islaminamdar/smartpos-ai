@@ -350,3 +350,34 @@ it('retries the original offered request after response loss and remount without
   expect(sent[1]).toEqual(sent[0])
   expect(journal.save).toHaveBeenCalledTimes(1)
 })
+
+it.each(['Name', 'Address', 'TRN, if registered'])(
+  'rejects a new web buyer hidden null character in %s before journal/save',
+  async (label) => {
+    const save = vi.fn(() => response({}, 503))
+    vi.stubGlobal('fetch', api(save))
+    render(<LiveCounter />)
+    await selectOffer()
+    fireEvent.click(screen.getByText('Customer details for the invoice'))
+    fireEvent.change(screen.getByLabelText('Name', { exact: true }), {
+      target: { value: 'عميل 😀' },
+    })
+    fireEvent.change(screen.getByLabelText('Address', { exact: true }), {
+      target: { value: 'دبي' },
+    })
+    const field = screen.getByLabelText(label, { exact: true })
+    fireEvent.change(field, { target: { value: 'A\u0000B' } })
+    expect(field).toHaveValue('A\u0000B')
+    expect(field).toHaveAttribute('aria-invalid', 'true')
+    expect(
+      screen.getByText(/Customer details contain an unsupported hidden character/)
+    ).toBeVisible()
+    const button = screen.getByRole('button', { name: 'Save sale · AED 4.50' })
+    expect(button).toBeDisabled()
+    fireEvent.click(button)
+    expect(journal.save).not.toHaveBeenCalled()
+    expect(save).not.toHaveBeenCalled()
+    fireEvent.change(field, { target: { value: label === 'TRN, if registered' ? '' : 'دبي 😀' } })
+    expect(button).toBeEnabled()
+  }
+)

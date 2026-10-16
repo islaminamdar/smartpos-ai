@@ -220,3 +220,39 @@ it('verifies a maximum-line-count original receipt and measures its bounded resp
   const bytes = new TextEncoder().encode(JSON.stringify(response)).length
   expect(bytes).toBeGreaterThan(180_000); expect(bytes).toBeLessThan(MAX_PAYMENT_REGISTRATION_RESPONSE_BYTES)
 })
+
+
+it('retains verified historical NUL text as exact raw evidence and signs only a conflict', async () => {
+  freeze.request.customer = { name: 'Buyer\u0000Name', address: 'Street', trn: null }
+  const p = await proofs()
+  m.rpc.mockImplementation(async (name, args) => {
+    if (name === 'pos_offline_authority') return { data: row, error: null }
+    expect(name).toBe('pos_offline_retain_unsupported')
+    expect(args).toEqual({ p_authority: authority.id, p_envelope: p.envelope })
+    return { data: { status: 'reconciliation_required', exceptionId: id(88), code: 'unsupported_text' }, error: null }
+  })
+  const response = await registerOfflinePaymentFreeze(p.envelope, p.query)
+  expect(await status(response)).toMatchObject({ state: 'conflict', freezeSha256: await hash(freeze), resolutionSha256: null, issuanceSha256: null })
+  expect(response).toMatchObject({ receipt: null, acknowledgement: null, resolutionEnvelope: null })
+  expect(m.rpc.mock.calls.map(([name]) => name)).toEqual(['pos_offline_authority', 'pos_offline_retain_unsupported'])
+  const wrong = await signEnvelope(freeze, authority.deviceKeySha256, server.privateKey)
+  m.rpc.mockClear()
+  await expect(registerOfflinePaymentFreeze(wrong, p.query)).rejects.toThrow()
+  expect(m.rpc.mock.calls.every(([name]) => name === 'pos_offline_authority')).toBe(true)
+})
+it('does not report raw custody when storage failed or returned another result', async () => {
+  freeze.request.customer = { name: 'Buyer', address: 'Street\u0000Address', trn: null }
+  const p = await proofs()
+  for (const response of [{ data: null, error: { message: 'private details' } },
+    { data: { status: 'reconciliation_required', exceptionId: id(88), code: 'different' }, error: null },
+    { data: { status: 'reconciliation_required', exceptionId: id(88), code: 'unsupported_text', extra: true }, error: null }]) {
+    m.rpc.mockImplementation(async name => name === 'pos_offline_authority' ? { data: row, error: null } : response)
+    await expect(registerOfflinePaymentFreeze(p.envelope, p.query)).rejects.toMatchObject({ code: 'offline_storage_unavailable' })
+  }
+})
+it('keeps literal backslash-u0000 and Arabic or emoji on the ordinary historical path', async () => {
+  freeze.request.customer = { name: 'Buyer\\u0000Name', address: 'دبي 🍬', trn: null }
+  const p = await proofs()
+  expect((await status(await registerOfflinePaymentFreeze(p.envelope, p.query))).state).toBe('pending')
+  expect(m.rpc.mock.calls.map(([name]) => name)).toEqual(['pos_offline_authority', 'pos_offline_payment_freeze'])
+})

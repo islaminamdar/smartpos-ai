@@ -8,6 +8,7 @@ import { offlineAckSchema, offlineUuid } from './server-contracts'
 import { importOfflinePublicKey, offlineServerKeys, type OfflineServerKeys } from './server-keys'
 import { verifyOfflinePaymentFreeze, type VerifiedOfflinePaymentFreeze } from './payment-freeze'
 import { validateHistoricalIssuance } from './validation'
+import { hasUnsupportedCustomerText, retainVerifiedUnsupportedEvidence } from './unsupported-text'
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
 const resultScope = { freezeId: offlineUuid, freezeSha256: hash, authorityId: offlineUuid }
@@ -72,16 +73,22 @@ export async function registerOfflinePaymentFreeze(rawFreeze: unknown, rawQuery:
   const verified = await verifyOfflinePaymentFreeze(rawFreeze, rawQuery)
   // Load/validate the active signing configuration before the registration write.
   const keys = await offlineServerKeys()
-  const { data, error } = await posClient(undefined, true).rpc('pos_offline_payment_freeze', { p_envelope: verified.freezeEnvelope })
-  if (error) return unavailable()
-  let row: z.infer<typeof registrationResultSchema>
-  try {
-    row = registrationResultSchema.parse(data)
-    // The wrapper may exceed a signed-payload budget; compare each member independently.
-    for (const [key, value] of Object.entries(row))
-      if (canonicalJson(value) !== canonicalJson((data as Record<string, unknown>)[key])) throw new Error()
-  } catch { return unavailable() }
   const f = verified.freeze
+  let row: z.infer<typeof registrationResultSchema>
+  if (hasUnsupportedCustomerText(f.request.customer)) {
+    const retained = await retainVerifiedUnsupportedEvidence(f.authorityId, verified.freezeEnvelope)
+    row = { status: 'conflict', freezeId: f.freezeId, freezeSha256: verified.freezeSha256,
+      authorityId: f.authorityId, conflictId: retained.exceptionId, code: retained.code }
+  } else {
+    const { data, error } = await posClient(undefined, true).rpc('pos_offline_payment_freeze', { p_envelope: verified.freezeEnvelope })
+    if (error) return unavailable()
+    try {
+      row = registrationResultSchema.parse(data)
+      // The wrapper may exceed a signed-payload budget; compare each member independently.
+      for (const [key, value] of Object.entries(row))
+        if (canonicalJson(value) !== canonicalJson((data as Record<string, unknown>)[key])) throw new Error()
+    } catch { return unavailable() }
+  }
   if (row.freezeId !== f.freezeId || row.freezeSha256 !== verified.freezeSha256 || row.authorityId !== f.authorityId ||
     (row.status === 'registered' && row.paymentIntentId !== f.paymentIntentId)) return unavailable()
   const issuanceSha256 = row.status === 'already_issued' ? await originalIssuance(verified, row, keys) : null

@@ -112,7 +112,7 @@ public final class NativeReconciliation {
     }
     private void recordException(String receiptId,String payloadHash,JSONObject response)throws Exception{
         fields(response,"status","exceptionId","code");String id=response.getString("exceptionId"),code=response.getString("code");uuid(id);
-        if(!Arrays.asList("bundle","collision","state","sealed","scope","time","chain","number","calculation","budget","payment","ack","storage_conflict","invalid_historical_receipt").contains(code))throw invalid();
+        if(!Arrays.asList("bundle","collision","state","sealed","scope","time","chain","number","calculation","budget","payment","ack","storage_conflict","invalid_historical_receipt","unsupported_text").contains(code))throw invalid();
         synchronized(journal){SQLiteDatabase db=journal.getWritableDatabase();db.beginTransaction();try{
             try(Cursor c=db.rawQuery("SELECT payload_hash,code FROM offline_upload_exceptions WHERE receipt_id=? AND exception_id=?",new String[]{receiptId,id})){
                 if(c.moveToFirst()){if(!payloadHash.equals(c.getString(0))||!code.equals(c.getString(1)))throw invalid();db.setTransactionSuccessful();return;}

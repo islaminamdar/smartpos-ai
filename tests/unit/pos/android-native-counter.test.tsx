@@ -532,3 +532,82 @@ describe('real native counter UI flow', () => {
     expect(p.onHoldChange).toHaveBeenLastCalledWith(true)
   })
 })
+
+it.each(['Customer name', 'Customer address', 'Customer TRN (optional)'])(
+  'blocks new native payment input with a hidden null character in %s without altering it',
+  async (label) => {
+    render(<NativeCounter {...props()} />)
+    await review()
+    fireEvent.click(screen.getByText('Customer details'))
+    fireEvent.change(screen.getByLabelText('Customer name'), { target: { value: 'عميل 😀' } })
+    fireEvent.change(screen.getByLabelText('Customer address'), { target: { value: 'دبي' } })
+    const field = screen.getByLabelText(label)
+    fireEvent.change(field, { target: { value: 'A\u0000B' } })
+    expect(field).toHaveValue('A\u0000B')
+    expect(field).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByRole('alert')).toHaveTextContent('unsupported hidden character')
+    expect(screen.getByRole('button', { name: 'Review bill' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Save payment step before collection' })).toBeNull()
+    expect(bridge.beginNativePaymentIntent).not.toHaveBeenCalled()
+    expect(bridge.quoteNativeBasket).toHaveBeenCalledTimes(1)
+  }
+)
+it('passes normal Arabic and emoji buyer input unchanged to the native quote', async () => {
+  const customer = { name: 'عميل 😀', address: 'دبي 🏠', trn: null }
+  bridge.quoteNativeBasket.mockResolvedValue({ ...quote, request: { ...quote.request, customer } })
+  render(<NativeCounter {...props()} />)
+  await screen.findByRole('heading', { name: 'Choose items' })
+  fireEvent.click(screen.getByText('Customer details'))
+  fireEvent.change(screen.getByLabelText('Customer name'), { target: { value: customer.name } })
+  fireEvent.change(screen.getByLabelText('Customer address'), {
+    target: { value: customer.address },
+  })
+  await review()
+  expect(bridge.quoteNativeBasket.mock.calls[0][0].customer).toEqual(customer)
+  expect(screen.queryByRole('alert')).toBeNull()
+  expect(screen.getByRole('button', { name: 'Save payment step before collection' })).toBeEnabled()
+})
+it('keeps a historical receipt buyer containing a null character readable without new-input validation', async () => {
+  const customer = { name: 'Old\u0000Buyer', address: 'Old\u0000Address', trn: null }
+  bridge.readNativeCheckout.mockResolvedValue({
+    ...state,
+    lastReceiptId: receipt.id,
+    lastReceipt: { ...receipt, customer },
+  })
+  render(<NativeCounter {...props()} />)
+  await screen.findByRole('heading', { name: receipt.documentNumber })
+  expect(screen.getByText(customer.name).textContent).toBe(customer.name)
+  expect(screen.queryByText(/unsupported hidden character/)).toBeNull()
+})
+it('keeps unsupported historical buyer payment in custody with readable manager-review guidance', async () => {
+  const customer = { name: 'Old\u0000Buyer', address: 'دبي', trn: null }
+  const request = { ...intent.request, customer }
+  const saved = {
+    ...intent,
+    request,
+    quote: { ...intent.quote, request },
+    canConfirm: false,
+    reasonCode: 'unsupported_text',
+  }
+  bridge.readNativeCheckout.mockResolvedValue({
+    ...state,
+    canIssue: false,
+    pendingIntentId: intent.intentId,
+    unresolvedIntent: saved,
+    reasonCode: 'payment_reconciliation_required',
+  })
+  const p = props()
+  render(<NativeCounter {...p} />)
+  await screen.findByRole('heading', { name: 'Review the saved payment' })
+  expect(
+    screen.getByText(/Keep any saved payment for manager review and do not collect again/)
+  ).toBeVisible()
+  expect(
+    screen.getByRole('button', { name: 'Confirm received payment & save receipt' })
+  ).toBeDisabled()
+  expect(p.onHoldChange).toHaveBeenLastCalledWith(true)
+  fireEvent.click(screen.getByText('Payment needs manager review', { exact: true }))
+  fireEvent.click(screen.getByRole('checkbox', { name: /I confirm permanently freezing/ }))
+  expect(screen.getByRole('button', { name: 'Permanently freeze payment' })).toBeEnabled()
+  expect(bridge.beginNativePaymentIntent).not.toHaveBeenCalled()
+})

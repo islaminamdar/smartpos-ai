@@ -1,7 +1,7 @@
 import { readBoundedBody } from '@/lib/pos/server/body'
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticatedPosClient } from '@/lib/pos/server/client'
-import { liveOrderSchema } from '@/lib/pos/server/live-contracts'
+import { newLiveOrderSchema } from '@/lib/pos/server/live-contracts'
 import { fiscalDocumentSchema } from '@/lib/pos/server/documents'
 import { invoiceMatchesSale, settlementMatchesSale } from '@/lib/pos/server/sale-ack'
 import { requirePilot, requireOrigin, requireDevice } from '@/lib/pos/server/live-access'
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     } catch {
       return NextResponse.json({ code: 'invalid_json' }, { status: 400, headers: privateHeaders })
     }
-    const parsed = liveOrderSchema.safeParse(raw)
+    const parsed = newLiveOrderSchema.safeParse(raw)
     if (!parsed.success) {
       return NextResponse.json(
         { code: 'invalid_order', fields: parsed.error.issues.map((issue) => issue.path.join('.')) },

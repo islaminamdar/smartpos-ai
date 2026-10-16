@@ -1058,6 +1058,8 @@ export function quantityToMilli(value: string, unit: NativeCheckoutLine['unit'])
 }
 export function nativeCheckoutError(error: unknown): string {
   switch (nativeOfflineErrorCode(error)) {
+    case 'unsupported_text':
+      return 'Buyer details contain an unsupported hidden character. New billing cannot continue. Keep any saved payment for manager review and do not collect again.'
     case 'payment_frozen':
       return 'This payment is permanently frozen on this device. Manager review has not been sent. Do not collect again, issue a bill or declare it cancelled.'
     case 'native_session_expired':
@@ -1170,6 +1172,7 @@ export function knownCheckoutReason(code: string | null): boolean {
       'authority_exhausted',
       'payment_reconciliation_required',
       'payment_frozen',
+      'unsupported_text',
     ].includes(code)
   )
 }

@@ -158,6 +158,7 @@ public final class NativeCheckoutEngine {
                 }
                 if (hasUncertain(db)) throw invalid("payment_reconciliation_required");
                 OfflineBundle bundle = bundle(db, authorityId); unlock.requireUnlocked(binding);
+                requireStorableCustomer(request);
                 OfflineCalculator.Calculation calculation = calculate(bundle, request);
                 State state = state(db, authorityId); checkBudget(bundle, state, calculation.grossFils);
                 OfflineClock.Tick tick = advance(db, bundle, state);
@@ -182,7 +183,8 @@ public final class NativeCheckoutEngine {
                 if ("cancelled".equals(intent.getString("state"))) throw invalid("intent_cancelled");
                 if ("frozen_for_manager".equals(intent.getString("state"))) throw invalid("payment_frozen");
                 JSONObject request = intent.getJSONObject("request"); OfflineBundle bundle = bundle(db, request.getString("authorityId"));
-                unlock.requireUnlocked(binding); OfflineCalculator.Calculation calculation = calculate(bundle, request);
+                unlock.requireUnlocked(binding); requireStorableCustomer(request);
+                OfflineCalculator.Calculation calculation = calculate(bundle, request);
                 State state = state(db, bundle.authorityId); checkBudget(bundle, state, calculation.grossFils);
                 OfflineClock.Reading reading = safeReading(db, bundle); OfflineClock.Tick tick = advance(db, bundle, state, reading);
                 long sequence; String previous;
@@ -357,6 +359,7 @@ public final class NativeCheckoutEngine {
         JSONObject request=new JSONObject().put("authorityId",draft.get("authorityId")).put("serviceType",draft.get("serviceType"))
             .put("customer",draft.get("customer")).put("lines",draft.get("lines")).put("cashTenderedFils",0).put("recordedCardFils",0).put("presentedTotalFils",1);
         checkedRequest(request);
+        requireStorableCustomer(request);
         synchronized(journal){
             OfflineBundle bundle=bundle(journal.getReadableDatabase(),request.getString("authorityId"));
             // Preliminary arithmetic uses sufficient hypothetical tender only to obtain gross.
@@ -377,6 +380,7 @@ public final class NativeCheckoutEngine {
     void requireReady(String authorityId,JSONObject request)throws Exception{
         synchronized(journal){SQLiteDatabase db=journal.getWritableDatabase();db.beginTransaction();try{
             OfflineBundle b=bundle(db,authorityId);unlock.requireUnlocked(binding);
+            if(request!=null)requireStorableCustomer(request);
             long gross=request==null?1:calculate(b,request).grossFils;State state=state(db,authorityId);
             checkBudget(b,state,gross);OfflineClock.Tick tick=advance(db,b,state);saveClock(db,authorityId,tick);db.setTransactionSuccessful();
         }finally{db.endTransaction();}}
@@ -474,6 +478,15 @@ public final class NativeCheckoutEngine {
         String envelope=new JSONObject().put("format","pos-signed-v1").put("alg","ECDSA-P256-SHA256-DER").put("keyId",SignedProtocol.fingerprint(deviceKey))
             .put("payloadBase64Url",SignedProtocol.encode(bytes)).put("signatureBase64Url",SignedProtocol.encode(signature)).toString();
         SignedProtocol.verify(envelope,Collections.singletonMap(SignedProtocol.fingerprint(deviceKey),deviceKey)); return envelope;
+    }
+    /** New financial actions must be representable in PostgreSQL. Historical signed requests
+     * remain readable and freezable byte-for-byte; never normalize their customer fields. */
+    private static void requireStorableCustomer(JSONObject request) throws Exception {
+        if (!request.isNull("customer")) {
+            JSONObject customer = request.getJSONObject("customer");
+            if (customer.getString("name").indexOf('\0') >= 0 || customer.getString("address").indexOf('\0') >= 0)
+                throw invalid("unsupported_text");
+        }
     }
     private static JSONObject checkedRequest(JSONObject raw) throws Exception {
         JSONObject r=object(CanonicalJson.parse(CanonicalJson.bytes(raw)));

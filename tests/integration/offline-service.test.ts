@@ -9,7 +9,7 @@ const m=vi.hoisted(()=>({rpc:vi.fn(),auth:vi.fn()}))
 vi.mock('@/lib/pos/server/client',async original=>({...await original<typeof import('@/lib/pos/server/client')>(),authenticatedPosClient:m.auth,posClient:()=>({rpc:m.rpc})}))
 import { OfflineEnrollmentProofExpired, enrollOfflineDevice, reserveOfflineAuthority, importOfflineReceipt, sealOfflineAuthority } from '@/lib/pos/offline/server'
 import { encodeBase64Url, decodeBase64Url, parseCanonicalPayload, sha256Hex, canonicalBytes } from '@/lib/pos/offline/canonical'
-import { publicKeyFingerprint, signEnvelope, verifyOfflineBundle, verifySignedEnvelope } from '@/lib/pos/offline/authority'
+import { publicKeyFingerprint, signEnvelope, verifyOfflineBundle, verifySignedEnvelope, p1363ToDer } from '@/lib/pos/offline/authority'
 import { recoverOfflineBundle, nativeOfflineRecoveredSchema } from '@/lib/pos/offline/bundle-recovery'
 import { offlineAckSchema } from '@/lib/pos/offline/server-contracts'
 import { registerOfflinePaymentFreeze, nativePaymentRegistrationStatusSchema } from '@/lib/pos/offline/payment-registration'
@@ -19,7 +19,7 @@ interface TestDb { exec(sql:string):Promise<unknown>; query(sql:string,args?:unk
 let db:TestDb
 const ids=Object.fromEntries(['actor','org','branch','device','device2','shift','shift2','profile','product'].map(key=>[key,randomUUID()]))
 const scalar=async(sql:string,args:unknown[]=[])=>Object.values((await db.query(sql,args)).rows[0])[0]
-const admin=async(fn:()=>Promise<unknown>)=>{await db.exec('reset role');try{return await fn()}finally{await db.exec('set role service_role')}}
+const admin=async<T>(fn:()=>Promise<T>)=>{await db.exec('reset role');try{return await fn()}finally{await db.exec('set role service_role')}}
 beforeAll(async()=>{
   const socket=process.env.OFFLINE_TEST_PG_SOCKET,pgEntry=process.env.OFFLINE_TEST_PG_ENTRY
   if(socket||pgEntry){
@@ -215,7 +215,7 @@ it('enrolls two real device keys, reserves disjoint numbers, recovers out-of-ord
   expect(parseCanonicalPayload(decodeBase64Url(retry.acknowledgement.payloadBase64Url))).toMatchObject({issuanceId:first.id})
 })
 
-it('registers real signed freezes in SQL018 and verifies both sides of the historical invoice collision', async()=>{
+it('registers signed freezes, verifies invoice collisions, and retains unsupported historical text losslessly', async()=>{
   const actor=randomUUID(),org=randomUUID(),branch=randomUUID(),profile=randomUUID(),product=randomUUID()
   await admin(()=>db.exec(`insert into auth.users values('${actor}','synthetic-freeze@example.test',now());
     insert into public.pos_organizations(id,legal_name) values('${org}','Synthetic freeze service');
@@ -230,7 +230,7 @@ it('registers real signed freezes in SQL018 and verifies both sides of the histo
   vi.stubEnv('POS_OFFLINE_SIGNING_KEY_ID','synthetic-freeze-server')
   vi.stubEnv('POS_OFFLINE_SERVER_KEYS',JSON.stringify([{id:'synthetic-freeze-server',publicKeySpki:encodeBase64Url(new Uint8Array(await crypto.subtle.exportKey('spki',server.publicKey))),privateKeyPkcs8:encodeBase64Url(new Uint8Array(await crypto.subtle.exportKey('pkcs8',server.privateKey)))}]))
   const prepared=[]
-  for(let i=0;i<2;i++){
+  for(let i=0;i<4;i++){
     const device=randomUUID(),shift=randomUUID(),pair=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify'])
     await admin(()=>db.exec(`insert into public.pos_devices(id,organization_id,branch_id,name) values('${device}','${org}','${branch}','Synthetic freeze ${i}');
       insert into public.pos_shifts(id,organization_id,branch_id,device_id,opened_by,opening_cash_fils) values('${shift}','${org}','${branch}','${device}','${actor}',0);`))
@@ -250,7 +250,7 @@ it('registers real signed freezes in SQL018 and verifies both sides of the histo
   const digest=(value:unknown)=>sha256Hex(canonicalBytes(value))
   for(const [index,f] of prepared.entries()){
     const a=f.bundle.authority,orderId=randomUUID(),documentId=randomUUID(),paymentIntentId=randomUUID(),freezeId=randomUUID()
-    const request={authorityId:a.id,serviceType:'takeaway',customer:null,lines:[{productId:product,quantityMilli:1000}],cashTenderedFils:1500,recordedCardFils:0,presentedTotalFils:1000}
+    const request={authorityId:a.id,serviceType:'takeaway',customer:index>=2?{name:'Buyer\u0000Name',address:'دبي 🍬',trn:null}:null,lines:[{productId:product,quantityMilli:1000}],cashTenderedFils:1500,recordedCardFils:0,presentedTotalFils:1000}
     const freeze={kind:'offline-payment-freeze',schemaVersion:1,freezeId,paymentIntentId,orderId,documentId,
       organizationId:org,branchId:branch,deviceId:f.device,actorId:actor,shiftId:f.shift,keyEpoch:a.keyEpoch,deviceKeySha256:f.fingerprint,
       authorityId:a.id,authoritySha256:f.bundle.authoritySha256,snapshotSha256:f.bundle.snapshotSha256,requestSha256:await digest(request),request,
@@ -259,7 +259,7 @@ it('registers real signed freezes in SQL018 and verifies both sides of the histo
     const query=async(challenge:string)=>signEnvelope({kind:'offline-payment-resolution-query',schemaVersion:1,authorityId:a.id,keyEpoch:a.keyEpoch,deviceId:f.device,freezeId,freezeSha256,challenge},f.fingerprint,f.pair.privateKey)
     const issuance:OfflineIssuance={kind:'offline-sale',schemaVersion:1,id:orderId,authorityId:a.id,authoritySha256:f.bundle.authoritySha256,snapshotSha256:f.bundle.snapshotSha256,deviceSequence:1,previousEventSha256:null,paymentIntentId,
       clock:{estimatedServerAt:a.issuedAt,bootId:randomUUID(),elapsedRealtimeMs:1000},document:{schemaVersion:1,id:documentId,kind:'tax_invoice',documentNumber:`FRZ-INV-${String(a.invoiceRange.first).padStart(10,'0')}`,issuedAt:a.issuedAt,merchant:f.bundle.snapshot.profile,
-      orderId,branchId:branch,deviceId:f.device,shiftId:f.shift,actorId:actor,serviceType:'takeaway',customer:null,
+      orderId,branchId:branch,deviceId:f.device,shiftId:f.shift,actorId:actor,serviceType:'takeaway',customer:request.customer,
       lines:[{lineNumber:1,productId:product,name:'Synthetic freeze product',unit:'piece',quantityMilli:1000,unitPriceFils:1000,taxRateBps:500,grossFils:1000,netFils:952,taxFils:48}],
       totals:{grossFils:1000,netFils:952,taxFils:48},payments:[{method:'cash',amountFils:1000}],paymentSettlement:'recorded',cashTenderedFils:1500,changeFils:500}}
     const signedIssuance=await signEnvelope(issuance,f.fingerprint,f.pair.privateKey)
@@ -273,7 +273,7 @@ it('registers real signed freezes in SQL018 and verifies both sides of the histo
       expect((await readStatus(await registerOfflinePaymentFreeze(frozen,await query('c'.repeat(64))))).state).toBe('conflict')
       expect(await admin(()=>scalar('select count(*)::int from public.pos_documents where id=$1',[documentId]))).toBe(0)
       expect(await admin(()=>scalar('select count(*)::int from public.pos_offline_payment_freezes where id=$1',[freezeId]))).toBe(1)
-    }else{
+    }else if(index===1){
       const accepted=await importOfflineReceipt(signedIssuance)
       if(accepted.status!=='accepted')throw new Error('Expected original receipt before freeze')
       const response=await registerOfflinePaymentFreeze(frozen,await query('d'.repeat(64))),s=await readStatus(response)
@@ -282,6 +282,37 @@ it('registers real signed freezes in SQL018 and verifies both sides of the histo
       const retry=await importOfflineReceipt(signedIssuance)
       expect(retry).toMatchObject({status:'accepted',acknowledgement:accepted.acknowledgement})
       expect(await admin(()=>scalar('select count(*)::int from public.pos_documents where id=$1',[documentId]))).toBe(1)
+    }
+    if(index>=2){
+      const envelope=index===2?frozen:signedIssuance
+      const payload=index===2?freeze:issuance
+      const canonical=new TextDecoder().decode(canonicalBytes(payload))
+      for(const malformed of [canonical+' ',canonical.replace('{','{"authorityId":"'+a.id+'",')]){
+        const bytes=new TextEncoder().encode(malformed)
+        const signature=new Uint8Array(await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},f.pair.privateKey,bytes))
+        const invalid={...envelope,payloadBase64Url:encodeBase64Url(bytes),signatureBase64Url:encodeBase64Url(p1363ToDer(signature))}
+        if(index===2)await expect(registerOfflinePaymentFreeze(invalid,await query('e'.repeat(64)))).rejects.toThrow()
+        else await expect(importOfflineReceipt(invalid)).rejects.toThrow()
+      }
+      const bad=await signEnvelope(payload,f.fingerprint,server.privateKey)
+      if(index===2)await expect(registerOfflinePaymentFreeze(bad,await query('e'.repeat(64)))).rejects.toThrow()
+      else await expect(importOfflineReceipt(bad)).rejects.toThrow()
+      expect(await admin(()=>scalar('select count(*)::int from public.pos_offline_raw_evidence where authority_id=$1',[a.id]))).toBe(0)
+      if(index===2){
+        const response=await registerOfflinePaymentFreeze(envelope,await query('e'.repeat(64)))
+        expect(await readStatus(response)).toMatchObject({state:'conflict',issuanceSha256:null,resolutionSha256:null})
+        expect(response).toMatchObject({receipt:null,acknowledgement:null})
+        expect((await readStatus(await registerOfflinePaymentFreeze(await signEnvelope(freeze,f.fingerprint,f.pair.privateKey),await query('f'.repeat(64))))).state).toBe('conflict')
+      }else{
+        const retained=await importOfflineReceipt(envelope)
+        expect(retained).toMatchObject({status:'reconciliation_required',code:'unsupported_text'})
+        expect(await importOfflineReceipt(await signEnvelope(issuance,f.fingerprint,f.pair.privateKey))).toEqual(retained)
+      }
+      const rows=await admin(()=>db.query('select envelope,payload_sha256 from public.pos_offline_raw_evidence where authority_id=$1',[a.id]))
+      expect(rows.rows).toEqual([{envelope,payload_sha256:await digest(payload)}])
+      expect(await admin(()=>scalar('select count(*)::int from public.pos_documents where id=$1',[documentId]))).toBe(0)
+      expect(await admin(()=>scalar('select count(*)::int from public.pos_offline_receipts where authority_id=$1',[a.id]))).toBe(0)
+      expect(await admin(()=>scalar('select count(*)::int from public.pos_offline_payment_freezes where authority_id=$1',[a.id]))).toBe(0)
     }
     await expect(admin(()=>db.query("update public.pos_shifts set status='closed',closed_at=now() where id=$1",[f.shift]))).rejects.toThrow()
   }

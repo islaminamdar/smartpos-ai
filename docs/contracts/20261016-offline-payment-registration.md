@@ -40,3 +40,8 @@ The unit suite checks signature/key/identity substitutions, mismatched ACKs, alt
 An existing text-contract limitation remains a release gate: native/TypeScript buyer text can contain embedded U+0000, which PostgreSQL JSONB cannot represent. Such evidence fails decode without financial mutation; it is not reported registered. Before offline enablement, explicitly reject unsupported new inputs and define preservation/recovery for historical signed evidence. Never silently remove characters or rewrite its authenticated bytes.
 
 Next work is current manager authorization, exact reviewed return/void evidence, serialized decision storage, signing/attachment recovery, HTTP limits and release gates, and native challenge-bound result acceptance. Retained-funds invoicing needs the separate accounting decision and implementation. Two-device end-to-end acceptance, physical printing, signed update preservation and supervised branch handover remain outstanding.
+
+
+## Unsupported historical buyer text
+
+SQL019 and the verified service add [raw evidence custody](20261016-offline-unsupported-text.md) for historical customer names/addresses containing U+0000. These cannot enter PostgreSQL jsonb. The service verifies the original proof and arithmetic, then stores its unchanged ASCII envelope through a separate trusted RPC. A freeze receives signed `conflict` status with no receipt, acknowledgement or resolution. This is retained evidence awaiting review, not normal freeze registration or payment resolution.

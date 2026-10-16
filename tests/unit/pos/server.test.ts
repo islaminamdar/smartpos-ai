@@ -44,3 +44,11 @@ describe('online sale boundary',()=>{
     mocks.rpc.mockResolvedValue({data:null,error:{message:'private diagnostic'}});const result=await POST(request({order}));expect(result.status).toBe(503);expect(JSON.stringify(await result.json())).not.toContain('private diagnostic')
   })
 })
+it.each(['name', 'address'])('rejects new buyer %s U+0000 before database binding or sale RPC', async (field) => {
+  const customer = {name: 'عميل 😀', address: 'دبي 🏠', trn: null, [field]: 'A\u0000B'}
+  const result = await POST(request({order: {...order, customer}}))
+  expect(result.status).toBe(422)
+  expect(await result.json()).toMatchObject({code:'invalid_order', fields:[`order.customer.${field}`]})
+  expect(mocks.binding).not.toHaveBeenCalled()
+  expect(mocks.rpc).not.toHaveBeenCalled()
+})

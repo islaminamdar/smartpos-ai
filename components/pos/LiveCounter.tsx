@@ -166,6 +166,9 @@ export default function LiveCounter() {
   const [buyerName, setBuyerName] = useState('')
   const [buyerAddress, setBuyerAddress] = useState('')
   const [buyerTrn, setBuyerTrn] = useState('')
+  const invalidBuyerInput = [buyerName, buyerAddress, buyerTrn].some((value) =>
+    value.includes('\u0000')
+  )
   const [documents, setDocuments] = useState<FiscalDocument[]>([])
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [selected, setSelected] = useState<FiscalDocument | null>(null)
@@ -715,6 +718,10 @@ export default function LiveCounter() {
         : 0
       if (cashTenderedFils < cashApplied)
         throw new Error('Cash received is less than the amount due.')
+      if (invalidBuyerInput)
+        throw new Error(
+          'Customer details contain an unsupported hidden character. Remove it or retype the affected field before taking payment.'
+        )
       const hasCustomer = !!(buyerName.trim() || buyerAddress.trim() || buyerTrn.trim())
       if (hasCustomer && (!buyerName.trim() || !buyerAddress.trim()))
         throw new Error('Enter the customer name and address, or leave all customer fields blank.')
@@ -1666,6 +1673,10 @@ export default function LiveCounter() {
                       <input
                         maxLength={200}
                         value={buyerName}
+                        aria-invalid={buyerName.includes('\u0000') || undefined}
+                        aria-describedby={
+                          buyerName.includes('\u0000') ? 'live-buyer-input-error' : undefined
+                        }
                         disabled={basketLocked}
                         onChange={(event) => setBuyerName(event.target.value)}
                       />
@@ -1675,6 +1686,10 @@ export default function LiveCounter() {
                       <input
                         maxLength={400}
                         value={buyerAddress}
+                        aria-invalid={buyerAddress.includes('\u0000') || undefined}
+                        aria-describedby={
+                          buyerAddress.includes('\u0000') ? 'live-buyer-input-error' : undefined
+                        }
                         disabled={basketLocked}
                         onChange={(event) => setBuyerAddress(event.target.value)}
                       />
@@ -1685,15 +1700,30 @@ export default function LiveCounter() {
                         inputMode="numeric"
                         maxLength={15}
                         value={buyerTrn}
+                        aria-invalid={buyerTrn.includes('\u0000') || undefined}
+                        aria-describedby={
+                          buyerTrn.includes('\u0000') ? 'live-buyer-input-error' : undefined
+                        }
                         disabled={basketLocked}
                         onChange={(event) => setBuyerTrn(event.target.value)}
                       />
                     </label>
                   </details>
+                  {invalidBuyerInput && (
+                    <p className="lc-error" role="alert" id="live-buyer-input-error">
+                      Customer details contain an unsupported hidden character. Remove it or retype
+                      the affected field before taking payment.
+                    </p>
+                  )}
                   <button
                     className="lc-primary"
                     disabled={
-                      !mayWrite || !kitchenPaymentReady || !shift || total <= 0 || requiresOrderSave
+                      invalidBuyerInput ||
+                      !mayWrite ||
+                      !kitchenPaymentReady ||
+                      !shift ||
+                      total <= 0 ||
+                      requiresOrderSave
                     }
                     onClick={checkout}
                   >

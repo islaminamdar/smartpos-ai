@@ -97,6 +97,18 @@ public class NativeReconciliationTest {
         reopen();r=reconciler(rejected);assertEquals("attention",r.getState().getString("status"));assertEquals(1,calls.get());r.reconcile();assertEquals(1,count("offline_upload_exceptions"));assertEquals(2,calls.get());assertEquals(1,count("outbox"));
         r=reconciler((path,envelope)->accepted(envelope));JSONObject after=r.reconcile();assertTrue(after.isNull("noticeCode"));assertEquals(0,count("outbox"));assertEquals(1,count("offline_upload_exceptions"));assertEquals(1,count("acknowledgements"));assertThrows(SQLiteException.class,()->journal.getWritableDatabase().execSQL("DELETE FROM offline_upload_exceptions"));
     }
+    @Test public void UnsupportedTextCustodyPersistsAttentionWithoutAcknowledgingOrDroppingReceipt()throws Exception{
+        String original=sell(),exception=id();AtomicInteger calls=new AtomicInteger();
+        NativeReconciliation.Transport retained=(path,envelope)->{
+            assertArrayEquals(CanonicalJson.bytes(new JSONObject(original)),CanonicalJson.bytes(envelope));calls.incrementAndGet();
+            return new JSONObject().put("status","reconciliation_required").put("exceptionId",exception).put("code","unsupported_text");
+        };
+        NativeReconciliation r=reconciler(retained);assertEquals("offline_reconciliation_required",r.reconcile().getString("noticeCode"));
+        assertEquals("unsupported_text",textValue("SELECT code FROM offline_upload_exceptions"));
+        assertEquals(1,count("receipts"));assertEquals(1,count("outbox"));assertEquals(0,count("acknowledgements"));
+        reopen();r=reconciler(retained);assertEquals("attention",r.getState().getString("status"));assertEquals(1,calls.get());
+        r.reconcile();assertEquals(2,calls.get());assertEquals(1,count("offline_upload_exceptions"));assertEquals(1,count("outbox"));assertEquals(0,count("acknowledgements"));
+    }
     @Test public void FirstFailedReceiptStopsLaterChainAndAllSeals()throws Exception{
         sell();sell();engine.sealAuthority(authority.getString("id"));AtomicInteger calls=new AtomicInteger();JSONObject state=reconciler((path,envelope)->{assertEquals("/api/pos/offline/import",path);assertEquals(1,payload(envelope.toString()).getLong("deviceSequence"));calls.incrementAndGet();throw new java.io.IOException("synthetic outage");}).reconcile();
         assertEquals(1,calls.get());assertEquals(2,state.getInt("pendingReceipts"));assertEquals(1,state.getInt("pendingSeals"));assertEquals(0,count("offline_seal_confirmations"));

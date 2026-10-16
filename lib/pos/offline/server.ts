@@ -7,6 +7,7 @@ import { canonicalBytes, canonicalJson, decodeBase64Url, parseCanonicalPayload, 
 import { publicKeyFingerprint, signEnvelope, verifyOfflineBundle, verifySignedEnvelope } from './authority'
 import { offlineAuthoritySchema, offlineSnapshotSchema, signedEnvelopeSchema } from './contracts'
 import { validateHistoricalIssuance } from './validation'
+import { hasUnsupportedCustomerText, retainVerifiedUnsupportedEvidence } from './unsupported-text'
 import { offlineServerKeys, importOfflinePublicKey, type OfflineServerKeys } from './server-keys'
 import { enrollmentProofSchema, enrollmentRequestSchema, enrollmentResultSchema, reserveRequestSchema, offlineAckSchema,
   offlineExceptionSchema, offlineSealSchema, offlineUuid } from './server-contracts'
@@ -139,6 +140,8 @@ export async function importOfflineReceipt(raw: unknown) {
     }))
   }
   const issuance = validated.issuance
+  if (hasUnsupportedCustomerText(issuance.document.customer))
+    return retainVerifiedUnsupportedEvidence(issuance.authorityId, historical.envelope)
   const ack = offlineAckSchema.parse({ kind: 'offline-ack', schemaVersion: 1, id: randomUUID(), issuanceId: issuance.id,
     payloadSha256: historical.payloadSha256, authorityId: issuance.authorityId, keyEpoch: historical.bundle.authority.keyEpoch,
     deviceSequence: issuance.deviceSequence, receivedAt: new Date().toISOString() })
