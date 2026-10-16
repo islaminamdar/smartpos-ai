@@ -34,6 +34,24 @@ The usage limit counts completed orders, not the number of bundles. Editing, dis
 
 A manager can open **Reports**, choose an inclusive date range (up to 93 days) and select **Load report**. Dates use Dubai time. Sales and credit notes are counted on their issue dates, so a refund today for yesterday's bill reduces today's figures. Review sales, refunds, VAT, recorded cash/card payments and product totals; use **Export CSV** for the same selected range. Cash figures exclude opening float, change and drawer movements. Card figures do not confirm bank settlement. If a report fails to load, its totals are unavailable, not zero.
 
+## Manage staff access
+
+Open **Staff** to review cashiers assigned to this branch. Select a staff member, make the permitted changes, enter a reason and wait for **Staff access saved**. A branch manager cannot promote someone to manager or change an owner's access. Close the affected person's open shifts before disabling them or changing their role/branch. A name-only change can be made while their shift is open.
+
+**Invite staff member** currently works for an existing account whose email is already verified. The invitation grants branch access only after that person signs in with the matching account. Creating or copying a link does not send an email, create an account or reset a password. New-account verification and forgotten-password email delivery still need setup. Keep the link private; revoke an unused invitation when it is no longer needed.
+
+If a staff change has no confirmation, retry its saved request or use **Check saved change** after acknowledging the cancellation explanation. The check returns the original result if saved; otherwise an authorized manager can permanently cancel that original request. Do not clear browser storage to bypass an uncertain change. After access is restored and a replacement counter is registered, the same account can recover its earlier staff change.
+
+## Change your own password
+
+Finish saved requests and close your shifts first, then open **Account**. Enter your current password and the new password twice. Use 12–72 characters (at most 72 UTF-8 bytes). After confirmation, sign in again with the new password. If the screen says the password changed but signing out other sessions was not confirmed, the **new** password applies; do not resubmit the old password. Managers cannot see or reset someone else's password here.
+
+## Recover work after access changes
+
+Keep the original browser data. If branch access is unavailable, the counter's **Saved counter work** section can check your own earlier financial request. A disabled account can confirm a request already recorded, but cannot record a new sale or cancel an unsaved financial request. Ask the manager to restore access if further resolution is needed.
+
+Resolve a saved financial request before re-registering the counter: new registration replaces its device proof. After a confirmed cancellation, reconcile any money already collected or returned before making a replacement request.
+
 ## End a shift
 
 Review the shift totals, count the actual cash in the drawer, then use **Close shift**. Investigate any difference rather than changing the count to match the screen. Record authorized cash movements with their real amounts and reasons.

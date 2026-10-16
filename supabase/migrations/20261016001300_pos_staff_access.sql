@@ -350,7 +350,15 @@ begin
  if invitation.status='accepted' and invitation.accepted_by=auth.uid() then
   return jsonb_build_object('status','accepted','invitationId',invitation.id,'branchId',invitation.branch_id,'role',invitation.role,'replayed',true);
  end if;
- if exists(select 1 from public.pos_staff s where s.organization_id=invitation.organization_id and s.user_id=auth.uid()) then raise exception 'POS_STAFF_MEMBERSHIP_EXISTS'; end if;
+ if exists(select 1 from public.pos_staff s where s.organization_id=invitation.organization_id and s.user_id=auth.uid()) then
+  -- A duplicate acceptance can commit between our initial invitation read and this
+  -- membership check. Refresh the same immutable acceptance before rejecting it.
+  select * into invitation from public.pos_staff_invitations where token_hash=p_token_hash;
+  if invitation.status='accepted' and invitation.accepted_by=auth.uid() then
+   return jsonb_build_object('status','accepted','invitationId',invitation.id,'branchId',invitation.branch_id,'role',invitation.role,'replayed',true);
+  end if;
+  raise exception 'POS_STAFF_MEMBERSHIP_EXISTS';
+ end if;
  -- The inviting authority must survive until commit; the recipient cannot race a staff update.
  if invitation.invited_by=auth.uid() then raise exception 'POS_INVITATION_INVALID'; end if;
  perform pg_advisory_xact_lock_shared(hashtextextended(invitation.organization_id::text||':'||invitation.invited_by::text,15));
