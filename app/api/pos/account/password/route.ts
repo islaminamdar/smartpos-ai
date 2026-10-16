@@ -36,7 +36,8 @@ export async function POST(request: Request) {
     })
     if (rate.error) throw new PosServerError('authentication_unavailable', 503)
     if (rate.data !== true) throw new PosServerError('login_rate_limited', 429)
-    const verified = await posClient().auth.signInWithPassword({
+    const verifiedClient = posClient()
+    const verified = await verifiedClient.auth.signInWithPassword({
       email,
       password: input.data.currentPassword,
     })
@@ -45,7 +46,9 @@ export async function POST(request: Request) {
     const token = verified.data.session.access_token
     let changed = false
     try {
-      const updated = await posClient(token).auth.updateUser({ password: input.data.newPassword })
+      // Auth updateUser reads the client's in-memory session. A new client with
+      // only an Authorization header has no session and rejects before HTTP.
+      const updated = await verifiedClient.auth.updateUser({ password: input.data.newPassword })
       if (updated.error || updated.data.user?.id !== user.id)
         throw new PosServerError('password_change_unconfirmed', 503)
       changed = true

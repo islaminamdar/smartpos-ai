@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({
   auth: vi.fn(),
+  client: vi.fn(),
   rpc: vi.fn(),
   binding: vi.fn(),
   cookies: vi.fn(),
@@ -14,10 +15,7 @@ vi.mock('next/headers', () => ({ cookies: m.cookies }))
 vi.mock('@/lib/pos/server/client', async (original) => ({
   ...(await original<typeof import('@/lib/pos/server/client')>()),
   authenticatedPosClient: m.auth,
-  posClient: () => ({
-    rpc: m.rpc,
-    auth: { signInWithPassword: m.signIn, updateUser: m.update, admin: { signOut: m.signOut } },
-  }),
+  posClient: m.client,
   saveSession: m.save,
   clearSession: m.clear,
 }))
@@ -100,6 +98,10 @@ const req = (path: string, body: unknown, origin = 'http://localhost') =>
 const read = () => new Request('http://localhost/api/pos/staff?branchId=' + branch)
 beforeEach(() => {
   vi.resetAllMocks()
+  m.client.mockImplementation(() => ({
+    rpc: m.rpc,
+    auth: { signInWithPassword: m.signIn, updateUser: m.update, admin: { signOut: m.signOut } },
+  }))
   vi.unstubAllEnvs()
   vi.stubEnv('POS_ONLINE_PILOT', 'true')
   vi.stubEnv('POS_PUBLIC_ORIGIN', 'http://localhost')
@@ -391,4 +393,27 @@ it('staff recovery accepts only exact committed ACKs or exact permanent cancella
   expect((await RECOVER(req('/api/pos/staff/recovery', body))).status).toBe(503)
   m.rpc.mockResolvedValue({ error: { message: 'POS_STAFF_INACTIVE' } })
   expect((await RECOVER(req('/api/pos/staff/recovery', body))).status).toBe(403)
+})
+
+it('updates the password on the exact Auth client that holds the reauthenticated in-memory session', async () => {
+  m.client.mockImplementation(() => {
+    let hasSession = false
+    return {
+      rpc: m.rpc,
+      auth: {
+        admin: { signOut: m.signOut },
+        signInWithPassword: async () => {
+          hasSession = true
+          return { data: { user, session }, error: null }
+        },
+        updateUser: async () => {
+          if (!hasSession) throw new Error('AuthSessionMissingError')
+          return { data: { user }, error: null }
+        },
+      },
+    }
+  })
+  const result = await PASSWORD(req('/api/pos/account/password', changed))
+  expect(result.status).toBe(200)
+  expect(await result.json()).toEqual({ status: 'password_changed', requiresSignIn: true })
 })
