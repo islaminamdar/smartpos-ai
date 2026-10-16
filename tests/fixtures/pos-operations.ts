@@ -1,0 +1,103 @@
+const id = (n: number) => `10000000-0000-4000-8000-${String(n).padStart(12, '0')}`
+const timestamp = '2026-10-16T09:00:00.000Z'
+const summary = {
+  salesGrossFils: 15000,
+  refundGrossFils: 1000,
+  netGrossFils: 14000,
+  netExVatFils: 13333,
+  vatFils: 667,
+  invoiceCount: 2,
+  creditNoteCount: 1,
+}
+export const operationFixture = (branchId = id(1)) => ({
+  schemaVersion: 1,
+  status: 'ready',
+  branchId,
+  branchName: branchId === id(1) ? 'Bur Dubai' : 'Second branch',
+  currency: 'AED',
+  timezone: 'Asia/Dubai',
+  businessDate: '2026-10-16',
+  generatedAt: timestamp,
+  basis: 'server_recorded',
+  offlineDeviceCoverage: 'unknown',
+  sales: {
+    documentCount: 3,
+    legacyOrdersExcluded: 0,
+    summary,
+    payments: [
+      { method: 'cash', salesFils: 10000, refundsFils: 1000, netFils: 9000 },
+      { method: 'card', salesFils: 5000, refundsFils: 0, netFils: 5000 },
+    ],
+  },
+  openShifts: {
+    totalCount: 1,
+    limit: 20,
+    truncated: false,
+    items: [
+      {
+        id: id(10),
+        deviceId: id(11),
+        deviceName: 'Front counter',
+        openedBy: id(12),
+        staffName: 'Test staff',
+        openedAt: timestamp,
+        openingCashFils: 10000,
+      },
+    ],
+  },
+  closedShifts: {
+    windowStart: '2026-09-16T20:00:00.000Z',
+    windowEnd: timestamp,
+    totalCount: 1,
+    discrepancyCount: 1,
+    incompleteCount: 0,
+    netDifferenceFils: -155,
+    limit: 20,
+    truncated: false,
+    items: [
+      {
+        id: id(13),
+        deviceId: id(14),
+        deviceName: 'Evening counter',
+        openedBy: id(12),
+        staffName: null,
+        openedAt: '2026-10-15T09:00:00.000Z',
+        closedAt: '2026-10-16T08:59:00.000Z',
+        countedCashFils: 12345,
+        expectedCashFils: 12500,
+        cashDifferenceFils: -155,
+      },
+    ],
+  },
+  unpaidOrders: {
+    totalCount: 1,
+    totalFils: 4500,
+    oldestCreatedAt: timestamp,
+    limit: 20,
+    truncated: false,
+    items: [
+      {
+        id: id(15),
+        label: 'Family table',
+        serviceType: 'dine_in',
+        tableName: 'Table 4',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        totalFils: 4500,
+      },
+    ],
+  },
+  kitchen: {
+    paidTickets: { queued: 2, preparing: 1, ready: 0 },
+    tabTickets: { activeCount: 2, withUnacknowledgedChanges: 1 },
+    tabBatches: { queued: 3, preparing: 2, ready: 1 },
+  },
+  offlineCustody: {
+    unsealedAuthorities: 2,
+    unresolvedUploadExceptions: 0,
+    pendingPaymentFreezes: 1,
+    conflictRecords: 3,
+    unsupportedEvidenceRecords: 0,
+    blockedDeviceEpochs: 1,
+  },
+})

@@ -133,6 +133,7 @@ it('limits new manager and recurring billing surfaces to exact methods', () => {
     '/api/pos/offers': ['GET', 'POST'],
     '/api/pos/offers/quote': ['POST'],
     '/api/pos/reports': ['GET'],
+    '/api/pos/operations': ['GET'],
     '/api/pos/tab-kitchen': ['GET', 'POST'],
     '/api/pos/tab-kitchen/recovery': ['POST'],
     '/api/pos/staff': ['GET', 'POST'],

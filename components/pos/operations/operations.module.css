@@ -1,0 +1,296 @@
+.operations {
+  max-width: 1440px;
+  margin: 0 auto;
+  color: #142d4e;
+  min-width: 0;
+}
+.operations * {
+  box-sizing: border-box;
+}
+.header,
+.toolbar,
+.sectionHeading,
+.actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.header {
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+.header h2 {
+  font-size: 28px;
+  line-height: 1.2;
+  margin: 0 0 8px;
+}
+.header p,
+.sectionHeading p {
+  margin: 0;
+  line-height: 1.55;
+}
+.operations button,
+.operations select {
+  min-height: 48px;
+  max-width: 100%;
+  font: inherit;
+  color: inherit;
+  border: 1px solid #aab8c7;
+  background: #fff;
+  border-radius: 8px;
+  padding: 11px 14px;
+}
+.operations button {
+  cursor: pointer;
+  font-weight: 650;
+}
+.operations button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.operations button:focus-visible,
+.operations select:focus-visible {
+  outline: 3px solid #165dcc;
+  outline-offset: 3px;
+}
+.operations .primary {
+  background: #165dcc;
+  color: #fff;
+  border-color: #165dcc;
+}
+.toolbar {
+  margin-bottom: 16px;
+  align-items: flex-end;
+}
+.toolbar label {
+  display: grid;
+  gap: 7px;
+  font-weight: 650;
+  max-width: 100%;
+}
+.toolbar select {
+  min-width: 240px;
+}
+.help,
+.meta {
+  color: #526176;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.meta {
+  margin: 6px 0;
+}
+.notice,
+.warning,
+.error,
+.empty {
+  padding: 14px 16px;
+  border: 1px solid #c6d4e3;
+  border-radius: 8px;
+  line-height: 1.6;
+  margin: 12px 0;
+}
+.notice {
+  background: #edf3fa;
+}
+.warning {
+  background: #fff5d9;
+  border-color: #e7d39b;
+  color: #6e520f;
+}
+.error {
+  background: #fff0ed;
+  border-color: #d9a7a0;
+  color: #812b22;
+}
+.notice p,
+.warning p,
+.error p {
+  margin: 4px 0;
+}
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+}
+.section {
+  min-width: 0;
+  padding: 20px 0;
+  border-top: 2px solid #d8e1ed;
+}
+.section h3 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.3;
+}
+.sectionHeading {
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px 36px;
+  margin: 18px 0;
+}
+.summary > div {
+  min-width: 120px;
+}
+.summary dt {
+  color: #526176;
+  font-size: 14px;
+}
+.summary dd {
+  margin: 5px 0 0;
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.rows {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.row {
+  padding: 16px 0;
+  border-top: 1px solid #d8e1ed;
+  overflow-wrap: anywhere;
+}
+.row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.row h4 {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+.values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 12px 0 0;
+}
+.values dt {
+  font-size: 13px;
+  color: #526176;
+  line-height: 1.5;
+}
+.values dd {
+  margin: 3px 0 0;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.amount {
+  font-variant-numeric: tabular-nums;
+}
+.actions {
+  justify-content: flex-start;
+  margin-top: 16px;
+}
+@media (max-width: 700px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .header h2 {
+    font-size: 24px;
+  }
+  .toolbar,
+  .toolbar label {
+    width: 100%;
+  }
+  .toolbar select {
+    width: 100%;
+    min-width: 0;
+  }
+  .summary {
+    gap: 18px 24px;
+  }
+  .summary dd {
+    font-size: 23px;
+  }
+  .sectionHeading {
+    gap: 10px;
+  }
+}
+@media (max-width: 360px) {
+  .values {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Preserve the intended touch size inside the existing counter button rules. */
+.operations .primary,
+.operations .actions button,
+.operations .toolbar select {
+  min-height: 48px;
+}
+
+.operations .header {
+  align-items: center;
+  gap: 12px 24px;
+  margin-bottom: 8px;
+}
+.operations .header h2 {
+  margin: 0 0 4px;
+}
+.operations .header p {
+  margin: 0;
+}
+.operations .toolbar {
+  flex-wrap: nowrap;
+  gap: 12px;
+  margin: 0;
+}
+.operations .toolbar label {
+  margin: 0;
+  min-width: 0;
+}
+.operations .toolbar button {
+  flex-shrink: 0;
+}
+.operations .meta {
+  margin: 8px 0 4px;
+}
+.operations .coverage {
+  color: #526176;
+  font-size: 14px;
+  margin: 4px 0 12px;
+}
+.operations .coverageDetails {
+  margin: 0 0 12px;
+  color: #526176;
+  font-size: 14px;
+}
+.operations .coverageDetails summary {
+  cursor: pointer;
+  min-height: 44px;
+  padding: 10px 0;
+  font-weight: 600;
+}
+.operations .coverageDetails summary:focus-visible {
+  outline: 3px solid #165dcc;
+  outline-offset: 3px;
+}
+.operations .coverageDetails p {
+  margin: 4px 0 10px;
+  max-width: 80ch;
+}
+.operations .actions {
+  margin: 0 0 20px;
+}
+@media (max-width: 700px) {
+  .operations .toolbar {
+    width: 100%;
+  }
+  .operations .toolbar label {
+    flex: 1;
+    width: auto;
+  }
+  .operations .toolbar select {
+    min-width: 0;
+  }
+}

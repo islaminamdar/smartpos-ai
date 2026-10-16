@@ -1,5 +1,11 @@
 # Launch readiness and manager payment review
 
+## Candidate daily operations update — 2026-10-16
+
+The candidate now includes a usable manager/owner **Operations** view, including access before counter registration and a read-only selector for authorized branches. SQL024 supplies one current snapshot of today's issued sales/credits/tenders, all open shifts and unpaid orders, recent drawer differences, kitchen work and recorded offline custody. Complete totals are separate from the 20-row display limits; missing legacy cash amounts remain unknown. Staff revocation and branch permissions are enforced in the database. See [the exact scope](../contracts/20261016-branch-operations.md) and [manager guide](../operations/manager-daily-overview.md).
+
+This completes the initial per-branch operations overview in source, not consolidated cross-branch comparison, historical pagination, remote drawer closing, device-local synchronization monitoring or production release. Recorded production remains SQL001–016 and the online pilot; SQL017–024 have not been applied by this work. Offline Android issuance, controlled PIN/clock recovery, real two-device/printer acceptance and PayPal commissioning remain pending. The operations view cannot resolve custody or perform refunds.
+
 ## Candidate continuation update — 2026-10-16
 
 This update supersedes the older checkpoint below for native payment recovery, allocation continuation and drawer closing. Recorded live remains 5573dcc with SQL001–016, online pilot enabled and offline disabled. Candidate SQL017–023 include custody, manager return/void decisions, historical device retrieval, allocation continuation and exact native drawer-close lookup. Native SQLite v7 retains the v6 preparation handoff history and adds immutable close requests, signed results and setup transitions. Manager writing and native selling remain disabled; no customer APK is released.
@@ -127,3 +133,18 @@ SQL020 adds authenticated manager/owner case reads and full return/card-void att
 ## Subsequent candidate progress: native outcome acceptance
 
 The next candidate adds SQL021 historical device queries, challenge-bound signed outcome delivery and native SQLite v5 immutable acceptance/conflict custody. See [native retrieval scope and limits](../contracts/20261016-native-payment-result-retrieval.md). A resolved payment is displayed separately from a bill and grants no new selling permission. The manager browser reports device delivery as unconfirmed. SQL017–021 remain unapplied, offline selling remains disabled and the hosted manager writer remains excluded. Controlled next allocations/recovery, complete native/server journeys and physical manager/printer acceptance remain release requirements.
+
+
+## Product priorities after candidate f78b99b
+
+The native drawer-close candidate closes one engineering gap; it does not complete the restaurant product or justify postponing all useful web work. Same-original-actor PIN/global-clock recovery is the next bounded native foundation ([proposed experience](../design/2026-10-16-native-access-recovery.md)); it remains design pending a native/server contract.
+
+Prioritize three practical web workstreams alongside that foundation:
+
+1. **Owner daily operations:** branch/counter shift status, unresolved requests/payments, unpaid table orders, kitchen notices and reliable last-read/completeness indicators in one usable manager screen. Existing branch reports, table and kitchen components provide inputs, but authoritative cross-branch/shift aggregates and permissions must be implemented. This improves daily restaurant use before more decorative dashboards.
+2. **Menu and returns usability:** authentic image upload, variants/modifiers and branch price/availability management, followed by exact partial item/weight returns against original discount/VAT/tender allocations. Do not present the existing full-invoice return as partial returns or recorded card amounts as processor refunds.
+3. **Inventory then loyalty:** implement receiving/count/waste/adjustment ledger with units and audit first, then recipes/transfers; add optional customer identity, points ledger and refund reversal after that. Stock availability flags and fiscal buyer fields do not satisfy inventory or customer loyalty.
+
+In parallel, finish **USD 100 per branch/month PayPal commissioning** using the existing billing UI/service rather than adding another checkout screen. Source validates exact monthly USD100 plans and keeps provider ACTIVE separate from confirmed payment; merchant configuration and genuine sandbox approval/payment/failure/cancel/webhook evidence remain missing. No provider calls or configuration were performed for this audit. Keep the pilot’s AED100 manual agreement untouched. Missing provider setup should be reported as a commercial launch dependency, not treated as a reason to stop all other feature delivery. See `lib/billing/paypal/README.md` for the implemented boundary and remaining acceptance.
+
+Courses/station routing, physical printers, cross-branch reports, email-based account onboarding/recovery, off-host backup restoration, Windows packaging and full security/operational acceptance remain in the broader goal. Do not mark them done from current native tests or this plan. Complete browser-visible product increments with authoritative storage and role/branch checks, responsive review and verified readback before promoting their status.

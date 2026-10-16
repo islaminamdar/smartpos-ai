@@ -22,7 +22,7 @@ The older device recovery screen still exposes limited journal summaries (invoic
 
 If authority expires after collection starts, the pending intent remains preserved and no backdated invoice is issued. The candidate now includes immutable payment freeze, server custody/manager review and native verification of signed full-return/void outcomes; see [PAYMENT-RECOVERY.md](PAYMENT-RECOVERY.md). A saved decision, signed delivery and native acceptance remain separate. Production manager writes remain gated.
 
-Missing-bundle recovery and controlled allocation continuation are implemented as candidates; see [RECOVERY.md](RECOVERY.md) and [NEXT-ALLOCATION.md](NEXT-ALLOCATION.md). Native cash-drawer close, controlled PIN/clock/staff/device-loss recovery, full two-device native/server offline/restart/reconnect acceptance, physical printing and supervised manager acceptance remain pending. Offline bills do not automatically reach the cloud kitchen. SQL017–022 deployment and customer APK release are not implied by candidate tests.
+Missing-bundle recovery, controlled allocation continuation and native cash-drawer close are implemented as candidates; see [RECOVERY.md](RECOVERY.md), [NEXT-ALLOCATION.md](NEXT-ALLOCATION.md) and [SHIFT-CLOSE.md](SHIFT-CLOSE.md). SQL023/SQLite v7 add exact counted-close recovery and verified server totals while retaining history. Controlled PIN/clock/staff/device-loss recovery, full two-device native/server offline/restart/reconnect acceptance, physical printing and supervised manager acceptance remain pending. Offline bills do not automatically reach the cloud kitchen. SQL017–023 deployment and customer APK release are not implied by candidate tests.
 
 ## Verification scope
 

@@ -28,6 +28,7 @@ import {
 } from './offline-payments/journal'
 import CatalogueManager from './CatalogueManager'
 import BranchReports from './reports/BranchReports'
+import BranchOperations from './operations/BranchOperations'
 import OfferManager from './offers/OfferManager'
 import OfferPicker from './offers/OfferPicker'
 import StaffManager from './staff/StaffManager'
@@ -71,6 +72,7 @@ type View =
   | 'kitchen'
   | 'open-orders'
   | 'payment-review'
+  | 'operations'
 class ApiError extends Error {
   constructor(
     public status: number,
@@ -202,6 +204,8 @@ export default function LiveCounter({
     (item) => item.deviceId === boot.device?.id && item.openedBy !== boot.userId
   )
   const manager = branch?.role === 'manager' || branch?.role === 'owner'
+  const operationsAccess =
+    boot?.branches.some((item) => item.role === 'manager' || item.role === 'owner') ?? false
   const selectedCredited =
     selected?.kind === 'tax_invoice' &&
     documents.some((item) => item.kind === 'tax_credit_note' && item.orderId === selected.orderId)
@@ -1207,83 +1211,118 @@ export default function LiveCounter({
         )}
       </div>
       {!boot.device ? (
-        <main className="lc-enrol lc-noprint">
-          <h1>Set up this counter</h1>
-          <p>Give this browser a counter name. Each POS device keeps its own shift.</p>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault()
-              const data = new FormData(event.currentTarget)
-              void run(async () => {
-                if (reviewBusy || (await checkReviewPending(boot.userId)).length)
-                  throw new Error(
-                    'Check the saved manager decision before changing account or counter access.'
-                  )
-                if ((await checkTabKitchenPending(boot.userId)).length)
-                  throw new Error(
-                    'Resolve the saved kitchen dispatch before changing account or counter access.'
-                  )
-                if ((await checkKitchenPending(boot.userId)).length)
-                  throw new Error(
-                    'Resolve the saved kitchen change before registering a replacement counter.'
-                  )
-                if ((await checkOpenOrderPending(boot.userId)).length)
-                  throw new Error(
-                    'Resolve the saved unpaid-order change before registering a replacement counter.'
-                  )
-                await api('/api/pos/devices', 'POST', {
-                  branchId,
-                  name: String(data.get('deviceName')).trim(),
-                })
-                await refresh()
-              })
-            }}
-          >
-            <label>
-              Branch
-              <select
-                value={branchId}
-                disabled={reviewHeld}
-                onChange={(event) => setBranchId(event.target.value)}
+        <>
+          {operationsAccess && (
+            <nav className="lc-tabs lc-noprint" aria-label="Manager navigation">
+              <button
+                aria-current={view !== 'operations' ? 'page' : undefined}
+                onClick={() => setView('sell')}
               >
-                {boot.branches.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Counter name
-              <input
-                name="deviceName"
-                required
-                minLength={2}
-                maxLength={80}
-                placeholder="For example, Front counter"
+                Set up counter
+              </button>
+              <button
+                aria-current={view === 'operations' ? 'page' : undefined}
+                onClick={() => setView('operations')}
+              >
+                Operations
+              </button>
+            </nav>
+          )}
+          {view === 'operations' && operationsAccess ? (
+            <main className="lc-main">
+              <p>
+                You can review branch activity without registering this browser. Set up a counter
+                when you need to take orders.
+              </p>
+              <BranchOperations
+                actorId={boot.userId}
+                branchId={branchId}
+                branchName={branch?.name ?? 'Branch'}
+                branches={boot.branches}
+                disabled
+                onNavigate={() => {}}
               />
-            </label>
-            <button
-              className="lc-primary"
-              disabled={
-                busy ||
-                !branchId ||
-                !!pending ||
-                reviewHeld ||
-                tabKitchenBusy ||
-                tabKitchenPending ||
-                !tabKitchenJournalReady ||
-                kitchenPending ||
-                !kitchenJournalReady ||
-                openOrderPending ||
-                !openOrderJournalReady ||
-                openOrderBusy
-              }
-            >
-              Register this counter
-            </button>
-          </form>
-        </main>
+            </main>
+          ) : (
+            <main className="lc-enrol lc-noprint">
+              <h1>Set up this counter</h1>
+              <p>Give this browser a counter name. Each POS device keeps its own shift.</p>
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  const data = new FormData(event.currentTarget)
+                  void run(async () => {
+                    if (reviewBusy || (await checkReviewPending(boot.userId)).length)
+                      throw new Error(
+                        'Check the saved manager decision before changing account or counter access.'
+                      )
+                    if ((await checkTabKitchenPending(boot.userId)).length)
+                      throw new Error(
+                        'Resolve the saved kitchen dispatch before changing account or counter access.'
+                      )
+                    if ((await checkKitchenPending(boot.userId)).length)
+                      throw new Error(
+                        'Resolve the saved kitchen change before registering a replacement counter.'
+                      )
+                    if ((await checkOpenOrderPending(boot.userId)).length)
+                      throw new Error(
+                        'Resolve the saved unpaid-order change before registering a replacement counter.'
+                      )
+                    await api('/api/pos/devices', 'POST', {
+                      branchId,
+                      name: String(data.get('deviceName')).trim(),
+                    })
+                    await refresh()
+                  })
+                }}
+              >
+                <label>
+                  Branch
+                  <select
+                    value={branchId}
+                    disabled={reviewHeld}
+                    onChange={(event) => setBranchId(event.target.value)}
+                  >
+                    {boot.branches.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Counter name
+                  <input
+                    name="deviceName"
+                    required
+                    minLength={2}
+                    maxLength={80}
+                    placeholder="For example, Front counter"
+                  />
+                </label>
+                <button
+                  className="lc-primary"
+                  disabled={
+                    busy ||
+                    !branchId ||
+                    !!pending ||
+                    reviewHeld ||
+                    tabKitchenBusy ||
+                    tabKitchenPending ||
+                    !tabKitchenJournalReady ||
+                    kitchenPending ||
+                    !kitchenJournalReady ||
+                    openOrderPending ||
+                    !openOrderJournalReady ||
+                    openOrderBusy
+                  }
+                >
+                  Register this counter
+                </button>
+              </form>
+            </main>
+          )}
+        </>
       ) : (
         <>
           <nav className="lc-tabs lc-noprint" aria-label="Counter navigation">
@@ -1294,6 +1333,7 @@ export default function LiveCounter({
                 'open-orders',
                 'receipts',
                 'shift',
+                ...(operationsAccess ? ['operations'] : []),
                 ...(manager
                   ? [
                       'menu',
@@ -1327,6 +1367,7 @@ export default function LiveCounter({
                     staff: 'Staff',
                     account: 'Account',
                     'payment-review': 'Payment review',
+                    operations: 'Operations',
                   }[item]
                 }
               </button>
@@ -1334,6 +1375,19 @@ export default function LiveCounter({
             <span>{boot.device.name}</span>
           </nav>
           <main className="lc-main">
+            {view === 'operations' && operationsAccess && (
+              <BranchOperations
+                actorId={boot.userId}
+                branchId={branchId}
+                branchName={branch?.name ?? 'Branch'}
+                branches={boot.branches}
+                disabled={busy || openOrderBusy || reviewBusy || tabKitchenBusy}
+                onNavigate={(destination) => {
+                  if (!busy && !openOrderBusy && !reviewBusy && !tabKitchenBusy)
+                    setView(destination)
+                }}
+              />
+            )}
             {view === 'open-orders' && branch && (
               <OpenOrdersBoard
                 key={`${boot.userId}:${branchId}`}
