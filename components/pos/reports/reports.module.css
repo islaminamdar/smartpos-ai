@@ -1,0 +1,263 @@
+.reports {
+  color: #17324c;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+}
+.header h2 {
+  font-size: 28px;
+  line-height: 1.2;
+  margin: 6px 0 10px;
+  overflow-wrap: anywhere;
+}
+.header p {
+  line-height: 1.55;
+  margin: 6px 0;
+}
+.eyebrow {
+  font-size: 13px;
+  font-weight: 700;
+  color: #52677b;
+}
+.filters {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 24px 0 8px;
+}
+.filters label,
+.productsHeader label {
+  display: grid;
+  gap: 7px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.filters input,
+.productsHeader input {
+  font: inherit;
+  color: inherit;
+  border: 1px solid #aab8c7;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px 12px;
+  min-height: 44px;
+  min-width: 0;
+  max-width: 100%;
+}
+.filters button,
+.reportMeta a {
+  border: 1px solid #1859c8;
+  border-radius: 8px;
+  background: #1859c8;
+  color: #fff;
+  min-height: 44px;
+  padding: 11px 17px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.filters button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.filters .secondary {
+  background: #fff;
+  color: #1859c8;
+}
+.help {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #566a7e;
+}
+.error,
+.warning,
+.notice,
+.empty {
+  border-radius: 8px;
+  padding: 15px 18px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.error {
+  background: #fff1ef;
+  color: #8d2b21;
+  border: 1px solid #e6b5ae;
+}
+.warning {
+  background: #fff5d9;
+  color: #6e520f;
+  border: 1px solid #e7d39b;
+}
+.notice,
+.empty {
+  background: #edf3fa;
+  color: #3a526b;
+}
+.reportMeta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin: 22px 0 16px;
+  flex-wrap: wrap;
+}
+.reportMeta p {
+  font-size: 12px;
+  line-height: 1.6;
+}
+.summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+.summary article {
+  padding: 18px;
+  background: white;
+  border: 1px solid #d4dfe9;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.summary span,
+.summary small {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #52677b;
+}
+.summary strong {
+  font-size: 25px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.tableSection {
+  margin-top: 28px;
+  min-width: 0;
+}
+.tableSection h3,
+.productsHeader h3 {
+  font-size: 18px;
+  margin: 0 0 12px;
+}
+.tableScroll {
+  width: 100%;
+  overflow: auto;
+  border: 1px solid #d4dfe9;
+  border-radius: 10px;
+  background: #fff;
+}
+.tableScroll table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.tableScroll th,
+.tableScroll td {
+  text-align: right;
+  padding: 13px 15px;
+  white-space: nowrap;
+  border-bottom: 1px solid #e3eaf0;
+}
+.tableScroll th {
+  background: #edf3fa;
+  font-size: 12px;
+  font-weight: 700;
+}
+.tableScroll th:first-child,
+.tableScroll td:first-child {
+  text-align: left;
+  white-space: normal;
+  min-width: 130px;
+  max-width: 260px;
+  overflow-wrap: anywhere;
+}
+.tableScroll tbody tr:last-child td {
+  border-bottom: 0;
+}
+.twoColumns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+  min-width: 0;
+}
+.productsHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-top: 32px;
+}
+.productsHeader input {
+  min-width: 240px;
+}
+.reports :focus-visible {
+  outline: 3px solid #1560d7;
+  outline-offset: 3px;
+}
+@media (max-width: 1000px) {
+  .summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .twoColumns {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 600px) {
+  .reports {
+    padding: 16px 12px;
+  }
+  .header h2 {
+    font-size: 23px;
+  }
+  .summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .summary article {
+    padding: 14px;
+  }
+  .summary strong {
+    font-size: 22px;
+  }
+  .filters {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .filters input {
+    width: 100%;
+    padding: 10px 7px;
+    font-size: 13px;
+  }
+  .productsHeader {
+    display: block;
+  }
+  .productsHeader label {
+    margin-top: 16px;
+  }
+  .productsHeader input {
+    width: 100%;
+    min-width: 0;
+  }
+  .reportMeta a {
+    width: 100%;
+    text-align: center;
+  }
+  .tableScroll th,
+  .tableScroll td {
+    padding: 12px;
+  }
+  .summary article:last-child {
+    grid-column: 1/-1;
+  }
+}

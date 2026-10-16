@@ -25,6 +25,7 @@ export function publicReleaseAccess(
       '/api/pos/catalogue': ['GET', 'POST'],
       '/api/pos/bootstrap': ['GET'],
       '/api/pos/receipts': ['GET'],
+      '/api/pos/reports': ['GET'],
       '/api/pos/recovery': ['POST'],
       '/api/pos/devices': ['POST'],
       '/api/pos/sync': ['POST'],

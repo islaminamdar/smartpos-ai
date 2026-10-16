@@ -7,7 +7,7 @@ const db = new PGlite()
 await db.exec(`create role anon; create role authenticated; create role service_role; create schema auth; create table auth.users(id uuid primary key);
 create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('app.user_id',true),'')::uuid$$;
 grant usage on schema auth to authenticated; grant execute on function auth.uid() to authenticated;`)
-for (const file of ['20261016000100_pos_platform.sql','20261016000200_pos_operations.sql','20261016000300_pos_live_documents.sql','20261016000400_pos_online_access.sql','20261016000500_pos_request_recovery.sql','20261016000600_pos_cash_out_balance.sql','20261016000800_pos_catalogue_management.sql']) {
+for (const file of ['20261016000100_pos_platform.sql','20261016000200_pos_operations.sql','20261016000300_pos_live_documents.sql','20261016000400_pos_online_access.sql','20261016000500_pos_request_recovery.sql','20261016000600_pos_cash_out_balance.sql','20261016000800_pos_catalogue_management.sql','20261016001000_pos_sale_lock_order.sql']) {
  await db.exec(await readFile(new URL('../../supabase/migrations/'+file,import.meta.url),'utf8'))
 }
 const [actor,cashier,org,branch,profile,product,foreignOrg,foreignBranch,foreignProduct] = Array.from({length:9},()=>crypto.randomUUID())

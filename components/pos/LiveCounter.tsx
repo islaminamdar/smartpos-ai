@@ -21,10 +21,11 @@ import {
 } from '@/lib/pos/online-journal'
 import FiscalReceipt from './FiscalReceipt'
 import CatalogueManager from './CatalogueManager'
+import BranchReports from './reports/BranchReports'
 
 type Product = LiveBootstrap['catalogue'][number]
 type BasketLine = { product: Product; quantityMilli: number }
-type View = 'sell' | 'receipts' | 'shift' | 'branch' | 'menu'
+type View = 'sell' | 'receipts' | 'shift' | 'branch' | 'menu' | 'reports'
 class ApiError extends Error {
   constructor(
     public status: number,
@@ -676,28 +677,42 @@ export default function LiveCounter() {
       ) : (
         <>
           <nav className="lc-tabs lc-noprint" aria-label="Counter navigation">
-            {(['sell', 'receipts', 'shift', ...(manager ? ['menu'] : []), 'branch'] as View[]).map(
-              (item) => (
-                <button
-                  key={item}
-                  aria-current={view === item ? 'page' : undefined}
-                  onClick={() => setView(item)}
-                >
+            {(
+              [
+                'sell',
+                'receipts',
+                'shift',
+                ...(manager ? ['menu', 'reports'] : []),
+                'branch',
+              ] as View[]
+            ).map((item) => (
+              <button
+                key={item}
+                aria-current={view === item ? 'page' : undefined}
+                onClick={() => setView(item)}
+              >
+                {
                   {
-                    {
-                      sell: 'Sell',
-                      receipts: 'Receipts',
-                      shift: 'Shift',
-                      branch: 'Branch',
-                      menu: 'Menu',
-                    }[item]
-                  }
-                </button>
-              )
-            )}
+                    sell: 'Sell',
+                    receipts: 'Receipts',
+                    shift: 'Shift',
+                    branch: 'Branch',
+                    menu: 'Menu',
+                    reports: 'Reports',
+                  }[item]
+                }
+              </button>
+            ))}
             <span>{boot.device.name}</span>
           </nav>
           <main className="lc-main">
+            {view === 'reports' && manager && branch && (
+              <BranchReports
+                key={`${boot.userId}:${branchId}`}
+                branchId={branchId}
+                branchName={branch.name}
+              />
+            )}
             {view === 'menu' && manager && (
               <CatalogueManager
                 key={`${boot.userId}:${branchId}`}
