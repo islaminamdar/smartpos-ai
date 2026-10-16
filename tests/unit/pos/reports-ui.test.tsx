@@ -68,3 +68,23 @@ it('cannot display late responses from the previously selected branch', async ()
   expect(screen.getByRole('heading', { name: 'Second' })).toBeInTheDocument()
   expect(screen.queryByText('Sweet')).toBeNull()
 })
+
+it('recovers from a timeout with a usable retry and no invented zero totals', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockRejectedValueOnce(new DOMException('signal timed out', 'TimeoutError'))
+      .mockResolvedValueOnce(response(branchReport))
+  )
+  render(<BranchReports branchId={reportBranch} branchName="Test branch" />)
+  dates()
+  fireEvent.click(screen.getByRole('button', { name: 'Load report' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Check your connection and try again')
+  expect(screen.queryByRole('link', { name: 'Export CSV' })).toBeNull()
+  expect(screen.queryByText('Sales including VAT')).toBeNull()
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Load report' })).toBeEnabled())
+  fireEvent.click(screen.getByRole('button', { name: 'Load report' }))
+  expect(await screen.findByRole('link', { name: 'Export CSV' })).toBeInTheDocument()
+  expect(screen.queryByRole('alert')).toBeNull()
+})

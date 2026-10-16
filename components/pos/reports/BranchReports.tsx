@@ -88,9 +88,14 @@ export default function BranchReports({
     } catch (cause) {
       if (current === generation.current)
         setError(
-          cause instanceof Error && cause.name !== 'ZodError'
-            ? cause.message
-            : 'The report could not be verified. Please try again; no totals are available.'
+          cause !== null &&
+            typeof cause === 'object' &&
+            'name' in cause &&
+            cause.name === 'TimeoutError'
+            ? 'The report took too long to load. Check your connection and try again; no totals are available yet.'
+            : cause instanceof Error && cause.name !== 'ZodError'
+              ? cause.message
+              : 'The report could not be verified. Please try again; no totals are available.'
         )
     } finally {
       if (current === generation.current) setLoading(false)

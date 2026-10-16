@@ -23,7 +23,7 @@ In **Menu**, a manager can add an item or edit its price, unit and availability.
 
 ## Review branch reports
 
-In the upcoming reporting release, a manager can open **Reports**, choose an inclusive date range (up to 93 days) and select **Load report**. Dates use Dubai time. Sales and credit notes are counted on their issue dates, so a refund today for yesterday's bill reduces today's figures. Review sales, refunds, VAT, recorded cash/card payments and product totals; use **Export CSV** for the same selected range. Cash figures exclude opening float, change and drawer movements. Card figures do not confirm bank settlement. If a report fails to load, its totals are unavailable, not zero.
+A manager can open **Reports**, choose an inclusive date range (up to 93 days) and select **Load report**. Dates use Dubai time. Sales and credit notes are counted on their issue dates, so a refund today for yesterday's bill reduces today's figures. Review sales, refunds, VAT, recorded cash/card payments and product totals; use **Export CSV** for the same selected range. Cash figures exclude opening float, change and drawer movements. Card figures do not confirm bank settlement. If a report fails to load, its totals are unavailable, not zero.
 
 ## End a shift
 
