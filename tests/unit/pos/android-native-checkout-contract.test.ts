@@ -82,3 +82,39 @@ describe('native authoritative checkout boundary', () => {
     expect(knownCheckoutReason('pin_unlock_required')).toBe(true)
   })
 })
+
+describe('permanent native payment freeze boundary', () => {
+  const frozen = {
+    ...intent,
+    state: 'frozen_for_manager',
+    canConfirm: false,
+    canCancel: false,
+    reasonCode: 'payment_frozen',
+    managerReview: { freezeId: id(12), proofSha256: 'a'.repeat(64), status: 'saved_locally' },
+  }
+  it('accepts only locally saved frozen proof while keeping the intent unresolved', () => {
+    expect(parseNativeIntent(frozen)).toEqual(frozen)
+    expect(
+      parseNativeCheckoutState({
+        ...state,
+        canIssue: false,
+        pendingIntentId: intent.intentId,
+        unresolvedIntent: frozen,
+        reasonCode: 'payment_frozen',
+      }).pendingIntentId
+    ).toBe(intent.intentId)
+  })
+  it.each([
+    { ...frozen, canConfirm: true },
+    { ...frozen, canCancel: true },
+    { ...frozen, reasonCode: null },
+    { ...frozen, receipt },
+    { ...frozen, managerReview: undefined },
+    { ...frozen, managerReview: { ...frozen.managerReview, freezeId: 'bad' } },
+    { ...frozen, managerReview: { ...frozen.managerReview, proofSha256: 'A'.repeat(64) } },
+    { ...frozen, managerReview: { ...frozen.managerReview, status: 'submitted' } },
+    { ...intent, managerReview: frozen.managerReview },
+  ])('rejects mutable, claimed submitted or malformed freeze state', (value) =>
+    expect(() => parseNativeIntent(value)).toThrow()
+  )
+})

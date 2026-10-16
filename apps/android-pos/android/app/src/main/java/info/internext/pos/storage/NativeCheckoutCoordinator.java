@@ -35,7 +35,7 @@ public final class NativeCheckoutCoordinator {
                 CheckoutContext unlocked=source.load(true);
                 if(pending!=null)state.put("unresolvedIntent",intent(unlocked,pending));
                 if(last!=null)state.put("lastReceipt",receipt(unlocked,last));
-                if(pending!=null)return state.put("reasonCode","payment_reconciliation_required");
+                if(pending!=null)return state.put("reasonCode","frozen_for_manager".equals(state.getJSONObject("unresolvedIntent").getString("state"))?"payment_frozen":"payment_reconciliation_required");
                 requireReleased();unlocked.engine.requireReady(unlocked.bundle.authorityId,null);state.put("canIssue",true);
             }catch(Exception error){state.put("reasonCode",code(error));}
             return state;
@@ -64,6 +64,7 @@ public final class NativeCheckoutCoordinator {
         synchronized(journal){
             requireIntentScope(context,id);
             JSONObject original=context.engine.getIntent(id);
+            if("frozen_for_manager".equals(original.getString("state")))throw fail("payment_frozen");
             if(!"committed".equals(original.getString("state")))requireReleased();
             context.engine.commitPaymentIntent(id);return intent(context,id);
         }
@@ -72,6 +73,10 @@ public final class NativeCheckoutCoordinator {
         CheckoutContext context=source.load(true);synchronized(journal){requireIntentScope(context,id);
             context.engine.cancelUncollectedIntent(id,reason);return intent(context,id);}
     }
+    public synchronized JSONObject freezePaymentIntentForManager(String id)throws Exception{
+        CheckoutContext context=source.load(true);
+        synchronized(journal){requireIntentScope(context,id);context.engine.freezePaymentIntentForManager(id);return intent(context,id);}
+    }
     public synchronized JSONObject getReceipt(String id)throws Exception{
         CheckoutContext context=source.load(true);synchronized(journal){return receipt(context,id);}
     }
@@ -79,11 +84,13 @@ public final class NativeCheckoutCoordinator {
         requireIntentScope(context,id);JSONObject saved=context.engine.getIntent(id),request=saved.getJSONObject("request");
         String created;
         try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT created_at FROM intents WHERE id=?",new String[]{id})){if(!c.moveToFirst())throw fail("intent_missing");created=c.getString(0);}
-        String status=saved.getString("state"),reason=null;boolean canConfirm=false,canCancel=status.equals("payment_confirmation_required");
+        String status=saved.getString("state"),reason=status.equals("frozen_for_manager")?"payment_frozen":null;boolean canConfirm=false,canCancel=status.equals("payment_confirmation_required");
         if(canCancel){try{requireReleased();context.engine.requireReady(context.bundle.authorityId,request);canConfirm=true;}catch(Exception error){reason=code(error);}}
-        return new JSONObject().put("schemaVersion",1).put("intentId",id).put("state",status).put("createdAt",created)
+        JSONObject result=new JSONObject().put("schemaVersion",1).put("intentId",id).put("state",status).put("createdAt",created)
             .put("request",request).put("quote",context.engine.quoteRequest(request)).put("canConfirm",canConfirm).put("canCancel",canCancel)
             .put("reasonCode",nullable(reason)).put("receipt",status.equals("committed")?receipt(context,saved.getString("orderId")):JSONObject.NULL);
+        if(status.equals("frozen_for_manager"))result.put("managerReview",saved.getJSONObject("managerReview"));
+        return result;
     }
     private JSONObject receipt(CheckoutContext context,String id)throws Exception{
         String intentId;
@@ -117,7 +124,7 @@ public final class NativeCheckoutCoordinator {
         if(error instanceof NativeAccessError)return ((NativeAccessError)error).code;
         if(error instanceof OfflineClock.ClockException)return ((OfflineClock.ClockException)error).code;
         String message=error.getMessage();
-        return java.util.Arrays.asList("pin_unlock_required","authority_missing","authority_closed","authority_exhausted","payment_reconciliation_required","intent_missing","intent_conflict","intent_cancelled","already_issued","cancellation_conflict","buyer_details_required","presented_total_changed","tender_not_authorized","receipt_integrity_failed","invalid_tender").contains(message)?message:"native_checkout_unavailable";
+        return java.util.Arrays.asList("payment_frozen","freeze_integrity_failed","intent_integrity_failed","pin_unlock_required","authority_missing","authority_closed","authority_exhausted","payment_reconciliation_required","intent_missing","intent_conflict","intent_cancelled","already_issued","cancellation_conflict","buyer_details_required","presented_total_changed","tender_not_authorized","receipt_integrity_failed","invalid_tender").contains(message)?message:"native_checkout_unavailable";
     }
     private static NativeAccessError fail(String code){return new NativeAccessError(code);}
 }

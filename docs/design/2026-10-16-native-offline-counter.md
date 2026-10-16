@@ -140,3 +140,22 @@ Validation:
 - These browser fixtures prove UI behavior only. They do not prove a real device-signed request, production recovery, server acknowledgement, printing or permission to collect payment. Native APK new sales remain paused; the separately deployed online web pilot is unchanged.
 
 Root independently verified the 375px consent → recovery → retained flow with the pending declaration count increasing to one, and the 1280px final layout. Final Semgrep scan: 210 rules on three changed runtime files, zero findings/errors. Temporary fixture and review browser tab were removed after review; private evidence remains outside the repository.
+
+## Permanent payment freeze UI — 2026-10-16
+
+Added a separate, irreversible manager-review freeze for an unlocked original pending payment when native permits review. Its checkbox is bound to the exact intent ID and complete frozen request, separate from received-payment confirmation and no-money cancellation. Native Android performs the actual freeze with original actor/PIN checks; JavaScript neither authorizes it nor creates a financial record. The UI remains usable for an expired permission with collection disabled, subject to native review permission.
+
+A canonical frozen acknowledgement must match the same intent and request, contain a valid local freeze reference and SHA-256 proof fingerprint, and prohibit confirmation/cancellation with no receipt. The strict bridge parser rejects malformed or contradictory variants. Lost responses retain the original ID and require reading that payment before further action; no replacement intent is created. Frozen payments remain unresolved, so new sales and setup changes stay on hold. A previous unrelated receipt is not displayed alongside a pending or frozen payment.
+
+The frozen view says “Saved locally · not sent,” explains that manager resolution is not available in this version, and makes no claim of a tax invoice, money returned, or a submitted manager review. The freeze reference remains visible; the technical proof fingerprint is in collapsed Support details. All full financial details, proof and consent are removed from the DOM on native lock/background, and delayed acknowledgements from an earlier lifecycle are ignored. The production issuance gate is unchanged.
+
+Validation:
+
+- Fifteen new UI/strict-boundary regressions cover expired paused review, exact acknowledgement, lost response recovery, lifecycle privacy and malformed frozen records. The six-file native UI/boundary regression run passed 156 tests after the final Support details adjustment.
+- App TypeScript, scoped ESLint and Vite build passed. Final bundle: `index-9BDau5kq.js`, stylesheet `index-BKpGeRKi.css`.
+- Synthetic rendered review at requested 375/1280/320 widths covered exact consent → frozen readback, desktop layout and narrow expanded proof wrapping. Document scroll widths matched client widths (360/1265/305px); visible action and disclosure controls measured at least 48px tall.
+- Browser fixtures verify presentation and UI behavior only. They do not prove native persistence, cryptographic proof validity, original-account/PIN enforcement, server delivery or real payment handling; the release owner verifies native acceptance separately. No provider calls or production writes were made for this review.
+
+Root independently reviewed the 375px exact-consent → frozen flow and the final 1280px collapsed Support details presentation. Final Semgrep Community scan: 210 rules on the two changed runtime files, zero findings/errors. The temporary fixture, own preview server and own review tab were removed; viewport reset and no listener remained on port 3050. Private synthetic evidence is retained outside the repository.
+
+The synthetic export from the actual Android payment-freeze tests also passed two Java-to-TypeScript parser regressions: the exact frozen intent/local proof and the unresolved, issuance-disabled counter state. With these cross-language checks, the seven-file native UI/boundary run passed 158 tests; scoped lint passed. This addition changed tests/documentation only, leaving the reviewed runtime bundle unchanged.

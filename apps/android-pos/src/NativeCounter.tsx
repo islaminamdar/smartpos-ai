@@ -12,6 +12,7 @@ import {
   readNativePaymentIntent,
   confirmNativePaymentIntent,
   cancelNativeUncollectedIntent,
+  freezeNativePaymentForManager,
   unlockNativeOffline,
   checkoutRequestKey,
   quoteInputKey,
@@ -174,6 +175,7 @@ export default function NativeCounter({
   const [customerAddress, setCustomerAddress] = useState('')
   const [customerTrn, setCustomerTrn] = useState('')
   const [receivedConsent, setReceivedConsent] = useState<string | null>(null)
+  const [freezeConsent, setFreezeConsent] = useState<string | null>(null)
   const [noMoneyConsent, setNoMoneyConsent] = useState<string | null>(null)
   const [cancelReason, setCancelReason] = useState('')
   const [search, setSearch] = useState('')
@@ -186,7 +188,10 @@ export default function NativeCounter({
   const context =
     listening && ready && fresh && checkedRevision === revision ? state?.context : null
   const pendingId = uncertain?.intentId ?? state?.pendingIntentId ?? null
-  const pending = intent?.state === 'payment_confirmation_required' ? intent : null
+  const pending =
+    intent && ['payment_confirmation_required', 'frozen_for_manager'].includes(intent.state)
+      ? intent
+      : null
   const hold =
     available &&
     (!listening ||
@@ -228,6 +233,7 @@ export default function NativeCounter({
     setCustomerTrn('')
     setReceivedConsent(null)
     setNoMoneyConsent(null)
+    setFreezeConsent(null)
     setCancelReason('')
   }, [])
   const applyState = useCallback(
@@ -244,6 +250,7 @@ export default function NativeCounter({
       }
       setReceivedConsent(null)
       setNoMoneyConsent(null)
+      setFreezeConsent(null)
       setCancelReason('')
       setState(next)
       setFresh(true)
@@ -345,7 +352,13 @@ export default function NativeCounter({
   const visibleIntent =
     !uncertain && listening && ready && fresh && checkedRevision === revision ? pending : null
   const receipt =
-    !uncertain && listening && ready && fresh && checkedRevision === revision
+    !pendingId &&
+    !pending &&
+    !uncertain &&
+    listening &&
+    ready &&
+    fresh &&
+    checkedRevision === revision
       ? (intent?.receipt ?? (showLast ? state?.lastReceipt : null))
       : null
   function dirty(action: () => void) {
@@ -449,6 +462,7 @@ export default function NativeCounter({
     beginUncertain.current = false
     setReceivedConsent(null)
     setNoMoneyConsent(null)
+    setFreezeConsent(null)
     setCancelReason('')
     setFresh(true)
     setCheckedRevision(revision)
@@ -457,13 +471,29 @@ export default function NativeCounter({
         ? {
             ...previous,
             canIssue: false,
-            pendingIntentId: next.state === 'payment_confirmation_required' ? next.intentId : null,
-            unresolvedIntent: next.state === 'payment_confirmation_required' ? next : null,
+            pendingIntentId: ['payment_confirmation_required', 'frozen_for_manager'].includes(
+              next.state
+            )
+              ? next.intentId
+              : null,
+            unresolvedIntent: ['payment_confirmation_required', 'frozen_for_manager'].includes(
+              next.state
+            )
+              ? next
+              : null,
             lastReceiptId: next.receipt?.id ?? previous.lastReceiptId,
             lastReceipt: next.receipt ?? previous.lastReceipt,
           }
         : previous
     )
+    if (next.state === 'frozen_for_manager') {
+      clearDraft()
+      setShowLast(false)
+      setNotice(
+        'Payment permanently frozen and saved on this device. Manager review has not been sent. Keep this device’s records.'
+      )
+      onRecordsChanged()
+    }
     if (next.state === 'committed') {
       clearDraft()
       setShowLast(true)
@@ -565,7 +595,13 @@ export default function NativeCounter({
     }
   }
   async function resolve(kind: 'confirm' | 'cancel') {
-    if (!visibleIntent || !knownCheckoutReason(visibleIntent.reasonCode) || !!uncertain) return
+    if (
+      !visibleIntent ||
+      visibleIntent.state !== 'payment_confirmation_required' ||
+      !knownCheckoutReason(visibleIntent.reasonCode) ||
+      !!uncertain
+    )
+      return
     const original = { intentId: visibleIntent.intentId, request: visibleIntent.request }
     const identity = `${original.intentId}:${checkoutRequestKey(original.request)}`
     if (kind === 'confirm' && (!visibleIntent.canConfirm || receivedConsent !== identity)) return
@@ -600,6 +636,43 @@ export default function NativeCounter({
       if (mounted.current) {
         setFresh(false)
         setError(`${nativeCheckoutError(failure)} Check the original payment; do not charge again.`)
+      }
+    } finally {
+      finish()
+    }
+  }
+  async function freezeForManager() {
+    if (
+      !visibleIntent ||
+      visibleIntent.state !== 'payment_confirmation_required' ||
+      !visibleIntent.canCancel ||
+      !knownCheckoutReason(visibleIntent.reasonCode) ||
+      uncertain
+    )
+      return
+    const original = { intentId: visibleIntent.intentId, request: visibleIntent.request }
+    const identity = `${original.intentId}:${checkoutRequestKey(original.request)}`
+    if (freezeConsent !== identity || !start('Permanently freezing this payment on the device…'))
+      return
+    const operationEpoch = epoch.current,
+      operationRevision = revision
+    setUncertain(original)
+    setFreezeConsent(null)
+    onHoldChange(true)
+    try {
+      const next = await freezeNativePaymentForManager(original.intentId)
+      if (
+        mounted.current &&
+        operationEpoch === epoch.current &&
+        operationRevision === currentRevision.current
+      )
+        acceptIntent(next, original)
+    } catch (failure) {
+      if (mounted.current && operationEpoch === epoch.current) {
+        setFresh(false)
+        setError(
+          `${nativeCheckoutError(failure)} Check the original payment before retrying the freeze. Do not collect again.`
+        )
       }
     } finally {
       finish()
@@ -706,91 +779,176 @@ export default function NativeCounter({
           )}
           {visibleIntent && (
             <section className="payment-review" aria-labelledby="payment-review-heading">
-              <h3 id="payment-review-heading">Review the saved payment</h3>
+              <h3 id="payment-review-heading">
+                {visibleIntent.state === 'frozen_for_manager'
+                  ? 'Payment frozen for manager review'
+                  : 'Review the saved payment'}
+              </h3>
               <p>
                 {serviceNames[visibleIntent.request.serviceType]} · Saved{' '}
                 {date(visibleIntent.createdAt)} Dubai time
               </p>
-              <Bill bill={visibleIntent.quote} />
-              <p className="access-note">
-                The payment step is saved on this device. Cash is handled at the counter; card
-                payment happens on your separate card terminal. This app does not charge a card. If
-                this is a recovered payment, check the cash drawer or terminal result first.
-              </p>
-              {visibleIntent.reasonCode && (
-                <p className="error">{nativeCheckoutError(new Error(visibleIntent.reasonCode))}</p>
-              )}
-              <label className="cash-confirm">
-                <input
-                  type="checkbox"
-                  checked={receivedConsent === intentKey}
-                  disabled={
-                    !!busy ||
-                    !visibleIntent.canConfirm ||
-                    !knownCheckoutReason(visibleIntent.reasonCode)
-                  }
-                  onChange={(e) => setReceivedConsent(e.target.checked ? intentKey : null)}
-                />
-                I checked that the exact payment shown above was received.
-              </label>
-              <button
-                className="primary"
-                disabled={
-                  !!busy ||
-                  !visibleIntent.canConfirm ||
-                  !knownCheckoutReason(visibleIntent.reasonCode) ||
-                  receivedConsent !== intentKey
-                }
-                onClick={() => void resolve('confirm')}
-              >
-                Confirm received payment &amp; save receipt
-              </button>
-              <details className="no-money">
-                <summary>No money was received</summary>
-                <p>
-                  Only cancel if no cash was taken and no card transaction succeeded. If money was
-                  received but the receipt is blocked, keep this payment and contact your manager.
+              {visibleIntent.state === 'frozen_for_manager' && (
+                <p className="help">
+                  Original planned payment. These amounts do not prove that money was collected or
+                  returned.
                 </p>
-                <label>
-                  Reason for no-money cancellation
-                  <textarea
-                    maxLength={240}
-                    value={cancelReason}
-                    disabled={!!busy}
-                    onChange={(e) => setCancelReason(e.target.value)}
-                  />
-                </label>
-                <label className="cash-confirm">
-                  <input
-                    type="checkbox"
-                    checked={noMoneyConsent === intentKey}
-                    disabled={!!busy || !visibleIntent.canCancel}
-                    onChange={(e) => setNoMoneyConsent(e.target.checked ? intentKey : null)}
-                  />
-                  I checked that no money was received.
-                </label>
-                <button
-                  className="secondary"
-                  disabled={
-                    !!busy ||
-                    !visibleIntent.canCancel ||
-                    !knownCheckoutReason(visibleIntent.reasonCode) ||
-                    noMoneyConsent !== intentKey ||
-                    !cancelReason.trim()
-                  }
-                  onClick={() => void resolve('cancel')}
-                >
-                  Cancel uncollected payment
-                </button>
-              </details>
-              {!visibleIntent.canCancel && (
-                <button
-                  className="secondary"
-                  disabled={!!busy || !ready}
-                  onClick={() => void unlock()}
-                >
-                  Unlock payment review
-                </button>
+              )}
+              <Bill bill={visibleIntent.quote} />
+              {visibleIntent.state === 'frozen_for_manager' ? (
+                <>
+                  <p className="access-note">
+                    Saved on this device. Manager review has not been sent, and no manager decision
+                    is recorded. This is not a tax invoice or confirmation of a payment return.
+                  </p>
+                  <p>
+                    Further collection, receipt issuance and no-money cancellation are permanently
+                    blocked for this payment. New sales and setup changes remain on hold. Keep this
+                    app’s data; manager resolution is not available in this version.
+                  </p>
+                  <dl className="record-values">
+                    <div>
+                      <dt>Freeze reference</dt>
+                      <dd>
+                        <span className="reference">{visibleIntent.managerReview.freezeId}</span>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Review delivery</dt>
+                      <dd>Saved locally · not sent</dd>
+                    </div>
+                  </dl>
+                  <details className="counter-details">
+                    <summary>Support details</summary>
+                    <p>Saved proof fingerprint</p>
+                    <span className="reference">{visibleIntent.managerReview.proofSha256}</span>
+                  </details>
+                </>
+              ) : (
+                <>
+                  <p className="access-note">
+                    The payment step is saved on this device. Cash is handled at the counter; card
+                    payment happens on your separate card terminal. This app does not charge a card.
+                    If this is a recovered payment, check the cash drawer or terminal result first.
+                  </p>
+                  {visibleIntent.reasonCode && (
+                    <p className="error">
+                      {nativeCheckoutError(new Error(visibleIntent.reasonCode))}
+                    </p>
+                  )}
+                  <label className="cash-confirm">
+                    <input
+                      type="checkbox"
+                      checked={receivedConsent === intentKey}
+                      disabled={
+                        !!busy ||
+                        !visibleIntent.canConfirm ||
+                        !knownCheckoutReason(visibleIntent.reasonCode)
+                      }
+                      onChange={(e) => setReceivedConsent(e.target.checked ? intentKey : null)}
+                    />
+                    I checked that the exact payment shown above was received.
+                  </label>
+                  <button
+                    className="primary"
+                    disabled={
+                      !!busy ||
+                      !visibleIntent.canConfirm ||
+                      !knownCheckoutReason(visibleIntent.reasonCode) ||
+                      receivedConsent !== intentKey
+                    }
+                    onClick={() => void resolve('confirm')}
+                  >
+                    Confirm received payment &amp; save receipt
+                  </button>
+                  <details className="no-money">
+                    <summary>No money was received</summary>
+                    <p>
+                      Only cancel if no cash was taken and no card transaction succeeded. If money
+                      was received but the receipt is blocked, keep this payment and contact your
+                      manager.
+                    </p>
+                    <label>
+                      Reason for no-money cancellation
+                      <textarea
+                        maxLength={240}
+                        value={cancelReason}
+                        disabled={!!busy}
+                        onChange={(e) => setCancelReason(e.target.value)}
+                      />
+                    </label>
+                    <label className="cash-confirm">
+                      <input
+                        type="checkbox"
+                        checked={noMoneyConsent === intentKey}
+                        disabled={!!busy || !visibleIntent.canCancel}
+                        onChange={(e) => setNoMoneyConsent(e.target.checked ? intentKey : null)}
+                      />
+                      I checked that no money was received.
+                    </label>
+                    <button
+                      className="secondary"
+                      disabled={
+                        !!busy ||
+                        !visibleIntent.canCancel ||
+                        !knownCheckoutReason(visibleIntent.reasonCode) ||
+                        noMoneyConsent !== intentKey ||
+                        !cancelReason.trim()
+                      }
+                      onClick={() => void resolve('cancel')}
+                    >
+                      Cancel uncollected payment
+                    </button>
+                  </details>
+                  <details className="no-money">
+                    <summary>Payment needs manager review</summary>
+                    <p>
+                      If money may have been received and you cannot safely finish this payment,
+                      permanently freeze its original basket and payment plan for manager review.
+                      This cannot be undone. It does not return money, issue an invoice, or send a
+                      review to the manager.
+                    </p>
+                    <label className="cash-confirm">
+                      <input
+                        type="checkbox"
+                        checked={freezeConsent === intentKey}
+                        disabled={
+                          !!busy ||
+                          !visibleIntent.canCancel ||
+                          !knownCheckoutReason(visibleIntent.reasonCode)
+                        }
+                        onChange={(event) =>
+                          setFreezeConsent(event.target.checked ? intentKey : null)
+                        }
+                      />
+                      <span>
+                        I confirm permanently freezing this exact saved payment for manager review.
+                        I understand that collection and no-money cancellation will remain blocked.
+                      </span>
+                    </label>
+                    <button
+                      className="secondary"
+                      disabled={
+                        !!busy ||
+                        !visibleIntent.canCancel ||
+                        !knownCheckoutReason(visibleIntent.reasonCode) ||
+                        freezeConsent !== intentKey
+                      }
+                      onClick={() => void freezeForManager()}
+                    >
+                      Permanently freeze payment
+                    </button>
+                  </details>
+                  {!visibleIntent.canCancel && (
+                    <button
+                      className="secondary"
+                      disabled={!!busy || !ready}
+                      onClick={() => void unlock()}
+                    >
+                      Unlock payment review
+                    </button>
+                  )}
+                </>
               )}
             </section>
           )}

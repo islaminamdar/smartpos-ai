@@ -67,6 +67,18 @@ public final class NativeCheckoutEngine {
         db.execSQL("CREATE TRIGGER offline_chain_replace BEFORE INSERT ON offline_chain WHEN EXISTS(SELECT 1 FROM offline_chain) BEGIN SELECT RAISE(ABORT,'custody_replace'); END");
     }
 
+    /** Version 4 is additive. A freeze can only be followed by a separately verified
+     * manager result in a future migration; it cannot be erased or called never-collected. */
+    static void createFreezeTables(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE offline_intent_freezes (intent_id TEXT PRIMARY KEY NOT NULL REFERENCES offline_intent_context(intent_id), freeze_id TEXT UNIQUE NOT NULL CHECK(length(freeze_id)=36), proof_payload_sha256 TEXT NOT NULL CHECK(length(proof_payload_sha256)=64), proof_envelope TEXT NOT NULL, envelope_sha256 TEXT NOT NULL CHECK(length(envelope_sha256)=64), frozen_observation_json TEXT NOT NULL)");
+        db.execSQL("CREATE TRIGGER offline_freeze_immutable_update BEFORE UPDATE ON offline_intent_freezes BEGIN SELECT RAISE(ABORT,'immutable_freeze'); END");
+        db.execSQL("CREATE TRIGGER offline_freeze_immutable_delete BEFORE DELETE ON offline_intent_freezes BEGIN SELECT RAISE(ABORT,'immutable_freeze'); END");
+        db.execSQL("CREATE TRIGGER offline_freeze_insert_guard BEFORE INSERT ON offline_intent_freezes WHEN EXISTS(SELECT 1 FROM offline_intent_freezes WHERE intent_id=NEW.intent_id OR freeze_id=NEW.freeze_id) OR EXISTS(SELECT 1 FROM intents WHERE id=NEW.intent_id AND receipt_id IS NOT NULL) OR EXISTS(SELECT 1 FROM receipts WHERE intent_id=NEW.intent_id) OR EXISTS(SELECT 1 FROM offline_intent_cancellations WHERE intent_id=NEW.intent_id) BEGIN SELECT RAISE(ABORT,'freeze_conflict'); END");
+        db.execSQL("CREATE TRIGGER offline_frozen_receipt_guard BEFORE INSERT ON receipts WHEN EXISTS(SELECT 1 FROM offline_intent_freezes WHERE intent_id=NEW.intent_id) BEGIN SELECT RAISE(ABORT,'payment_frozen'); END");
+        db.execSQL("CREATE TRIGGER offline_frozen_intent_guard BEFORE UPDATE OF receipt_id ON intents WHEN NEW.receipt_id IS NOT NULL AND EXISTS(SELECT 1 FROM offline_intent_freezes WHERE intent_id=NEW.id) BEGIN SELECT RAISE(ABORT,'payment_frozen'); END");
+        db.execSQL("CREATE TRIGGER offline_frozen_cancel_guard BEFORE INSERT ON offline_intent_cancellations WHEN EXISTS(SELECT 1 FROM offline_intent_freezes WHERE intent_id=NEW.intent_id) BEGIN SELECT RAISE(ABORT,'payment_frozen'); END");
+    }
+
     /** freshServerMs must originate from a fresh authenticated native HTTPS exchange, never JS
      * wall time or an old authority timestamp. Exact installation retries never reset the anchor. */
     void installVerifiedBundle(String snapshotEnvelope, String authorityEnvelope, long freshServerMs) throws Exception {
@@ -168,6 +180,7 @@ public final class NativeCheckoutEngine {
                     String original = receiptEnvelope(db, intent.getString("orderId")); db.setTransactionSuccessful(); return original;
                 }
                 if ("cancelled".equals(intent.getString("state"))) throw invalid("intent_cancelled");
+                if ("frozen_for_manager".equals(intent.getString("state"))) throw invalid("payment_frozen");
                 JSONObject request = intent.getJSONObject("request"); OfflineBundle bundle = bundle(db, request.getString("authorityId"));
                 unlock.requireUnlocked(binding); OfflineCalculator.Calculation calculation = calculate(bundle, request);
                 State state = state(db, bundle.authorityId); checkBudget(bundle, state, calculation.grossFils);
@@ -204,6 +217,7 @@ public final class NativeCheckoutEngine {
                 JSONObject intent = intentState(db, intentId);
                 unlock.requireUnlocked(binding);
                 if ("committed".equals(intent.getString("state"))) throw invalid("already_issued");
+                if ("frozen_for_manager".equals(intent.getString("state"))) throw invalid("payment_frozen");
                 if ("cancelled".equals(intent.getString("state"))) {
                     try (Cursor c = db.rawQuery("SELECT reason FROM offline_intent_cancellations WHERE intent_id=?", new String[]{intentId})) {
                         if (!c.moveToFirst() || !reason.equals(c.getString(0))) throw invalid("cancellation_conflict");
@@ -216,6 +230,68 @@ public final class NativeCheckoutEngine {
             } finally { db.endTransaction(); }
         }
     }
+
+    /** Irreversibly freeze an unissued payment before any online manager request.
+     * Returns custody evidence internally; the bridge returns only the display summary. */
+    public String freezePaymentIntentForManager(String intentId)throws Exception {
+        uuid(intentId);
+        synchronized(journal){
+            SQLiteDatabase db=journal.getWritableDatabase();db.beginTransaction();
+            try {
+                JSONObject base=freezeBase(db,intentId);unlock.requireUnlocked(binding);
+                JSONObject saved=intentState(db,intentId);
+                if("committed".equals(saved.getString("state")))throw invalid("already_issued");
+                if("cancelled".equals(saved.getString("state")))throw invalid("intent_cancelled");
+                if("frozen_for_manager".equals(saved.getString("state"))){String original=verifiedFreeze(db,intentId,base).getString("envelope");db.setTransactionSuccessful();return original;}
+                JSONObject head;
+                try(Cursor c=db.rawQuery("SELECT key_epoch,sequence,event_hash FROM offline_chain WHERE slot=1",null)){
+                    if(!c.moveToFirst()||!binding.keyEpoch.equals(c.getString(0)))throw invalid("chain_missing");
+                    head=new JSONObject().put("sequence",c.getLong(1)).put("eventSha256",c.isNull(2)?JSONObject.NULL:c.getString(2));checkFreezeHead(head);
+                }
+                Object observation=JSONObject.NULL;
+                // Diagnostic only. This does not advance an authority clock or authorize a sale.
+                // The PIN guard is still mandatory; a failed PIN clock cannot be bypassed here.
+                try {OfflineClock.Reading reading=clock.read();observation=new JSONObject().put("bootId",reading.bootId).put("elapsedRealtimeMs",reading.elapsedRealtimeMs).put("wallTimeMs",reading.wallTimeMs);}
+                catch(Exception unavailable){/* Preserve unknown observation honestly. */}
+                String freezeId=UUID.randomUUID().toString();JSONObject payload=base.put("freezeId",freezeId).put("chainHead",head).put("observation",observation);
+                String envelope=sign(payload);SignedProtocol.Verified verified=SignedProtocol.verify(envelope,Collections.singletonMap(SignedProtocol.fingerprint(deviceKey),deviceKey));
+                ContentValues row=new ContentValues();row.put("intent_id",intentId);row.put("freeze_id",freezeId);row.put("proof_payload_sha256",verified.payloadSha256);row.put("proof_envelope",envelope);row.put("envelope_sha256",NativeJournal.hash(envelope));row.put("frozen_observation_json",canonicalValue(observation));
+                db.insertOrThrow("offline_intent_freezes",null,row);db.setTransactionSuccessful();return envelope;
+            }finally{db.endTransaction();}
+        }
+    }
+    private JSONObject freezeBase(SQLiteDatabase db,String intentId)throws Exception {
+        try(Cursor c=db.rawQuery("SELECT i.request_json,i.request_hash,i.created_at,x.authority_id,x.order_id,x.document_id FROM intents i JOIN offline_intent_context x ON x.intent_id=i.id WHERE i.id=?",new String[]{intentId})){
+            if(!c.moveToFirst())throw invalid("intent_missing");
+            String exact=c.getString(0);JSONObject request=checkedRequest(object(CanonicalJson.parse(exact.getBytes(StandardCharsets.UTF_8))));
+            if(!canonical(request).equals(exact)||!NativeJournal.hash(exact).equals(c.getString(1))||!request.getString("authorityId").equals(c.getString(3)))throw invalid("intent_integrity_failed");
+            OfflineBundle b=bundle(db,c.getString(3));calculate(b,request);String created=c.getString(2);strictIso(created);uuid(c.getString(4));uuid(c.getString(5));
+            return new JSONObject().put("kind","offline-payment-freeze").put("schemaVersion",1).put("paymentIntentId",intentId).put("orderId",c.getString(4)).put("documentId",c.getString(5))
+                .put("organizationId",b.organizationId).put("branchId",b.branchId).put("deviceId",b.deviceId).put("actorId",b.actorId).put("shiftId",b.shiftId).put("keyEpoch",b.keyEpoch).put("deviceKeySha256",b.deviceKeySha256)
+                .put("authorityId",b.authorityId).put("authoritySha256",b.authoritySha256).put("snapshotSha256",b.snapshotSha256).put("requestSha256",c.getString(1)).put("request",request).put("intentCreatedAt",created)
+                .put("declaration","local-intent-unissued-and-permanently-frozen");
+        }
+    }
+    private JSONObject verifiedFreeze(SQLiteDatabase db,String id,JSONObject base)throws Exception {
+        try(Cursor c=db.rawQuery("SELECT freeze_id,proof_payload_sha256,proof_envelope,envelope_sha256,frozen_observation_json FROM offline_intent_freezes WHERE intent_id=?",new String[]{id})){
+            if(!c.moveToFirst())throw invalid("freeze_missing");String envelope=c.getString(2);
+            if(!NativeJournal.hash(envelope).equals(c.getString(3)))throw invalid("freeze_integrity_failed");
+            SignedProtocol.Verified verified=SignedProtocol.verify(envelope,Collections.singletonMap(SignedProtocol.fingerprint(deviceKey),deviceKey));JSONObject proof=object(verified.payload());
+            if(!verified.payloadSha256.equals(c.getString(1))||!c.getString(0).equals(string(proof,"freezeId")))throw invalid("freeze_integrity_failed");uuid(c.getString(0));
+            checkFreezeHead(proof.getJSONObject("chainHead"));Object observation=proof.get("observation");
+            if(observation!=JSONObject.NULL){JSONObject value=object(observation);fields(value,"bootId","elapsedRealtimeMs","wallTimeMs");new OfflineClock.Reading(string(value,"bootId"),integer(value,"elapsedRealtimeMs",0,9_007_199_254_740_991L),integer(value,"wallTimeMs",0,OfflineClock.MAX_TIME_MS));}
+            if(!canonicalValue(observation).equals(c.getString(4)))throw invalid("freeze_integrity_failed");
+            proof.remove("freezeId");proof.remove("chainHead");proof.remove("observation");
+            if(!canonical(proof).equals(canonical(base)))throw invalid("freeze_integrity_failed");
+            return new JSONObject().put("envelope",envelope).put("managerReview",new JSONObject().put("freezeId",c.getString(0)).put("proofSha256",c.getString(1)).put("status","saved_locally"));
+        }
+    }
+    private static void checkFreezeHead(JSONObject head)throws Exception {
+        fields(head,"sequence","eventSha256");long sequence=integer(head,"sequence",0,9_007_199_254_740_991L);
+        if(sequence==0){if(!head.isNull("eventSha256"))throw invalid("chain_missing");}
+        else if(!(head.get("eventSha256") instanceof String)||!head.getString("eventSha256").matches("[0-9a-f]{64}"))throw invalid("chain_missing");
+    }
+    private static String canonicalValue(Object value)throws Exception{return new String(CanonicalJson.bytes(value),StandardCharsets.UTF_8);}
 
     /** Stop new issuance durably BEFORE returning the exact signed terminal declaration. */
     public String sealAuthority(String authorityId) throws Exception { return sealAuthority(authorityId,true); }
@@ -378,11 +454,14 @@ public final class NativeCheckoutEngine {
     }
     private static boolean hasUncertain(SQLiteDatabase db) { return exists(db,"SELECT 1 FROM intents i LEFT JOIN offline_intent_cancellations c ON c.intent_id=i.id WHERE i.receipt_id IS NULL AND c.intent_id IS NULL LIMIT 1"); }
     private static boolean exists(SQLiteDatabase db,String sql) { try(Cursor c=db.rawQuery(sql,null)){return c.moveToFirst();} }
-    private static JSONObject intentState(SQLiteDatabase db,String id) throws Exception {
-        try(Cursor c=db.rawQuery("SELECT i.request_json,i.receipt_id,x.order_id,x.document_id,c.intent_id FROM intents i JOIN offline_intent_context x ON x.intent_id=i.id LEFT JOIN offline_intent_cancellations c ON c.intent_id=i.id WHERE i.id=?",new String[]{id})) {
+    private JSONObject intentState(SQLiteDatabase db,String id) throws Exception {
+        try(Cursor c=db.rawQuery("SELECT i.request_json,i.receipt_id,x.order_id,x.document_id,c.intent_id,f.intent_id FROM intents i JOIN offline_intent_context x ON x.intent_id=i.id LEFT JOIN offline_intent_cancellations c ON c.intent_id=i.id LEFT JOIN offline_intent_freezes f ON f.intent_id=i.id WHERE i.id=?",new String[]{id})) {
             if(!c.moveToFirst())throw invalid("intent_missing");
-            return new JSONObject().put("intentId",id).put("state",!c.isNull(1)?"committed":!c.isNull(4)?"cancelled":"payment_confirmation_required")
+            if(!c.isNull(5)&&(!c.isNull(1)||!c.isNull(4)))throw invalid("freeze_integrity_failed");
+            JSONObject result=new JSONObject().put("intentId",id).put("state",!c.isNull(1)?"committed":!c.isNull(4)?"cancelled":!c.isNull(5)?"frozen_for_manager":"payment_confirmation_required")
                 .put("orderId",c.getString(2)).put("documentId",c.getString(3)).put("request",CanonicalJson.parse(c.getString(0).getBytes(StandardCharsets.UTF_8)));
+            if(!c.isNull(5))result.put("managerReview",verifiedFreeze(db,id,freezeBase(db,id)).getJSONObject("managerReview"));
+            return result;
         }
     }
     private static String receiptEnvelope(SQLiteDatabase db,String id) {

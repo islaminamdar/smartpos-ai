@@ -20,7 +20,7 @@ public final class NativeJournal extends SQLiteOpenHelper {
     private final CommitProbe probe;
     public NativeJournal(Context context) { this(context, DATABASE, () -> {}); }
     NativeJournal(Context context, String name, CommitProbe probe) {
-        super(context, name, null, 3);
+        super(context, name, null, 4);
         this.probe = probe;
         setWriteAheadLoggingEnabled(true);
     }
@@ -51,11 +51,13 @@ public final class NativeJournal extends SQLiteOpenHelper {
         db.execSQL("CREATE TRIGGER intents_insert_guard BEFORE INSERT ON intents WHEN EXISTS(SELECT 1 FROM intents WHERE id=NEW.id) BEGIN SELECT RAISE(ABORT,'intent_exists'); END");
         NativeCheckoutEngine.createTables(db);
         NativeReconciliation.createTables(db);
+        NativeCheckoutEngine.createFreezeTables(db);
     }
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        if ((oldVersion == 1 || oldVersion == 2) && newVersion == 3) {
+        if (oldVersion >= 1 && oldVersion <= 3 && newVersion == 4) {
             if(oldVersion==1)NativeCheckoutEngine.createTables(db);
-            NativeReconciliation.createTables(db);return;
+            if(oldVersion<=2)NativeReconciliation.createTables(db);
+            NativeCheckoutEngine.createFreezeTables(db);return;
         }
         throw new IllegalStateException("A reviewed ledger migration is required");
     }

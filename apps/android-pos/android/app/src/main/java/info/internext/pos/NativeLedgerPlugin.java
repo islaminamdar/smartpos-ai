@@ -84,6 +84,7 @@ public final class NativeLedgerPlugin extends Plugin {
     @PluginMethod public void getPaymentIntent(PluginCall call){checkoutCall(call,()->checkout().getPaymentIntent(call.getData().getString("intentId")),"intentId");}
     @PluginMethod public void confirmPaymentIntent(PluginCall call){checkoutCall(call,()->checkout().confirmPaymentIntent(call.getData().getString("intentId")),"intentId");}
     @PluginMethod public void cancelUncollectedIntent(PluginCall call){checkoutCall(call,()->checkout().cancelUncollectedIntent(call.getData().getString("intentId"),call.getData().getString("reason")),"intentId","reason");}
+    @PluginMethod public void freezePaymentIntentForManager(PluginCall call){checkoutCall(call,()->checkout().freezePaymentIntentForManager(call.getData().getString("intentId")),"intentId");}
     @PluginMethod public void getReceipt(PluginCall call){checkoutCall(call,()->checkout().getReceipt(call.getData().getString("id")),"id");}
     @PluginMethod public void getReconciliationState(PluginCall call){execute(call,()->reconciliation().getState(),true);}
     @PluginMethod public void reconcileOffline(PluginCall call){execute(call,()->reconciliation().reconcile(),true);}
