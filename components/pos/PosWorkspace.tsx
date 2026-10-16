@@ -1,5 +1,6 @@
 'use client'
 
+import { csvTextCell } from '@/lib/pos/csv'
 import {
   createContext,
   useContext,
@@ -698,9 +699,7 @@ export default function PosWorkspace() {
     ]
     download(
       `internext-training-sales-${new Date().toISOString().slice(0, 10)}.csv`,
-      rows
-        .map((row) => row.map((v) => `"${String(v).replaceAll('"', '""')}"`).join(','))
-        .join('\r\n'),
+      rows.map((row) => row.map((v) => csvTextCell(String(v))).join(',')).join('\r\n'),
       'text/csv;charset=utf-8'
     )
   }

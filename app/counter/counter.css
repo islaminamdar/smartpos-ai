@@ -676,3 +676,80 @@
     break-inside: avoid;
   }
 }
+
+.lc-catalogue-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+  gap: 24px;
+  align-items: start;
+}
+.lc-catalogue-list {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.lc-catalogue-list > button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  text-align: left;
+  padding: 16px;
+  background: white;
+  border: 1px solid #dce3ed;
+  border-radius: 12px;
+}
+.lc-catalogue-list > button[aria-pressed='true'] {
+  border: 2px solid #165bc5;
+}
+.lc-catalogue-list > button span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.lc-catalogue-list > button > strong {
+  white-space: nowrap;
+}
+.lc-catalogue-list small {
+  display: block;
+  margin-top: 6px;
+  color: #526278;
+}
+.lc-menu-editor {
+  background: white;
+  border: 1px solid #dce3ed;
+  border-radius: 16px;
+  padding: 24px;
+  scroll-margin-top: 24px;
+}
+.lc-menu-editor fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+}
+.lc-menu-editor img {
+  border-radius: 12px;
+  object-fit: cover;
+  margin: 0 0 16px;
+}
+.lc-success {
+  border: 1px solid #b8dfcf;
+  border-radius: 12px;
+  padding: 14px;
+  color: #14543e;
+  background: #eaf8f1;
+}
+@media (max-width: 760px) {
+  .lc-catalogue-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .lc-menu-editor {
+    grid-row: 1;
+  }
+  .lc-catalogue-list > button {
+    padding: 12px;
+    gap: 8px;
+  }
+}

@@ -1,0 +1,51 @@
+# Commercial POS scope and release evidence
+
+Updated 2026-10-16. This document distinguishes the live online pilot from the expanded commercial product. A reachable website, a successful build, or a passing unit test is not evidence that every planned feature is delivered.
+
+## Commercial decisions
+
+- New commercial target: USD 100 per branch per month, all delivered features and multiple staff/devices included. No paid feature tiers are proposed.
+- The first Bur Dubai pilot was previously agreed at AED 100 per branch per month, manually collected. Keep its existing record unchanged unless the customer approves replacement terms.
+- PayPal recurring subscriptions require a configured Business merchant, a verified monthly USD 100 plan, sandbox checkout/webhook/cancellation evidence, then explicit live configuration. Missing configuration must keep checkout unavailable. No payment or subscription has been initiated during development.
+- Hardware selection is deferred. Native APK delivery and physical receipt/kitchen printing remain acceptance items, not reasons to delay the web implementation.
+
+## Delivery and verification matrix
+
+| Area                     | Intended behavior                                                                                                                 | Current evidence / remaining work                                                                                                                                                                     |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Staff access             | Authenticated branch staff; bound browser counters; owner, manager and cashier permissions                                        | Live pilot deployed; cross-tenant/device checks tested. Staff invitations, account recovery and permission-management UI pending.                                                                     |
+| Counter selling          | Dine-in, takeaway and delivery order type; cash, recorded card or split tender; exact change                                      | Live online flow tested on synthetic tenants. Card recording is not card-terminal integration. Table assignment, delivery dispatch and shared held orders pending.                                    |
+| Menu                     | Authentic photos, categories, availability, piece/pack/kg pricing; audited edits with stale-basket rejection                      | 133 source items/125 source images loaded; 103 active priced/30 disabled. Manager editor and revision protection under local verification; not yet deployed. New image upload pending.                |
+| Invoices and returns     | Immutable merchant/line/tax snapshots, sequential identifiers, exact original full credit notes                                   | Live pilot verified. Partial credit notes, controlled discounts and customer-account payments pending.                                                                                                |
+| Cash drawer              | Opening float, cash in/out with reasons, reconciliation, no unsupported cash withdrawal                                           | Live pilot verified, including real concurrent server tests. Manager multi-counter closing dashboard pending.                                                                                         |
+| Offers                   | Percentage/fixed discounts, scheduled happy hours, bundles, buy-X-get-Y, coupons, eligibility and usage limits                    | Not implemented in live pilot. Must define stacking/rounding, lock usage atomically, retain applied-offer snapshot and refund original net paid amount.                                               |
+| Loyalty and customers    | Opt-in profiles, points, earned/redeemed history, tiers and customer balance                                                      | Planned. No customer marketing messages or invented customer data. Ledger and refund reversal tests required.                                                                                         |
+| Tables and kitchen       | Floor/table status, shared orders, courses, item routing, kitchen tickets/display, ready/served tracking                          | Training contains local holds/kitchen workflows only. Multi-device live coordination, duplicate-print prevention and kitchen hardware pending.                                                        |
+| Inventory and purchasing | Recipes and ingredients, purchase receiving, waste, counts, adjustments, transfers and low-stock visibility                       | Planned. Quantity precision, stock ownership and audit/rollback tests required.                                                                                                                       |
+| Reporting                | Branch/day/shift totals, payment/VAT breakdown, returns, staff and product reports; exports                                       | Receipt history and own-shift reconciliation live. Broader branch reports/export and cross-branch dashboard pending.                                                                                  |
+| Offline and Android      | Durable local sales ledger, stable request IDs, device-specific invoice allocation, retry reconciliation, native printer adapters | Browser training works offline. Real financial sales remain online-only. Signed offline permission, native durable store, multi-counter outage/reconnect tests, APK signing and device tests pending. |
+| SaaS billing             | USD 100 monthly PayPal approval, verified payment events, retry-safe cancellation, visible billing state                          | Backend/UI and isolated tests in progress; no merchant credentials or sandbox roundtrip verified. Existing AED pilot unchanged.                                                                       |
+| Website and usability    | Honest availability copy, staff access, mobile and desktop layouts, keyboard use                                                  | Live baseline inspected. New specialist-designed homepage and billing screen require fresh rendered checks before release.                                                                            |
+| Security and operations  | Tenant isolation, auth/rate limiting, permission checks, immutable financial records, scoped deployments, restore evidence        | Baseline review running; legacy routes remain inaccessible. Source-specific login limiter fix pending. Same-host daily backups restored in tests; off-host disaster recovery pending.                 |
+
+## Acceptance sequence
+
+1. Integrate and verify catalogue administration, subscription boundaries and the login-rate-limit fix. Run unit, isolated SQL, real concurrent transaction, static security and responsive browser checks on the exact candidate release. Test with synthetic branches, never fabricated transactions in the restaurant ledger.
+2. Publish the reviewed web release with a verified pre-change backup, migration ledger and artifact checks. Read back public behavior and check existing neighboring sites. PayPal remains disabled until the merchant configuration and sandbox evidence are complete.
+3. Implement offers and branch reports, then live kitchen/table workflows and staff management. Each addition must have a usable browser flow and authoritative server behavior before it is marked delivered.
+4. Complete loyalty and inventory workflows, and test changes across roles, branches, reversals and competing devices.
+5. Implement offline live reconciliation and native Android durability/printing. Reconnection must not duplicate a bill, refund, payment or stock event. Physical receipt delivery and crash recovery need device evidence.
+6. Complete end-to-end customer acceptance and operational handover. Do not claim superiority over every POS; compare verified functionality against specific requirements and published competitor features.
+
+## Benchmark sources consulted
+
+These are feature references, not claims that this implementation matches or exceeds those products:
+
+- [OrderPin POS](https://www.orderpin.co/products-pos/)
+- [OrderPin ordering help](https://helpcenter.orderpin.co/docs/POS-Ordering)
+- [Square for Restaurants](https://squareup.com/us/en/point-of-sale/restaurants)
+- [Square feature/pricing matrix](https://squareup.com/us/en/point-of-sale/software/pricing)
+- [Toast loyalty](https://pos.toasttab.com/products/loyalty/)
+- [Toast automatic discounts](https://doc.toasttab.com/doc/platformguide/adminAutoApplyDiscounts.html)
+
+Private deployment evidence, credentials and restaurant financial records must remain outside this repository.

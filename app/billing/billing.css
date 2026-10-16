@@ -1,0 +1,249 @@
+.billing-shell {
+  min-height: 100vh;
+  background: #f5f3ed;
+  color: #192b25;
+  padding: 0 max(20px, calc((100vw - 1120px) / 2));
+  font-family: Arial, sans-serif;
+}
+.billing-shell * {
+  box-sizing: border-box;
+}
+.billing-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  padding: 28px 0;
+  border-bottom: 1px solid #d5d8ce;
+}
+.billing-shell a {
+  color: inherit;
+  text-underline-offset: 4px;
+}
+.billing-brand {
+  font-weight: 800;
+  font-size: 24px;
+  letter-spacing: -1px;
+  text-decoration: none;
+}
+.billing-brand span {
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.billing-intro {
+  padding: 60px 0 35px;
+  max-width: 670px;
+}
+.billing-eyebrow {
+  font-size: 12px;
+  letter-spacing: 2px;
+  font-weight: 700;
+}
+.billing-intro h1 {
+  font-size: clamp(40px, 6vw, 68px);
+  line-height: 1.02;
+  letter-spacing: -3px;
+  margin: 18px 0;
+}
+.billing-shell p {
+  font-size: 15px;
+  line-height: 1.65;
+}
+.billing-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 24px;
+}
+.billing-card {
+  border: 1px solid #d5d8ce;
+  background: #fff;
+  padding: 30px;
+  border-radius: 18px;
+  min-width: 0;
+}
+.billing-price {
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -1px;
+}
+.billing-price span {
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.billing-field {
+  display: grid;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  margin-top: 24px;
+}
+.billing-field select {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px;
+  border: 1px solid #9baba0;
+  border-radius: 8px;
+  background: #fff;
+  color: #192b25;
+}
+.billing-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 22px 0;
+}
+.billing-check input {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  accent-color: #244d3d;
+}
+.billing-shell button,
+.billing-approve {
+  display: block;
+  width: 100%;
+  text-align: center;
+  border: 1px solid #244d3d;
+  border-radius: 8px;
+  padding: 14px 18px;
+  min-height: 48px;
+  background: #244d3d;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.billing-shell button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.billing-shell .billing-secondary {
+  background: #fff;
+  color: #244d3d;
+}
+.billing-shell .billing-approve {
+  color: #fff;
+  margin-top: 12px;
+}
+.billing-shell :focus-visible {
+  outline: 3px solid #cf9b28;
+  outline-offset: 4px;
+}
+.billing-shell .billing-note {
+  font-size: 12px;
+  color: #5c6a62;
+}
+.billing-shell .billing-terms {
+  font-size: 13px;
+}
+.billing-sandbox {
+  background: #fff2c7;
+  padding: 12px;
+  border-radius: 8px;
+}
+.billing-message {
+  overflow-wrap: anywhere;
+  min-height: 26px;
+}
+.billing-card h2 {
+  font-size: 22px;
+  margin: 0 0 18px;
+}
+.billing-card dl {
+  margin: 20px 0;
+}
+.billing-card dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid #e4e7df;
+  padding: 14px 0;
+  font-size: 14px;
+}
+.billing-card dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.billing-cancel {
+  border-top: 1px solid #e4e7df;
+  margin-top: 26px;
+  padding-top: 3px;
+}
+.billing-signin {
+  display: inline-block;
+  margin-top: 24px;
+  font-size: 14px;
+  min-height: 44px;
+  padding-top: 10px;
+}
+.billing-ledger {
+  margin-top: 24px;
+}
+.billing-ledger ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.billing-ledger li {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 0;
+  border-bottom: 1px solid #e4e7df;
+  font-size: 14px;
+}
+.billing-ledger li div {
+  display: grid;
+  gap: 6px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.billing-ledger li div:last-child {
+  text-align: right;
+}
+.billing-ledger li span {
+  font-size: 12px;
+  color: #5c6a62;
+}
+.billing-footer {
+  padding: 30px 0 40px;
+  font-size: 13px;
+}
+@media (max-width: 700px) {
+  .billing-grid {
+    grid-template-columns: 1fr;
+  }
+  .billing-card {
+    padding: 22px;
+  }
+  .billing-intro {
+    padding: 40px 0 26px;
+  }
+  .billing-nav {
+    padding: 20px 0;
+  }
+  .billing-nav > a:last-child {
+    font-size: 13px;
+  }
+  .billing-price {
+    font-size: 32px;
+  }
+  .billing-price span {
+    display: block;
+    margin-top: 5px;
+  }
+  .billing-intro h1 {
+    letter-spacing: -2px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .billing-shell * {
+    scroll-behavior: auto;
+  }
+}

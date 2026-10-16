@@ -20,10 +20,11 @@ import {
   type PendingOnlineRequest,
 } from '@/lib/pos/online-journal'
 import FiscalReceipt from './FiscalReceipt'
+import CatalogueManager from './CatalogueManager'
 
 type Product = LiveBootstrap['catalogue'][number]
 type BasketLine = { product: Product; quantityMilli: number }
-type View = 'sell' | 'receipts' | 'shift' | 'branch'
+type View = 'sell' | 'receipts' | 'shift' | 'branch' | 'menu'
 class ApiError extends Error {
   constructor(
     public status: number,
@@ -449,6 +450,7 @@ export default function LiveCounter() {
           quantityMilli: line.quantityMilli,
           expectedUnitPriceFils: line.product.unitPriceFils,
           expectedTaxRateBps: line.product.taxRateBps,
+          expectedRevision: line.product.revision,
         })),
         payments: [
           ...(cashApplied ? [{ method: 'cash' as const, amountFils: cashApplied }] : []),
@@ -674,18 +676,42 @@ export default function LiveCounter() {
       ) : (
         <>
           <nav className="lc-tabs lc-noprint" aria-label="Counter navigation">
-            {(['sell', 'receipts', 'shift', 'branch'] as View[]).map((item) => (
-              <button
-                key={item}
-                aria-current={view === item ? 'page' : undefined}
-                onClick={() => setView(item)}
-              >
-                {{ sell: 'Sell', receipts: 'Receipts', shift: 'Shift', branch: 'Branch' }[item]}
-              </button>
-            ))}
+            {(['sell', 'receipts', 'shift', ...(manager ? ['menu'] : []), 'branch'] as View[]).map(
+              (item) => (
+                <button
+                  key={item}
+                  aria-current={view === item ? 'page' : undefined}
+                  onClick={() => setView(item)}
+                >
+                  {
+                    {
+                      sell: 'Sell',
+                      receipts: 'Receipts',
+                      shift: 'Shift',
+                      branch: 'Branch',
+                      menu: 'Menu',
+                    }[item]
+                  }
+                </button>
+              )
+            )}
             <span>{boot.device.name}</span>
           </nav>
           <main className="lc-main">
+            {view === 'menu' && manager && (
+              <CatalogueManager
+                key={`${boot.userId}:${branchId}`}
+                branchId={branchId}
+                deviceId={boot.device.id}
+                disabled={busy || !!pending || !online}
+                onChanged={async () => {
+                  await refresh()
+                  setBasket([])
+                  setCashInput('')
+                  setCardInput('')
+                }}
+              />
+            )}
             {view === 'sell' && (
               <div className="lc-sell lc-noprint">
                 <section className="lc-menu">

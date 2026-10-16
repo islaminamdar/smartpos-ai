@@ -60,19 +60,62 @@ describe('training-only hosted release', () => {
 
 describe('online pilot route isolation', () => {
   it('permits only exact pilot endpoints and keeps every legacy route blocked', () => {
-    for (const [path, method] of [['/counter', 'GET'], ['/api/pos/session', 'POST'], ['/api/pos/session', 'DELETE'], ['/api/pos/bootstrap', 'GET'], ['/api/pos/sync', 'POST'], ['/api/pos/commands', 'POST'], ['/api/pos/receipts', 'GET'], ['/api/pos/devices', 'POST']]) expect(publicReleaseAccess(path, method, true)).toBe('allow')
-    for (const path of ['/login', '/signup', '/dashboard', '/api/ai/parse-order', '/api/print', '/api/stripe/webhook', '/api/whatsapp/webhook']) expect(publicReleaseAccess(path, 'POST', true)).toBe('not_found')
+    for (const [path, method] of [
+      ['/counter', 'GET'],
+      ['/api/pos/session', 'POST'],
+      ['/api/pos/session', 'DELETE'],
+      ['/api/pos/bootstrap', 'GET'],
+      ['/api/pos/sync', 'POST'],
+      ['/api/pos/commands', 'POST'],
+      ['/api/pos/receipts', 'GET'],
+      ['/api/pos/devices', 'POST'],
+    ])
+      expect(publicReleaseAccess(path, method, true)).toBe('allow')
+    for (const path of [
+      '/login',
+      '/signup',
+      '/dashboard',
+      '/api/ai/parse-order',
+      '/api/print',
+      '/api/stripe/webhook',
+      '/api/whatsapp/webhook',
+    ])
+      expect(publicReleaseAccess(path, 'POST', true)).toBe('not_found')
     expect(publicReleaseAccess('/counter', 'POST', true)).toBe('not_found')
     expect(publicReleaseAccess('/api/pos/session', 'PUT', true)).toBe('unavailable')
   })
   it('never falls back to legacy auth/routes when release flags are absent', async () => {
-    vi.stubEnv('POS_PUBLIC_RELEASE_ONLY', 'false'); vi.stubEnv('POS_ONLINE_PILOT', 'false')
-    try { expect((await middleware(new NextRequest('https://pos.internext.info/signup'))).status).toBe(404) }
-    finally { vi.unstubAllEnvs() }
+    vi.stubEnv('POS_PUBLIC_RELEASE_ONLY', 'false')
+    vi.stubEnv('POS_ONLINE_PILOT', 'false')
+    try {
+      expect((await middleware(new NextRequest('https://pos.internext.info/signup'))).status).toBe(
+        404
+      )
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 })
 
 it('allows explicit pending recovery even when sale writes are paused', () => {
   expect(publicReleaseAccess('/api/pos/recovery', 'POST', true)).toBe('allow')
   expect(publicReleaseAccess('/api/pos/recovery', 'GET', true)).toBe('unavailable')
+})
+
+it('limits new manager and recurring billing surfaces to exact methods', () => {
+  for (const [path, methods] of Object.entries({
+    '/api/pos/catalogue': ['GET', 'POST'],
+    '/api/billing/paypal/status': ['GET'],
+    '/api/billing/paypal/checkout': ['POST'],
+    '/api/billing/paypal/reconcile': ['POST'],
+    '/api/billing/paypal/cancel': ['POST'],
+    '/api/billing/paypal/webhook': ['POST'],
+  })) {
+    for (const method of ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
+      expect(publicReleaseAccess(path, method, true) === 'allow').toBe(methods.includes(method))
+    expect(publicReleaseAccess(path + '/extra', 'POST', true)).not.toBe('allow')
+  }
+  expect(publicReleaseAccess('/billing', 'GET', true)).toBe('allow')
+  expect(publicReleaseAccess('/billing', 'POST', true)).toBe('not_found')
+  expect(publicReleaseAccess('/billing', 'GET', false)).toBe('not_found')
 })

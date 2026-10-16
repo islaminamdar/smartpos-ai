@@ -1,6 +1,6 @@
 # Internext POS
 
-Web-first restaurant POS under development for `pos.internext.info`. Commercial terms: **AED 100 per branch per month**, all planned features and multiple staff/devices included, with subscriptions collected manually initially.
+Web-first restaurant POS under development for `pos.internext.info`. Commercial target for new customers: **USD 100 per branch per month**, with PayPal recurring billing under development. The existing Bur Dubai pilot remains on its earlier **AED 100 manual plan** pending approval of any change. Multiple staff/devices are included. Planned features are not all delivered; see the [commercial readiness matrix](docs/plans/2026-10-16-commercial-pos-readiness.md).
 
 First pilot: **Abdul Gafoor Suleman Usman Mithaiwala Restaurant LLC — Bur Dubai**. Hardware selection is deferred. The next packaging target is an Android APK with bundled assets and local storage, followed by Windows. Neither native package is built yet.
 

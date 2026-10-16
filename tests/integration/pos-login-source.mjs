@@ -1,0 +1,26 @@
+import { readFile } from 'node:fs/promises'
+import { pathToFileURL } from 'node:url'
+import assert from 'node:assert/strict'
+const { PGlite } = await import(pathToFileURL(process.argv[2]).href)
+const db=new PGlite()
+await db.exec(`create role anon;create role authenticated;create role service_role;create schema auth;create table auth.users(id uuid primary key);create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('app.user_id',true),'')::uuid$$;grant usage on schema auth to authenticated;grant execute on function auth.uid() to authenticated;`)
+for(const file of ['20261016000100_pos_platform.sql','20261016000200_pos_operations.sql','20261016000300_pos_live_documents.sql','20261016000400_pos_online_access.sql','20261016000900_pos_login_source_limits.sql'])await db.exec(await readFile(new URL('../../supabase/migrations/'+file,import.meta.url),'utf8'))
+const key=n=>n.toString(16).padStart(64,'0')
+const attempt=async(account,source)=>(await db.query('select pos_login_attempt($1,$2) as allowed',[account,source])).rows[0].allowed
+await db.exec('set role service_role')
+for(let n=6000;n<6070;n++)assert.equal((await db.query('select pos_login_attempt($1) as allowed',[key(n)])).rows[0].allowed,true,'old release overload has no shared budget')
+for(let n=0;n<10;n++)assert.equal((await db.query('select pos_login_attempt($1) as allowed',[key(7000)])).rows[0].allowed,true)
+assert.equal((await db.query('select pos_login_attempt($1) as allowed',[key(7000)])).rows[0].allowed,false,'old release retains account limit')
+for(let n=1;n<=60;n++)assert.equal(await attempt(key(n),key(1000)),true)
+assert.equal(await attempt(key(61),key(1000)),false,'source exceeds its own budget')
+assert.equal(await attempt(key(62),key(1001)),true,'unrelated source/account unaffected by60bogusattempts')
+for(let n=0;n<10;n++)assert.equal(await attempt(key(2000),key(3000+n)),true)
+assert.equal(await attempt(key(2000),key(4000)),false,'account limit holds across source changes')
+assert.equal(await attempt(key(2001),key(4001)),true)
+assert.equal(await attempt(null,key(4001)),false)
+await db.exec('set role authenticated')
+await assert.rejects(attempt(key(5000),key(5001)),/permission denied/)
+await assert.rejects(db.query('select * from pos_login_windows'),/permission denied/)
+await db.exec(`reset role;update pos_login_windows set window_started=now()-interval '16 minutes';set role service_role;`)
+assert.equal(await attempt(key(2000),key(1000)),true,'expired windows reset')
+await db.close();console.log('PASS: no global denial bucket; source60/min independent; account10/15min retained across sources; private service-only storage/RPC; expiry; null inputs.')
