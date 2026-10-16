@@ -1,0 +1,382 @@
+.board,
+.save,
+.recovery {
+  color: #142d4e;
+  min-width: 0;
+}
+.board {
+  max-width: 1440px;
+  margin: auto;
+}
+.board *,
+.save *,
+.recovery * {
+  box-sizing: border-box;
+}
+.board button,
+.save button,
+.recovery button {
+  min-height: 48px;
+  padding: 11px 16px;
+  border: 1px solid #bccbdc;
+  border-radius: 8px;
+  background: white;
+  color: #142d4e;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.board button:disabled,
+.save button:disabled,
+.recovery button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.board button:focus-visible,
+.save button:focus-visible,
+.recovery button:focus-visible,
+.board input:focus-visible,
+.save input:focus-visible,
+.board textarea:focus-visible,
+.save textarea:focus-visible,
+.save select:focus-visible {
+  outline: 3px solid #165dcc;
+  outline-offset: 3px;
+}
+.board .primary,
+.save .primary,
+.recovery .primary {
+  background: #165dcc;
+  border-color: #165dcc;
+  color: white;
+}
+.board .danger {
+  background: #fff0ed;
+  color: #812b22;
+  border-color: #d9a7a0;
+}
+.heading,
+.toolbar,
+.actions,
+.pagination {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.heading h2 {
+  margin: 0 0 6px;
+}
+.heading p {
+  margin: 0;
+  color: #526176;
+}
+.scope,
+.updated,
+.help {
+  font-size: 0.88rem;
+  color: #526176;
+  line-height: 1.5;
+}
+.scope {
+  border-left: 4px solid #165dcc;
+  padding: 10px 14px;
+  background: #eaf1ff;
+}
+.toolbar {
+  margin: 18px 0;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #dce3eb;
+  justify-content: flex-start;
+}
+.toolbar button[aria-pressed='true'] {
+  color: #124da9;
+  border-color: #165dcc;
+  background: #eaf1ff;
+}
+.orders {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.order {
+  background: white;
+  border: 1px solid #c7d3e1;
+  border-radius: 10px;
+  padding: 20px;
+  min-width: 0;
+  align-self: start;
+}
+.order h3,
+.table h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  overflow-wrap: anywhere;
+}
+.reference {
+  color: #526176;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+.orderTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.badge {
+  background: #fff3dc;
+  color: #744609;
+  border-radius: 5px;
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.money {
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.money small {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: #526176;
+}
+.meta {
+  display: flex;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+}
+.lines {
+  padding: 0;
+  margin: 16px 0;
+  list-style: none;
+  border-top: 1px solid #dce3eb;
+}
+.lines li {
+  display: grid;
+  grid-template-columns: minmax(52px, auto) minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid #e6ebf1;
+  overflow-wrap: anywhere;
+}
+.lines small {
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+.order details summary {
+  min-height: 44px;
+  padding: 10px 0;
+  cursor: pointer;
+  font-weight: 600;
+}
+.notes {
+  padding: 10px 12px;
+  background: #f4f7fb;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.order .actions {
+  margin-top: 16px;
+  justify-content: flex-start;
+}
+.tables {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.table {
+  background: white;
+  border: 1px solid #c7d3e1;
+  border-top: 5px solid #16724c;
+  border-radius: 9px;
+  padding: 16px;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.table.occupied {
+  border-top-color: #a56412;
+}
+.table.inactive {
+  border-top-color: #66788f;
+  background: #eef1f5;
+}
+.table p {
+  margin: 0;
+}
+.table button {
+  width: 100%;
+  margin-top: 8px;
+}
+.editor {
+  max-width: 620px;
+  margin: 20px 0;
+  padding: 20px;
+  background: white;
+  border: 1px solid #c7d3e1;
+  border-radius: 10px;
+}
+.board label,
+.save label {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  min-width: 0;
+}
+.board input,
+.save input,
+.board textarea,
+.save textarea,
+.save select {
+  min-width: 0;
+  width: 100%;
+  min-height: 48px;
+  font: inherit;
+  padding: 10px;
+  border: 1px solid #aebccd;
+  border-radius: 7px;
+  color: #142d4e;
+  background: white;
+}
+.board textarea,
+.save textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+.board .check,
+.save .check,
+.recovery .check {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  margin: 12px 0;
+  font-weight: 500;
+  max-width: 75ch;
+}
+.check input {
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+  flex: 0 0 22px;
+  accent-color: #165dcc;
+}
+.error,
+.notice,
+.pending,
+.empty {
+  padding: 16px;
+  border-radius: 8px;
+  margin: 16px 0;
+  border: 1px solid #c7d3e1;
+  overflow-wrap: anywhere;
+}
+.error {
+  background: #fff0ed;
+  color: #812b22;
+  border-color: #e2b0a8;
+}
+.notice {
+  background: #edf6ef;
+  border-color: #adcdb7;
+}
+.pending {
+  background: #fff5df;
+  border-color: #dcc28b;
+}
+.pending h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.pending p {
+  line-height: 1.5;
+}
+.empty {
+  background: white;
+}
+.confirm {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid #dce3eb;
+  background: #f4f7fb;
+  border-radius: 8px;
+}
+.confirm p {
+  margin: 0;
+}
+.save {
+  padding: 16px 0;
+  border-top: 1px solid #dce3eb;
+}
+.save h3 {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+}
+.save > form > button {
+  width: 100%;
+}
+.saveGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+.pagination {
+  margin: 16px 0;
+  justify-content: flex-start;
+}
+.pagination p {
+  flex-basis: 100%;
+  margin: 0;
+}
+@media (max-width: 1000px) {
+  .tables {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 700px) {
+  .orders {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tables {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 420px) {
+  .tables,
+  .saveGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .heading > button,
+  .order .actions > button,
+  .pending > button {
+    width: 100%;
+  }
+  .order,
+  .editor {
+    padding: 16px;
+  }
+  .toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .toolbar button {
+    padding: 10px;
+  }
+}
+.saveSummary {
+  min-height: 48px;
+  padding: 12px 0;
+  cursor: pointer;
+  font-weight: 700;
+}

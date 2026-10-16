@@ -80,7 +80,7 @@ Targeted unit tests cover cookie/session behavior, login limits, origin checks, 
 
 Local checks do not establish production configuration, real Supabase session behavior or concurrent multi-backend transaction safety. Verify those on the actual isolated backend before activation, including two tenants, staff roles, devices, concurrent retries and cancellation races.
 
-Remaining limits include offline live reconciliation, partial/item returns, modifiers, stock restocking, unpaid shared orders/table coordination, external card settlement, printer hardware delivery, automatic subscription enforcement and fine-grained report permissions within a branch. Receipt reprinting uses immutable records but does not confirm physical printer delivery.
+Remaining limits include offline live reconciliation, partial/item returns, modifiers, stock restocking, external card settlement, printer hardware delivery, automatic subscription enforcement and fine-grained report permissions within a branch. Receipt reprinting uses immutable records but does not confirm physical printer delivery.
 
 ## Foundation compatibility
 
@@ -99,3 +99,9 @@ For a local preview only, explicitly use `POS_LOGIN_SOURCE_MODE=loopback-develop
 Kitchen tickets project only new immutable invoices, in the same transaction, and contain no prices, customer details, tender or coupon data. Full credit notes cancel matching tickets transactionally. The board is a paged online polling view, not a physical print queue. Stage changes require active branch staff and their bound device, without requiring a cash shift. Forward movement is adjacent; backward corrections require a manager and a reason.
 
 Kitchen writes take shared staff authority lock15, request lock18, then device, order and ticket locks. Recovery uses the same request lock and immutable cancellation records. An inactive original actor may retrieve their own exact committed result only. Replacement bindings must belong to the same actor and branch and original device ownership is checked independently. See `docs/plans/2026-10-16-live-kitchen-contract.md` and the isolated/concurrent verification records for scope and limitations.
+
+## Shared unpaid orders (migration015)
+
+`GET /api/pos/open-orders?branchId&deviceId` returns complete table occupancy, total open count, a page of100open orders and latest50closed orders. Use paired `afterCreatedAt`/`afterId` for paging, or `tabId` for scoped detail. `POST /api/pos/open-orders` takes the strict `OpenOrderCommand` directly. `POST /api/pos/open-orders/recovery` takes that exact original command and returns its canonical result or immutable cancellation. These reads/writes require branch authority and bound devices; drafting does not require a cash shift.
+
+A live sale may include `sourceTab:{id,expectedRevision}`. Settlement requires the same saved service type and line prices, quantities and catalogue revisions, and returns `settledTab:{id,revision}` in addition to the existing fiscal receipt. Every HTTP/browser financial recovery path validates both. Exact original outer requests are private; changing or stripping the link on replay conflicts. An earlier ordinary invoice cannot be adopted to settle a draft. Refunds preserve settled order history. See the shared-order contract for lock order, immutable journals and limits.

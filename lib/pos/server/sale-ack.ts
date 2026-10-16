@@ -1,5 +1,25 @@
 import type { LiveOrder } from './live-contracts'
 import type { FiscalDocument, ReceiptDocument } from './documents'
+import { z } from 'zod'
+
+const settledTabSchema = z
+  .object({
+    id: z.string().uuid(),
+    revision: z.number().int().min(1).max(2_147_483_647),
+  })
+  .strict()
+/** A receipt alone does not prove that the linked unpaid order was settled. */
+export function settlementMatchesSale(order: LiveOrder, result: unknown): boolean {
+  if (!result || typeof result !== 'object') return false
+  if (!order.sourceTab) return !('settledTab' in result)
+  if (!('settledTab' in result)) return false
+  const link = settledTabSchema.safeParse(result.settledTab)
+  return (
+    link.success &&
+    link.data.id.toLowerCase() === order.sourceTab.id.toLowerCase() &&
+    link.data.revision === order.sourceTab.expectedRevision + 1
+  )
+}
 
 /** Never clear an immutable pending request on a well-formed but unrelated invoice. */
 export function invoiceMatchesSale(

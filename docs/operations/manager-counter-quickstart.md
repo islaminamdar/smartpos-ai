@@ -75,3 +75,15 @@ Review the shift totals, count the actual cash in the drawer, then use **Close s
 - Subscription payments are handled separately from customer counter payments. Visiting the billing screen does not change the existing manually collected pilot arrangement.
 
 Practice only in the training workspace or an explicitly designated test branch. Do not enter fabricated sales into the restaurant's live ledger.
+
+## Orders and tables
+
+1. Open **Orders & tables**. Managers can add named tables with an area and seat count. An occupied table cannot be made inactive.
+2. Choose an available table or start a normal basket in **Sell**. Expand **Save this order for later**, give it a label, and save. Saving takes no payment and creates no invoice.
+3. Another branch counter can open that saved order. Review its items and prices. Changed items, quantities or service type must be saved before payment. Conflicting edits require refreshing the order; they never silently overwrite another operator.
+4. Open your own cash shift, choose payment and save the sale. The server settles the saved bill and releases its table together. A retry uses the same payment request.
+5. To serve another guest, choose **New order / clear counter**. The confirmation clears only this browser basket; the saved order remains in the branch list. Managers can void an unpaid order with a reason or review and reopen a voided order. Paid orders cannot be reopened this way.
+
+Unpaid orders reach the kitchen **only after payment in this release**. Kitchen dispatch before payment, courses and station routing remain under development. Table names and preparation notes are currently shared-order details; they are not added to existing fiscal receipts or kitchen tickets.
+
+If confirmation is lost, keep browser data and use the saved change's recovery controls. The checkbox permits permanent cancellation only if the server proves that particular change was not saved. It does not void an existing order, cancel an issued bill or return money.

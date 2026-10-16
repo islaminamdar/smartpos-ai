@@ -16,6 +16,16 @@ export const liveOrderSchema = z
           .min(1)
           .max(200),
         offerSelection: offerSelectionSchema.optional(),
+        sourceTab: z
+          .object({
+            id: z
+              .string()
+              .uuid()
+              .transform((value) => value.toLowerCase()),
+            expectedRevision: z.number().int().min(1).max(2_147_483_646),
+          })
+          .strict()
+          .optional(),
         profileId: z.string().uuid(),
         customer: receiptCustomerSchema.nullable(),
         cashTenderedFils: z.number().int().min(0).max(100_000_000),
@@ -34,16 +44,21 @@ export const liveOrderSchema = z
       .strict()
       .superRefine((order, ctx) => {
         if (
-          order.offerSelection &&
+          (order.offerSelection || order.sourceTab) &&
           (order.lines.some((line) => line.expectedRevision === undefined) ||
             new Set(order.lines.map((line) => line.productId.toLowerCase())).size !==
               order.lines.length)
         ) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: 'Offer sales require current unique menu lines.',
+            message: 'Offer and saved-order sales require current unique menu lines.',
           })
         }
+        if (order.sourceTab?.id === order.id.toLowerCase())
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'A payment request needs its own reference.',
+          })
       }),
   })
   .strict()

@@ -25,6 +25,12 @@ vi.mock('@/lib/pos/online-journal', () => ({
     journal.current = null
   },
 }))
+vi.mock('@/lib/pos/open-order-journal', () => ({
+  readPendingOpenOrderRequests: async () => [],
+  openOrderJournalEvent: 'test-open-order-journal',
+  savePendingOpenOrderRequest: vi.fn(),
+  acknowledgeOpenOrderRequest: vi.fn(),
+}))
 const id = (digit: number) => `${digit}0000000-0000-4000-8000-000000000001`
 const branchId = id(1),
   deviceId = id(2),
@@ -179,6 +185,20 @@ const response = (body: unknown, status = 200) => new Response(JSON.stringify(bo
 function api(save: (order: LiveOrder) => Response | Promise<Response>) {
   return vi.fn(async (url: string, options?: RequestInit) => {
     if (url === '/api/pos/bootstrap') return response(boot)
+    if (url.startsWith('/api/pos/open-orders?'))
+      return response({
+        status: 'ready',
+        organizationId: id(7),
+        branchId,
+        actorRole: 'manager',
+        generatedAt: '2026-10-16T00:00:00Z',
+        tables: [],
+        openTabs: [],
+        openCount: 0,
+        openNextCursor: null,
+        recentTabs: [],
+        recentTruncated: false,
+      })
     if (url.startsWith('/api/pos/receipts')) return response({ receipts: [], nextCursor: null })
     if (url === '/api/pos/offers/quote') {
       const body = JSON.parse(options?.body as string)
@@ -198,7 +218,9 @@ function api(save: (order: LiveOrder) => Response | Promise<Response>) {
   })
 }
 async function selectOffer() {
-  fireEvent.click(await screen.findByRole('button', { name: /Test tea/ }))
+  const product = await screen.findByRole('button', { name: /Test tea/ })
+  await waitFor(() => expect(product).toBeEnabled())
+  fireEvent.click(product)
   fireEvent.click(screen.getByRole('button', { name: 'Check offers' }))
   fireEvent.click(await screen.findByRole('radio', { name: /Test tea saving/ }))
   expect(screen.getByRole('button', { name: 'Save sale · AED 4.50' })).toBeEnabled()

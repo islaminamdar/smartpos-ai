@@ -28,9 +28,20 @@ import StaffManager from './staff/StaffManager'
 import AccountSettings from './staff/AccountSettings'
 import PendingAccessRecovery from './staff/PendingAccessRecovery'
 import KitchenBoard, { KitchenPendingRecovery } from './kitchen/KitchenBoard'
+import OpenOrdersBoard from './open-orders/OpenOrdersBoard'
+import OpenOrderSave from './open-orders/OpenOrderSave'
+import { OpenOrderPendingRecovery } from './open-orders/OpenOrderPendingRecovery'
+import { readPendingOpenOrderRequests, openOrderJournalEvent } from '@/lib/pos/open-order-journal'
+import type {
+  OpenOrderTab,
+  OpenOrderTable,
+  OpenOrderCommand,
+  OpenOrderUpdateResult,
+} from '@/lib/pos/server/open-order-contracts'
+import { basketFromOpenOrder, openOrderBasketMatches } from '@/lib/pos/open-order-basket'
 import { readPendingKitchenRequests, kitchenJournalEvent } from '@/lib/pos/kitchen-journal'
 import type { OfferSelection, EligibleOfferQuote } from '@/lib/pos/server/offers'
-import { invoiceMatchesSale } from '@/lib/pos/server/sale-ack'
+import { invoiceMatchesSale, settlementMatchesSale } from '@/lib/pos/server/sale-ack'
 
 type Product = LiveBootstrap['catalogue'][number]
 type BasketLine = { product: Product; quantityMilli: number }
@@ -45,6 +56,7 @@ type View =
   | 'staff'
   | 'account'
   | 'kitchen'
+  | 'open-orders'
 class ApiError extends Error {
   constructor(
     public status: number,
@@ -112,6 +124,13 @@ export default function LiveCounter() {
   const [pending, setPending] = useState<PendingOnlineRequest | null>(null)
   const [kitchenPending, setKitchenPending] = useState(false)
   const [kitchenJournalReady, setKitchenJournalReady] = useState(false)
+  const [openOrderPending, setOpenOrderPending] = useState(false)
+  const [openOrderJournalReady, setOpenOrderJournalReady] = useState(false)
+  const [openOrderBusy, setOpenOrderBusy] = useState(false)
+  const [sourceTab, setSourceTab] = useState<OpenOrderTab | null>(null)
+  const [initialTableId, setInitialTableId] = useState<string | null>(null)
+  const [openOrderMetadataDirty, setOpenOrderMetadataDirty] = useState(false)
+  const [replacement, setReplacement] = useState<OpenOrderTab | OpenOrderTable | 'new' | null>(null)
   const currentActor = useRef<string | undefined>(undefined)
   currentActor.current = boot?.userId
   const [branchId, setBranchId] = useState('')
@@ -180,6 +199,13 @@ export default function LiveCounter() {
       })),
     [basket]
   )
+  const savedBasketMatches = sourceTab
+    ? openOrderBasketMatches(sourceTab, serviceType, offerLines)
+    : false
+  const requiresOrderSave =
+    openOrderMetadataDirty || !!initialTableId || (!!sourceTab && !savedBasketMatches)
+  const basketLocked =
+    busy || !!pending || openOrderBusy || openOrderPending || !openOrderJournalReady
   const offerScope = JSON.stringify({ branchId, serviceType, lines: offerLines })
   const activeOffer = chosenOffer?.scope === offerScope ? chosenOffer : null
   const total = activeOffer?.quote.grossFils ?? beforeDiscount
@@ -199,6 +225,9 @@ export default function LiveCounter() {
     boot.device &&
     !busy &&
     !pending &&
+    !openOrderBusy &&
+    !openOrderPending &&
+    openOrderJournalReady &&
     branch?.profile
   )
 
@@ -248,6 +277,52 @@ export default function LiveCounter() {
     }
   }, [boot?.userId])
 
+  const checkOpenOrderPending = useCallback(async (actorId: string) => {
+    const requests = await readPendingOpenOrderRequests(actorId)
+    if (currentActor.current === actorId) {
+      setOpenOrderPending(requests.length > 0)
+      setOpenOrderJournalReady(true)
+    }
+    return requests
+  }, [])
+  useEffect(() => {
+    if (!boot?.userId) {
+      setOpenOrderJournalReady(false)
+      return
+    }
+    const actorId = boot.userId
+    let alive = true
+    const check = () => {
+      void readPendingOpenOrderRequests(actorId)
+        .then((requests) => {
+          if (!alive) return
+          setOpenOrderPending(requests.length > 0)
+          setOpenOrderJournalReady(true)
+        })
+        .catch(() => {
+          if (!alive) return
+          setOpenOrderJournalReady(false)
+        })
+    }
+    check()
+    window.addEventListener(openOrderJournalEvent, check)
+    window.addEventListener('focus', check)
+    let channel: BroadcastChannel | null = null
+    try {
+      if (typeof BroadcastChannel !== 'undefined')
+        channel = new BroadcastChannel(openOrderJournalEvent)
+    } catch {
+      /* Focus and same-tab events still reconcile persistent work. */
+    }
+    if (channel) channel.onmessage = check
+    return () => {
+      alive = false
+      window.removeEventListener(openOrderJournalEvent, check)
+      window.removeEventListener('focus', check)
+      channel?.close()
+    }
+  }, [boot?.userId])
+
   const refresh = useCallback(async () => {
     const next = liveBootstrapSchema.parse(await api('/api/pos/bootstrap'))
     const journal = await readPendingRequest(next.userId)
@@ -257,6 +332,9 @@ export default function LiveCounter() {
       setNextCursor(null)
       setSelected(null)
       setBasket([])
+      setSourceTab(null)
+      setInitialTableId(null)
+      setOpenOrderMetadataDirty(false)
       setChosenOffer(null)
       setCashInput('')
       setCardInput('')
@@ -322,14 +400,14 @@ export default function LiveCounter() {
       loadDocuments(branchId).catch((err) => setError(humanError(err)))
   }, [view, branchId, needsLogin, loadDocuments])
   useEffect(() => {
-    if (!pending) return
+    if (!pending && !openOrderPending && !basket.length && !sourceTab) return
     const warn = (event: BeforeUnloadEvent) => {
       event.preventDefault()
       event.returnValue = ''
     }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
-  }, [pending])
+  }, [pending, openOrderPending, basket.length, sourceTab])
   const run = async (action: () => Promise<void>) => {
     if (locked.current) return
     locked.current = true
@@ -382,6 +460,9 @@ export default function LiveCounter() {
       await acknowledgePendingRequest(request.actorId, request.id)
       setPending(null)
       setBasket([])
+      setSourceTab(null)
+      setInitialTableId(null)
+      setOpenOrderMetadataDirty(false)
       setChosenOffer(null)
       setCashInput('')
       setCardInput('')
@@ -411,7 +492,7 @@ export default function LiveCounter() {
       if (receipt.kind !== 'tax_invoice' || receipt.orderId !== request.id)
         throw new Error('Invoice confirmation did not match the saved sale.')
       const input = liveOrderSchema.parse(request.body).order
-      if (!invoiceMatchesSale(input, receipt))
+      if (!invoiceMatchesSale(input, receipt) || !settlementMatchesSale(input, result))
         throw new Error('Invoice amounts did not match the saved sale.')
     } else {
       if (
@@ -442,6 +523,9 @@ export default function LiveCounter() {
     setPending(null)
     if (request.endpoint === '/api/pos/sync') {
       setBasket([])
+      setSourceTab(null)
+      setInitialTableId(null)
+      setOpenOrderMetadataDirty(false)
       setChosenOffer(null)
       setCashInput('')
       setCardInput('')
@@ -499,6 +583,14 @@ export default function LiveCounter() {
     queue('/api/pos/commands', value.id, { command: value })
   const checkout = () =>
     run(async () => {
+      if (
+        openOrderBusy ||
+        !openOrderJournalReady ||
+        (boot && (await checkOpenOrderPending(boot.userId)).length)
+      )
+        throw new Error('Resolve the saved unpaid-order change before taking payment.')
+      if (requiresOrderSave)
+        throw new Error('Save your unpaid order changes before taking payment.')
       if (!boot?.device || !branch?.profile || !shift || !basket.length || total <= 0)
         throw new Error('Open your shift and add an item first.')
       if (
@@ -546,6 +638,9 @@ export default function LiveCounter() {
         expectedTotalFils: total,
         lines: offerLines,
         ...(activeOffer ? { offerSelection: activeOffer.selection } : {}),
+        ...(sourceTab
+          ? { sourceTab: { id: sourceTab.id, expectedRevision: sourceTab.revision } }
+          : {}),
         payments: [
           ...(cashApplied ? [{ method: 'cash' as const, amountFils: cashApplied }] : []),
           ...(card ? [{ method: 'card' as const, amountFils: card }] : []),
@@ -554,7 +649,7 @@ export default function LiveCounter() {
       await queue('/api/pos/sync', order.id, { order })
     })
   function add(product: Product) {
-    if (pending || busy) return
+    if (basketLocked) return
     setBasket((current) => {
       const found = current.find((line) => line.product.id === product.id)
       return found
@@ -571,6 +666,70 @@ export default function LiveCounter() {
           )
         : [...current, { product, quantityMilli: product.unit === 'kg' ? 250 : 1000 }]
     })
+  }
+  function resolvedOpenOrderElsewhere(
+    command: OpenOrderCommand,
+    result: OpenOrderUpdateResult | { status: 'cancelled' }
+  ) {
+    if (command.branchId !== branchId || result.status !== 'updated' || !('tab' in result)) return
+    if (command.type === 'tab.save' || command.type === 'tab.reopen') {
+      setSourceTab(result.tab)
+      setBasket(basketFromOpenOrder(result.tab))
+      setServiceType(result.tab.serviceType)
+      setInitialTableId(null)
+      setOpenOrderMetadataDirty(false)
+      setChosenOffer(null)
+      setCashInput('')
+      setCardInput('')
+      setNotice('Saved order confirmed. Its basket is ready to review at the counter.')
+    } else if (command.type === 'tab.void' && sourceTab?.id === command.tabId) {
+      setBasket([])
+      setSourceTab(null)
+      setInitialTableId(null)
+      setOpenOrderMetadataDirty(false)
+      setChosenOffer(null)
+      setCashInput('')
+      setCardInput('')
+      setBuyerName('')
+      setBuyerAddress('')
+      setBuyerTrn('')
+      setNotice('The unpaid order was voided. Its counter basket has been cleared.')
+    }
+  }
+  function replaceBasket(selection: OpenOrderTab | OpenOrderTable | 'new') {
+    if (basketLocked) return
+    setReplacement(null)
+    setChosenOffer(null)
+    setCashInput('')
+    setCardInput('')
+    setBuyerName('')
+    setBuyerAddress('')
+    setBuyerTrn('')
+    setOpenOrderMetadataDirty(false)
+    if (selection !== 'new' && 'status' in selection) {
+      if (
+        selection.branchId !== branchId ||
+        selection.status === 'settled' ||
+        (selection.status === 'voided' && !manager)
+      )
+        return
+      setSourceTab(selection)
+      setInitialTableId(null)
+      setBasket(basketFromOpenOrder(selection))
+      setServiceType(selection.serviceType)
+    } else {
+      setSourceTab(null)
+      setInitialTableId(selection === 'new' ? null : selection.id)
+      setBasket([])
+      setServiceType(selection === 'new' ? 'takeaway' : 'dine_in')
+    }
+    setView('sell')
+  }
+  function requestBasket(selection: OpenOrderTab | OpenOrderTable | 'new') {
+    if (basketLocked) return
+    if (basket.length || sourceTab || initialTableId || openOrderMetadataDirty)
+      setReplacement(selection)
+    else replaceBasket(selection)
   }
   function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -636,6 +795,7 @@ export default function LiveCounter() {
           <p role="alert">{error || 'The account service is not ready yet.'}</p>
           <PendingAccessRecovery />
           <KitchenPendingRecovery disabled={busy || !online} />
+          <OpenOrderPendingRecovery disabled={busy || !online} />
           <button
             onClick={() =>
               void run(async () => {
@@ -663,18 +823,36 @@ export default function LiveCounter() {
           </span>
         </div>
         <button
-          disabled={busy || !!pending || kitchenPending || !kitchenJournalReady}
+          disabled={
+            busy ||
+            !!pending ||
+            kitchenPending ||
+            !kitchenJournalReady ||
+            openOrderPending ||
+            !openOrderJournalReady ||
+            openOrderBusy
+          }
           onClick={() =>
             void run(async () => {
               if (await readPendingRequest(boot.userId))
                 throw new Error('Recover the pending request before signing out.')
               if ((await checkKitchenPending(boot.userId)).length)
                 throw new Error('Resolve the saved kitchen change before signing out.')
+              if ((await checkOpenOrderPending(boot.userId)).length)
+                throw new Error('Resolve the saved unpaid-order change before signing out.')
+              if (
+                (basket.length || openOrderMetadataDirty) &&
+                (!sourceTab || !savedBasketMatches || openOrderMetadataDirty)
+              )
+                throw new Error('Save or clear the current basket before signing out.')
               await api('/api/pos/session', 'DELETE')
               setBoot(null)
               setDocuments([])
               setSelected(null)
               setBasket([])
+              setSourceTab(null)
+              setInitialTableId(null)
+              setOpenOrderMetadataDirty(false)
               setChosenOffer(null)
               setNeedsLogin(true)
             })
@@ -729,6 +907,43 @@ export default function LiveCounter() {
             </details>
           </section>
         )}
+        {replacement && (
+          <section className="lc-warning" aria-label="Replace current basket">
+            <h2>Replace the current basket?</h2>
+            <p>
+              Saved orders remain available in Orders &amp; tables. Unsaved basket changes, customer
+              details and payment entries will be cleared.
+            </p>
+            <button disabled={basketLocked} onClick={() => replaceBasket(replacement)}>
+              Replace basket
+            </button>
+            <button onClick={() => setReplacement(null)}>Keep current basket</button>
+          </section>
+        )}
+        {openOrderPending && view !== 'sell' && view !== 'open-orders' && boot.device && (
+          <section className="lc-warning">
+            <p>An unpaid-order change needs confirmation.</p>
+            <button onClick={() => setView('sell')}>Review saved order request</button>
+          </section>
+        )}
+        {!openOrderJournalReady && (
+          <p className="lc-warning">
+            Checking saved unpaid-order work. Payment and account changes are paused until it can be
+            checked.
+          </p>
+        )}
+        {(openOrderPending || !boot.device) && (
+          <OpenOrderPendingRecovery
+            key={boot.userId}
+            actorId={boot.userId}
+            excludeBranchId={boot.device ? branchId : undefined}
+            onResolved={resolvedOpenOrderElsewhere}
+            disabled={busy || !online}
+            onPendingChange={() => {
+              void checkOpenOrderPending(boot.userId).catch(() => setOpenOrderJournalReady(false))
+            }}
+          />
+        )}
         {!kitchenJournalReady && (
           <p className="lc-warning">
             Saved kitchen work could not yet be checked. Account changes and counter registration
@@ -766,6 +981,10 @@ export default function LiveCounter() {
                   throw new Error(
                     'Resolve the saved kitchen change before registering a replacement counter.'
                   )
+                if ((await checkOpenOrderPending(boot.userId)).length)
+                  throw new Error(
+                    'Resolve the saved unpaid-order change before registering a replacement counter.'
+                  )
                 await api('/api/pos/devices', 'POST', {
                   branchId,
                   name: String(data.get('deviceName')).trim(),
@@ -796,7 +1015,16 @@ export default function LiveCounter() {
             </label>
             <button
               className="lc-primary"
-              disabled={busy || !branchId || !!pending || kitchenPending || !kitchenJournalReady}
+              disabled={
+                busy ||
+                !branchId ||
+                !!pending ||
+                kitchenPending ||
+                !kitchenJournalReady ||
+                openOrderPending ||
+                !openOrderJournalReady ||
+                openOrderBusy
+              }
             >
               Register this counter
             </button>
@@ -809,6 +1037,7 @@ export default function LiveCounter() {
               [
                 'sell',
                 'kitchen',
+                'open-orders',
                 'receipts',
                 'shift',
                 ...(manager ? ['menu', 'offers', 'reports', 'staff'] : []),
@@ -819,12 +1048,14 @@ export default function LiveCounter() {
               <button
                 key={item}
                 aria-current={view === item ? 'page' : undefined}
+                disabled={openOrderBusy}
                 onClick={() => setView(item)}
               >
                 {
                   {
                     sell: 'Sell',
                     kitchen: 'Kitchen',
+                    'open-orders': 'Orders & tables',
                     receipts: 'Receipts',
                     shift: 'Shift',
                     branch: 'Branch',
@@ -840,6 +1071,25 @@ export default function LiveCounter() {
             <span>{boot.device.name}</span>
           </nav>
           <main className="lc-main">
+            {view === 'open-orders' && branch && (
+              <OpenOrdersBoard
+                key={`${boot.userId}:${branchId}`}
+                actorId={boot.userId}
+                branchId={branchId}
+                branchName={branch.name}
+                deviceId={boot.device.id}
+                disabled={busy || !!pending || !online}
+                onOpen={requestBasket}
+                onStartTable={requestBasket}
+                onBusyChange={setOpenOrderBusy}
+                onResolved={resolvedOpenOrderElsewhere}
+                onPendingChange={() => {
+                  void checkOpenOrderPending(boot.userId).catch(() =>
+                    setOpenOrderJournalReady(false)
+                  )
+                }}
+              />
+            )}
             {view === 'kitchen' && branch && (
               <KitchenBoard
                 actorId={boot.userId}
@@ -867,7 +1117,15 @@ export default function LiveCounter() {
             {view === 'account' && (
               <AccountSettings
                 disabled={
-                  busy || !!pending || !online || !!shift || kitchenPending || !kitchenJournalReady
+                  busy ||
+                  !!pending ||
+                  !online ||
+                  !!shift ||
+                  kitchenPending ||
+                  !kitchenJournalReady ||
+                  openOrderPending ||
+                  !openOrderJournalReady ||
+                  openOrderBusy
                 }
               />
             )}
@@ -900,19 +1158,27 @@ export default function LiveCounter() {
                 onChanged={async () => {
                   await refresh()
                   setBasket([])
+                  setSourceTab(null)
+                  setInitialTableId(null)
+                  setOpenOrderMetadataDirty(false)
                   setChosenOffer(null)
                   setCashInput('')
                   setCardInput('')
                 }}
               />
             )}
-            {view === 'sell' && (
-              <div className="lc-sell lc-noprint">
+            {
+              <div
+                className="lc-sell lc-noprint"
+                style={view === 'sell' ? undefined : { display: 'none' }}
+              >
                 <section className="lc-menu">
                   <div className="lc-section-heading">
                     <div>
                       <span className="lc-eyebrow">{products.length} available items</span>
-                      <h1>New order</h1>
+                      <h1>
+                        {sourceTab ? sourceTab.label : initialTableId ? 'Table order' : 'New order'}
+                      </h1>
                     </div>
                     <button
                       onClick={() =>
@@ -950,7 +1216,7 @@ export default function LiveCounter() {
                       <button
                         key={product.id}
                         className="lc-product"
-                        disabled={busy || !!pending || product.unitPriceFils <= 0}
+                        disabled={basketLocked || product.unitPriceFils <= 0}
                         onClick={() => add(product)}
                       >
                         {product.imageUrl?.startsWith('/pos-assets/') ? (
@@ -969,13 +1235,60 @@ export default function LiveCounter() {
                   {!visibleProducts.length && <p>No available items match your search.</p>}
                 </section>
                 <aside className="lc-order" ref={orderRef} aria-label="Current order">
-                  <h2>Current order</h2>
+                  <h2>{sourceTab ? sourceTab.label : 'Current order'}</h2>
+                  <button disabled={basketLocked} onClick={() => requestBasket('new')}>
+                    New order / clear counter
+                  </button>
+                  {sourceTab && (
+                    <button
+                      disabled={basketLocked || !online}
+                      onClick={() =>
+                        void run(async () => {
+                          const next = await refresh()
+                          const current = next.catalogue.filter(
+                            (product) => product.branchId === branchId
+                          )
+                          const unavailable = basket.filter(
+                            (line) => !current.some((product) => product.id === line.product.id)
+                          )
+                          if (unavailable.length)
+                            throw new Error(
+                              `Remove unavailable items before saving: ${unavailable.map((line) => line.product.name).join(', ')}`
+                            )
+                          setBasket(
+                            basket.map((line) => ({
+                              ...line,
+                              product: current.find((product) => product.id === line.product.id)!,
+                            }))
+                          )
+                          setChosenOffer(null)
+                          setCashInput('')
+                          setCardInput('')
+                          setNotice(
+                            'Current menu loaded. Review quantities and prices, then save any changes before payment.'
+                          )
+                        })
+                      }
+                    >
+                      Review with current menu prices
+                    </button>
+                  )}
+                  {sourceTab && (
+                    <p className="lc-help">
+                      Saved unpaid order ·{' '}
+                      {sourceTab.status === 'voided'
+                        ? 'Voided: review and reopen before payment.'
+                        : savedBasketMatches && !openOrderMetadataDirty
+                          ? 'Basket matches the saved order.'
+                          : 'Changes need saving before payment.'}
+                    </p>
+                  )}
                   <p>{shift ? 'Shift open' : 'Open your shift before checkout'}</p>
                   <label>
                     Order type
                     <select
                       value={serviceType}
-                      disabled={busy || !!pending}
+                      disabled={basketLocked}
                       onChange={(event) =>
                         setServiceType(event.target.value as LiveOrder['serviceType'])
                       }
@@ -1011,7 +1324,7 @@ export default function LiveCounter() {
                               ? line.quantityMilli
                               : line.quantityMilli / 1000
                           }
-                          disabled={busy || !!pending}
+                          disabled={basketLocked}
                           onChange={(event) => {
                             const quantity = Number(event.target.value)
                             const scaled = quantity * (line.product.unit === 'kg' ? 1 : 1000)
@@ -1034,7 +1347,7 @@ export default function LiveCounter() {
                         />
                       </label>
                       <button
-                        disabled={busy || !!pending}
+                        disabled={basketLocked}
                         aria-label={`Remove ${line.product.name}`}
                         onClick={() =>
                           setBasket((current) =>
@@ -1052,9 +1365,38 @@ export default function LiveCounter() {
                       branchId={branchId}
                       serviceType={serviceType}
                       lines={offerLines}
-                      disabled={busy || !!pending || !online}
+                      disabled={basketLocked || !online}
                       onSelection={chooseOffer}
                     />
+                  )}
+                  <OpenOrderSave
+                    key={`${boot.userId}:${branchId}:${sourceTab?.id ?? 'new'}:${sourceTab?.revision ?? 0}:${initialTableId ?? ''}`}
+                    actorId={boot.userId}
+                    branchId={branchId}
+                    deviceId={boot.device.id}
+                    sourceTab={sourceTab}
+                    initialTableId={initialTableId}
+                    serviceType={serviceType}
+                    lines={offerLines}
+                    disabled={busy || !!pending || !online}
+                    onDirtyChange={setOpenOrderMetadataDirty}
+                    onBusyChange={setOpenOrderBusy}
+                    onPendingChange={() => {
+                      void checkOpenOrderPending(boot.userId).catch(() =>
+                        setOpenOrderJournalReady(false)
+                      )
+                    }}
+                    onSaved={(tab) => {
+                      setSourceTab(tab)
+                      setInitialTableId(null)
+                      setOpenOrderMetadataDirty(false)
+                      setBasket(basketFromOpenOrder(tab))
+                      setServiceType(tab.serviceType)
+                      setNotice('Unpaid order saved for your branch. Payment has not been taken.')
+                    }}
+                  />
+                  {requiresOrderSave && (
+                    <p className="lc-warning">Save this unpaid order before taking payment.</p>
                   )}
                   <dl className="lc-totals">
                     {activeOffer && (
@@ -1082,7 +1424,7 @@ export default function LiveCounter() {
                     Payment
                     <select
                       value={paymentMethod}
-                      disabled={busy || !!pending}
+                      disabled={basketLocked}
                       onChange={(event) =>
                         setPaymentMethod(event.target.value as typeof paymentMethod)
                       }
@@ -1098,7 +1440,7 @@ export default function LiveCounter() {
                       <input
                         inputMode="decimal"
                         value={cardInput}
-                        disabled={busy || !!pending}
+                        disabled={basketLocked}
                         onChange={(event) => setCardInput(event.target.value)}
                       />
                     </label>
@@ -1110,7 +1452,7 @@ export default function LiveCounter() {
                         inputMode="decimal"
                         placeholder={paymentMethod === 'cash' ? formatFils(total) : 'Cash amount'}
                         value={cashInput}
-                        disabled={busy || !!pending}
+                        disabled={basketLocked}
                         onChange={(event) => setCashInput(event.target.value)}
                       />
                     </label>
@@ -1128,7 +1470,7 @@ export default function LiveCounter() {
                       <input
                         maxLength={200}
                         value={buyerName}
-                        disabled={busy || !!pending}
+                        disabled={basketLocked}
                         onChange={(event) => setBuyerName(event.target.value)}
                       />
                     </label>
@@ -1137,7 +1479,7 @@ export default function LiveCounter() {
                       <input
                         maxLength={400}
                         value={buyerAddress}
-                        disabled={busy || !!pending}
+                        disabled={basketLocked}
                         onChange={(event) => setBuyerAddress(event.target.value)}
                       />
                     </label>
@@ -1147,14 +1489,14 @@ export default function LiveCounter() {
                         inputMode="numeric"
                         maxLength={15}
                         value={buyerTrn}
-                        disabled={busy || !!pending}
+                        disabled={basketLocked}
                         onChange={(event) => setBuyerTrn(event.target.value)}
                       />
                     </label>
                   </details>
                   <button
                     className="lc-primary"
-                    disabled={!mayWrite || !shift || total <= 0}
+                    disabled={!mayWrite || !shift || total <= 0 || requiresOrderSave}
                     onClick={checkout}
                   >
                     {busy ? 'Waiting for confirmation…' : `Save sale · ${currency(total)}`}
@@ -1165,7 +1507,7 @@ export default function LiveCounter() {
                   </p>
                 </aside>
               </div>
-            )}
+            }
             {view === 'receipts' && (
               <section className="lc-documents">
                 <div className="lc-noprint">

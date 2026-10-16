@@ -8,7 +8,7 @@ import {
 } from '@/lib/pos/online-journal'
 import { liveCommandSchema, liveOrderSchema } from '@/lib/pos/server/live-contracts'
 import { fiscalDocumentSchema, type FiscalDocument } from '@/lib/pos/server/documents'
-import { invoiceMatchesSale } from '@/lib/pos/server/sale-ack'
+import { invoiceMatchesSale, settlementMatchesSale } from '@/lib/pos/server/sale-ack'
 import FiscalReceipt from '../FiscalReceipt'
 import styles from './staff.module.css'
 const sessionSchema = z.object({ userId: z.string().uuid() })
@@ -109,7 +109,8 @@ export default function PendingAccessRecovery() {
           document = fiscalDocumentSchema.parse(result.receipt)
           if (
             document.kind !== 'tax_invoice' ||
-            !invoiceMatchesSale(liveOrderSchema.parse(pending.body).order, document)
+            !invoiceMatchesSale(liveOrderSchema.parse(pending.body).order, document) ||
+            !settlementMatchesSale(liveOrderSchema.parse(pending.body).order, result)
           )
             throw new Error(
               'The invoice did not match the saved sale. Keep this request for review.'

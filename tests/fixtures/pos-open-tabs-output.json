@@ -1,0 +1,709 @@
+{
+  "list": {
+    "status": "ready",
+    "tables": [
+      {
+        "id": "a1b4183d-c03d-4bda-9724-998238192b22",
+        "area": "Main",
+        "name": "Inactive",
+        "seats": 4,
+        "active": false,
+        "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+        "revision": 1,
+        "createdAt": "2026-10-16T07:59:14.155+04:00",
+        "updatedAt": "2026-10-16T07:59:14.155+04:00",
+        "occupiedTabId": null
+      },
+      {
+        "id": "f38923ef-2053-4afe-8af5-835a0b00e664",
+        "area": "Main",
+        "name": "Table 1",
+        "seats": 4,
+        "active": true,
+        "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+        "revision": 1,
+        "createdAt": "2026-10-16T07:59:13.968+04:00",
+        "updatedAt": "2026-10-16T07:59:13.968+04:00",
+        "occupiedTabId": null
+      },
+      {
+        "id": "456f2223-3c65-4f79-9718-723ce0505bd7",
+        "area": "Main",
+        "name": "Table 2",
+        "seats": 4,
+        "active": true,
+        "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+        "revision": 1,
+        "createdAt": "2026-10-16T07:59:13.992+04:00",
+        "updatedAt": "2026-10-16T07:59:13.992+04:00",
+        "occupiedTabId": null
+      }
+    ],
+    "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+    "openTabs": [
+      {
+        "id": "4e521b43-5e1e-42cc-85af-4986879922af",
+        "note": "Synthetic note",
+        "label": "Synthetic dine-in",
+        "lines": [],
+        "status": "open",
+        "tableId": null,
+        "taxFils": 0,
+        "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+        "revision": 1,
+        "createdAt": "2026-10-16T07:59:14.01+04:00",
+        "createdBy": "2b0ad660-b288-4e1e-b9bf-9b7a48acb8de",
+        "updatedAt": "2026-10-16T07:59:14.01+04:00",
+        "updatedBy": "2b0ad660-b288-4e1e-b9bf-9b7a48acb8de",
+        "guestCount": null,
+        "serviceType": "takeaway",
+        "subtotalFils": 0,
+        "settledOrderId": null
+      },
+      {
+        "id": "0d580630-b0e6-4a8e-a26d-b2d5d7f2c10f",
+        "note": "Synthetic note",
+        "label": "Synthetic dine-in",
+        "lines": [
+          {
+            "name": "Test item",
+            "unit": "piece",
+            "category": "Test",
+            "imageUrl": null,
+            "revision": 1,
+            "productId": "ef8ffc02-7685-40f3-aadf-591aec38da0a",
+            "taxRateBps": 500,
+            "quantityMilli": 1000,
+            "unitPriceFils": 1000
+          }
+        ],
+        "status": "open",
+        "tableId": null,
+        "taxFils": 48,
+        "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+        "revision": 1,
+        "createdAt": "2026-10-16T07:59:14.113+04:00",
+        "createdBy": "2b0ad660-b288-4e1e-b9bf-9b7a48acb8de",
+        "updatedAt": "2026-10-16T07:59:14.113+04:00",
+        "updatedBy": "2b0ad660-b288-4e1e-b9bf-9b7a48acb8de",
+        "guestCount": 2,
+        "serviceType": "dine_in",
+        "subtotalFils": 1000,
+        "settledOrderId": null
+      }
+    ],
+    "actorRole": "owner",
+    "openCount": 2,
+    "recentTabs": [
+      {
+        "id": "b29074e8-3afa-4c48-84e2-5cdbd3ff5ac2",
+        "note": "Synthetic note",
+        "label": "Synthetic dine-in",
+        "lines": [
+          {
+            "name": "Test item",
+            "unit": "piece",
+            "category": "Test",
+            "imageUrl": null,
+            "revision": 1,
+            "productId": "ef8ffc02-7685-40f3-aadf-591aec38da0a",
+            "taxRateBps": 500,
+            "quantityMilli": 1000,
+            "unitPriceFils": 1000
+          }
+        ],
+        "status": "settled",
+        "tableId": null,
+        "taxFils": 48,
+        "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+        "revision": 2,
+        "createdAt": "2026-10-16T07:59:14.122+04:00",
+        "createdBy": "a79aa4f3-eb23-4c89-99b0-4126038da42d",
+        "updatedAt": "2026-10-16T07:59:14.127+04:00",
+        "updatedBy": "a79aa4f3-eb23-4c89-99b0-4126038da42d",
+        "guestCount": 2,
+        "serviceType": "dine_in",
+        "subtotalFils": 1000,
+        "settledOrderId": "2cbc31e7-5320-4a8b-8dd1-db262ec9c569"
+      },
+      {
+        "id": "ec92587b-f17f-44bc-96ba-8a35d29e6a3a",
+        "note": "Synthetic note",
+        "label": "Synthetic dine-in",
+        "lines": [
+          {
+            "name": "Test item",
+            "unit": "piece",
+            "category": "Test",
+            "imageUrl": null,
+            "revision": 1,
+            "productId": "ef8ffc02-7685-40f3-aadf-591aec38da0a",
+            "taxRateBps": 500,
+            "quantityMilli": 1000,
+            "unitPriceFils": 1000
+          }
+        ],
+        "status": "settled",
+        "tableId": null,
+        "taxFils": 48,
+        "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+        "revision": 2,
+        "createdAt": "2026-10-16T07:59:14.085+04:00",
+        "createdBy": "2b0ad660-b288-4e1e-b9bf-9b7a48acb8de",
+        "updatedAt": "2026-10-16T07:59:14.099+04:00",
+        "updatedBy": "2b0ad660-b288-4e1e-b9bf-9b7a48acb8de",
+        "guestCount": 2,
+        "serviceType": "dine_in",
+        "subtotalFils": 1000,
+        "settledOrderId": "239b495e-616f-4208-95ea-53626193158a"
+      },
+      {
+        "id": "7362c695-8ccd-4d92-851c-285c3636f62b",
+        "note": "Synthetic note",
+        "label": "Synthetic dine-in",
+        "lines": [
+          {
+            "name": "Test item",
+            "unit": "piece",
+            "category": "Test",
+            "imageUrl": null,
+            "revision": 1,
+            "productId": "ef8ffc02-7685-40f3-aadf-591aec38da0a",
+            "taxRateBps": 500,
+            "quantityMilli": 1000,
+            "unitPriceFils": 1000
+          }
+        ],
+        "status": "settled",
+        "tableId": null,
+        "taxFils": 48,
+        "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+        "revision": 2,
+        "createdAt": "2026-10-16T07:59:14.068+04:00",
+        "createdBy": "2b0ad660-b288-4e1e-b9bf-9b7a48acb8de",
+        "updatedAt": "2026-10-16T07:59:14.077+04:00",
+        "updatedBy": "2b0ad660-b288-4e1e-b9bf-9b7a48acb8de",
+        "guestCount": 2,
+        "serviceType": "dine_in",
+        "subtotalFils": 1000,
+        "settledOrderId": "e336df64-e688-48b3-ab12-b6b7bc382ffb"
+      },
+      {
+        "id": "0b5b3384-7101-4282-9e07-6d7b9ab84dad",
+        "note": "Synthetic note",
+        "label": "Synthetic dine-in",
+        "lines": [
+          {
+            "name": "Test item",
+            "unit": "piece",
+            "category": "Test",
+            "imageUrl": null,
+            "revision": 1,
+            "productId": "ef8ffc02-7685-40f3-aadf-591aec38da0a",
+            "taxRateBps": 500,
+            "quantityMilli": 1000,
+            "unitPriceFils": 1000
+          }
+        ],
+        "status": "settled",
+        "tableId": "f38923ef-2053-4afe-8af5-835a0b00e664",
+        "taxFils": 48,
+        "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+        "revision": 5,
+        "createdAt": "2026-10-16T07:59:13.98+04:00",
+        "createdBy": "2b0ad660-b288-4e1e-b9bf-9b7a48acb8de",
+        "updatedAt": "2026-10-16T07:59:14.056+04:00",
+        "updatedBy": "2b0ad660-b288-4e1e-b9bf-9b7a48acb8de",
+        "guestCount": 2,
+        "serviceType": "dine_in",
+        "subtotalFils": 1000,
+        "settledOrderId": "3257d49f-78bf-44da-9239-6e15aba3b4b4"
+      },
+      {
+        "id": "ab35e015-55db-4ed0-b939-fe60c4d9545e",
+        "note": "Synthetic note",
+        "label": "Synthetic dine-in",
+        "lines": [
+          {
+            "name": "Test item",
+            "unit": "piece",
+            "category": "Test",
+            "imageUrl": null,
+            "revision": 2,
+            "productId": "ef8ffc02-7685-40f3-aadf-591aec38da0a",
+            "taxRateBps": 500,
+            "quantityMilli": 1000,
+            "unitPriceFils": 1200
+          }
+        ],
+        "status": "settled",
+        "tableId": null,
+        "taxFils": 57,
+        "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+        "revision": 3,
+        "createdAt": "2026-10-16T07:59:14.029+04:00",
+        "createdBy": "2b0ad660-b288-4e1e-b9bf-9b7a48acb8de",
+        "updatedAt": "2026-10-16T07:59:14.051+04:00",
+        "updatedBy": "2b0ad660-b288-4e1e-b9bf-9b7a48acb8de",
+        "guestCount": 2,
+        "serviceType": "dine_in",
+        "subtotalFils": 1200,
+        "settledOrderId": "05018b26-3e44-4995-988c-fdaa3d343cb9"
+      },
+      {
+        "id": "6c84ab61-2141-4b51-926f-764fba0c7df0",
+        "note": "Synthetic note",
+        "label": "Synthetic dine-in",
+        "lines": [
+          {
+            "name": "Test item",
+            "unit": "piece",
+            "category": "Test",
+            "imageUrl": null,
+            "revision": 1,
+            "productId": "ef8ffc02-7685-40f3-aadf-591aec38da0a",
+            "taxRateBps": 500,
+            "quantityMilli": 1000,
+            "unitPriceFils": 1000
+          },
+          {
+            "name": "Second item",
+            "unit": "piece",
+            "category": "Test",
+            "imageUrl": null,
+            "revision": 1,
+            "productId": "04e7dd45-c4f5-4250-9dbf-c41689680beb",
+            "taxRateBps": 500,
+            "quantityMilli": 1000,
+            "unitPriceFils": 1000
+          }
+        ],
+        "status": "settled",
+        "tableId": null,
+        "taxFils": 96,
+        "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+        "revision": 2,
+        "createdAt": "2026-10-16T07:59:14.033+04:00",
+        "createdBy": "2b0ad660-b288-4e1e-b9bf-9b7a48acb8de",
+        "updatedAt": "2026-10-16T07:59:14.039+04:00",
+        "updatedBy": "2b0ad660-b288-4e1e-b9bf-9b7a48acb8de",
+        "guestCount": 2,
+        "serviceType": "dine_in",
+        "subtotalFils": 2000,
+        "settledOrderId": "e3cb5cc0-5fff-4ca9-b2e1-005192467d5a"
+      }
+    ],
+    "generatedAt": "2026-10-16T07:59:14.156+04:00",
+    "openNextCursor": null,
+    "organizationId": "eeb3adee-3a6c-4116-b3b5-3d2de075014f",
+    "recentTruncated": false
+  },
+  "detail": {
+    "tab": {
+      "id": "0d580630-b0e6-4a8e-a26d-b2d5d7f2c10f",
+      "note": "Synthetic note",
+      "label": "Synthetic dine-in",
+      "lines": [
+        {
+          "name": "Test item",
+          "unit": "piece",
+          "category": "Test",
+          "imageUrl": null,
+          "revision": 1,
+          "productId": "ef8ffc02-7685-40f3-aadf-591aec38da0a",
+          "taxRateBps": 500,
+          "quantityMilli": 1000,
+          "unitPriceFils": 1000
+        }
+      ],
+      "status": "open",
+      "tableId": null,
+      "taxFils": 48,
+      "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+      "revision": 1,
+      "createdAt": "2026-10-16T07:59:14.113+04:00",
+      "createdBy": "2b0ad660-b288-4e1e-b9bf-9b7a48acb8de",
+      "updatedAt": "2026-10-16T07:59:14.113+04:00",
+      "updatedBy": "2b0ad660-b288-4e1e-b9bf-9b7a48acb8de",
+      "guestCount": 2,
+      "serviceType": "dine_in",
+      "subtotalFils": 1000,
+      "settledOrderId": null
+    },
+    "status": "ready",
+    "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+    "actorRole": "owner",
+    "organizationId": "eeb3adee-3a6c-4116-b3b5-3d2de075014f"
+  },
+  "tableUpdated": {
+    "table": {
+      "id": "f38923ef-2053-4afe-8af5-835a0b00e664",
+      "area": "Main",
+      "name": "Table 1",
+      "seats": 4,
+      "active": true,
+      "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+      "revision": 1,
+      "createdAt": "2026-10-16T07:59:13.968+04:00",
+      "updatedAt": "2026-10-16T07:59:13.968+04:00",
+      "occupiedTabId": null
+    },
+    "status": "updated",
+    "replayed": false,
+    "requestId": "7ee62b62-4817-423e-a992-e817db681795"
+  },
+  "tabUpdated": {
+    "tab": {
+      "id": "0b5b3384-7101-4282-9e07-6d7b9ab84dad",
+      "note": "Synthetic note",
+      "label": "Synthetic dine-in",
+      "lines": [
+        {
+          "name": "Test item",
+          "unit": "piece",
+          "category": "Test",
+          "imageUrl": null,
+          "revision": 1,
+          "productId": "ef8ffc02-7685-40f3-aadf-591aec38da0a",
+          "taxRateBps": 500,
+          "quantityMilli": 1000,
+          "unitPriceFils": 1000
+        }
+      ],
+      "status": "open",
+      "tableId": "f38923ef-2053-4afe-8af5-835a0b00e664",
+      "taxFils": 48,
+      "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+      "revision": 1,
+      "createdAt": "2026-10-16T07:59:13.98+04:00",
+      "createdBy": "2b0ad660-b288-4e1e-b9bf-9b7a48acb8de",
+      "updatedAt": "2026-10-16T07:59:13.98+04:00",
+      "updatedBy": "2b0ad660-b288-4e1e-b9bf-9b7a48acb8de",
+      "guestCount": 2,
+      "serviceType": "dine_in",
+      "subtotalFils": 1000,
+      "settledOrderId": null
+    },
+    "status": "updated",
+    "replayed": false,
+    "requestId": "e4b07631-cbca-47c7-a181-7073a14301b7"
+  },
+  "cancelled": {
+    "status": "cancelled",
+    "replayed": false,
+    "requestId": "14dfc74c-5e56-45cf-9300-f045e88252d6"
+  },
+  "settled": {
+    "status": "synced",
+    "orderId": "3257d49f-78bf-44da-9239-6e15aba3b4b4",
+    "receipt": {
+      "id": "578cb788-0ec6-49bc-af77-7adc6c4e4174",
+      "kind": "tax_invoice",
+      "lines": [
+        {
+          "name": "Test item",
+          "unit": "piece",
+          "netFils": 952,
+          "taxFils": 48,
+          "grossFils": 1000,
+          "productId": "ef8ffc02-7685-40f3-aadf-591aec38da0a",
+          "lineNumber": 1,
+          "taxRateBps": 500,
+          "quantityMilli": 1000,
+          "unitPriceFils": 1000
+        }
+      ],
+      "totals": {
+        "netFils": 952,
+        "taxFils": 48,
+        "grossFils": 1000
+      },
+      "actorId": "2b0ad660-b288-4e1e-b9bf-9b7a48acb8de",
+      "orderId": "3257d49f-78bf-44da-9239-6e15aba3b4b4",
+      "shiftId": "c6513cdc-b5ba-48ba-bf37-d2ec59d69ca9",
+      "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+      "customer": null,
+      "deviceId": "e7c7a6e7-52ae-4cf0-ba58-ec03b5280f5d",
+      "issuedAt": "2026-10-16T07:59:14.056+04:00",
+      "merchant": {
+        "id": "1dfa2310-f539-4333-8427-118bc979e189",
+        "trn": "100000000000001",
+        "phone": "Test contact",
+        "address": "Test address",
+        "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+        "currency": "AED",
+        "timezone": "Asia/Dubai",
+        "legalName": "Synthetic",
+        "branchName": "First",
+        "confirmedAt": "2026-10-16T07:59:13.879+04:00",
+        "confirmedBy": "2b0ad660-b288-4e1e-b9bf-9b7a48acb8de",
+        "taxInclusive": true,
+        "taxRegistered": true,
+        "organizationId": "eeb3adee-3a6c-4116-b3b5-3d2de075014f",
+        "calculationVersion": "line-v2"
+      },
+      "payments": [
+        {
+          "method": "cash",
+          "amountFils": 1000
+        }
+      ],
+      "changeFils": 0,
+      "serviceType": "dine_in",
+      "schemaVersion": 1,
+      "documentNumber": "TEST-INV-0000000005",
+      "cashTenderedFils": 1000,
+      "paymentSettlement": "recorded"
+    },
+    "taxFils": 48,
+    "replayed": false,
+    "totalFils": 1000,
+    "settledTab": {
+      "id": "0b5b3384-7101-4282-9e07-6d7b9ab84dad",
+      "revision": 5
+    }
+  },
+  "offeredSettlement": {
+    "status": "synced",
+    "orderId": "239b495e-616f-4208-95ea-53626193158a",
+    "receipt": {
+      "id": "820b4651-fca8-4542-9930-1492d84f1a20",
+      "kind": "tax_invoice",
+      "lines": [
+        {
+          "name": "Test item",
+          "unit": "piece",
+          "netFils": 857,
+          "taxFils": 43,
+          "grossFils": 900,
+          "productId": "ef8ffc02-7685-40f3-aadf-591aec38da0a",
+          "lineNumber": 1,
+          "taxRateBps": 500,
+          "discountFils": 100,
+          "quantityMilli": 1000,
+          "unitPriceFils": 1000,
+          "beforeDiscountFils": 1000,
+          "bundleQuantityMilli": 0,
+          "rewardQuantityMilli": 0,
+          "eligibleQuantityMilli": 1000
+        }
+      ],
+      "totals": {
+        "netFils": 857,
+        "taxFils": 43,
+        "grossFils": 900,
+        "discountFils": 100,
+        "beforeDiscountFils": 1000
+      },
+      "actorId": "2b0ad660-b288-4e1e-b9bf-9b7a48acb8de",
+      "orderId": "239b495e-616f-4208-95ea-53626193158a",
+      "shiftId": "c6513cdc-b5ba-48ba-bf37-d2ec59d69ca9",
+      "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+      "customer": null,
+      "deviceId": "e7c7a6e7-52ae-4cf0-ba58-ec03b5280f5d",
+      "issuedAt": "2026-10-16T07:59:14.098+04:00",
+      "merchant": {
+        "id": "1dfa2310-f539-4333-8427-118bc979e189",
+        "trn": "100000000000001",
+        "phone": "Test contact",
+        "address": "Test address",
+        "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+        "currency": "AED",
+        "timezone": "Asia/Dubai",
+        "legalName": "Synthetic",
+        "branchName": "First",
+        "confirmedAt": "2026-10-16T07:59:13.879+04:00",
+        "confirmedBy": "2b0ad660-b288-4e1e-b9bf-9b7a48acb8de",
+        "taxInclusive": true,
+        "taxRegistered": true,
+        "organizationId": "eeb3adee-3a6c-4116-b3b5-3d2de075014f",
+        "calculationVersion": "line-v2"
+      },
+      "payments": [
+        {
+          "method": "cash",
+          "amountFils": 900
+        }
+      ],
+      "changeFils": 100,
+      "serviceType": "dine_in",
+      "appliedOffer": {
+        "lines": [
+          {
+            "netFils": 857,
+            "taxFils": 43,
+            "grossFils": 900,
+            "productId": "ef8ffc02-7685-40f3-aadf-591aec38da0a",
+            "discountFils": 100,
+            "beforeDiscountFils": 1000,
+            "bundleQuantityMilli": 0,
+            "rewardQuantityMilli": 0,
+            "eligibleQuantityMilli": 1000
+          }
+        ],
+        "benefit": {
+          "kind": "percentage",
+          "basisPoints": 1000,
+          "eligibility": {
+            "scope": "all"
+          },
+          "maximumDiscountFils": null
+        },
+        "netFils": 857,
+        "offerId": "8b1dadd5-88c2-4513-afa8-294c6ee7cf92",
+        "taxFils": 43,
+        "eligible": true,
+        "grossFils": 900,
+        "offerName": "Tab discount",
+        "applications": 1,
+        "discountFils": 100,
+        "offerRevision": 1,
+        "appliedDefinition": {
+          "id": "8b1dadd5-88c2-4513-afa8-294c6ee7cf92",
+          "name": "Tab discount",
+          "active": true,
+          "benefit": {
+            "kind": "percentage",
+            "basisPoints": 1000,
+            "eligibility": {
+              "scope": "all"
+            },
+            "maximumDiscountFils": null
+          },
+          "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+          "revision": 1,
+          "schedule": {
+            "endsAt": null,
+            "windows": [],
+            "startsAt": null,
+            "timezone": "Asia/Dubai"
+          },
+          "managerOnly": false,
+          "serviceTypes": ["dine_in", "takeaway", "delivery"],
+          "couponRequired": true,
+          "minimumSpendFils": 0,
+          "perCustomerLimit": null,
+          "totalRedemptionsLimit": null
+        },
+        "beforeDiscountFils": 1000,
+        "calculationVersion": "offer-v1"
+      },
+      "schemaVersion": 2,
+      "documentNumber": "TEST-INV-0000000007",
+      "cashTenderedFils": 1000,
+      "paymentSettlement": "recorded"
+    },
+    "taxFils": 43,
+    "replayed": false,
+    "totalFils": 900,
+    "settledTab": {
+      "id": "ec92587b-f17f-44bc-96ba-8a35d29e6a3a",
+      "revision": 2
+    }
+  },
+  "tableCommand": {
+    "id": "7ee62b62-4817-423e-a992-e817db681795",
+    "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+    "deviceId": "e7c7a6e7-52ae-4cf0-ba58-ec03b5280f5d",
+    "type": "table.save",
+    "expectedRevision": 0,
+    "table": {
+      "id": "f38923ef-2053-4afe-8af5-835a0b00e664",
+      "name": "Table 1",
+      "area": "Main",
+      "seats": 4,
+      "active": true
+    },
+    "reason": "Synthetic table setup"
+  },
+  "draftCommand": {
+    "id": "e4b07631-cbca-47c7-a181-7073a14301b7",
+    "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+    "deviceId": "e7c7a6e7-52ae-4cf0-ba58-ec03b5280f5d",
+    "type": "tab.save",
+    "tabId": "0b5b3384-7101-4282-9e07-6d7b9ab84dad",
+    "expectedRevision": 0,
+    "label": "Synthetic dine-in",
+    "serviceType": "dine_in",
+    "tableId": "f38923ef-2053-4afe-8af5-835a0b00e664",
+    "guestCount": 2,
+    "note": "Synthetic note",
+    "lines": [
+      {
+        "productId": "ef8ffc02-7685-40f3-aadf-591aec38da0a",
+        "quantityMilli": 1000,
+        "expectedUnitPriceFils": 1000,
+        "expectedTaxRateBps": 500,
+        "expectedRevision": 1
+      }
+    ]
+  },
+  "linkedOrder": {
+    "id": "3257d49f-78bf-44da-9239-6e15aba3b4b4",
+    "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+    "deviceId": "e7c7a6e7-52ae-4cf0-ba58-ec03b5280f5d",
+    "shiftId": "c6513cdc-b5ba-48ba-bf37-d2ec59d69ca9",
+    "createdAt": "2026-10-16T03:59:14.053Z",
+    "serviceType": "dine_in",
+    "lines": [
+      {
+        "productId": "ef8ffc02-7685-40f3-aadf-591aec38da0a",
+        "quantityMilli": 1000,
+        "expectedUnitPriceFils": 1000,
+        "expectedTaxRateBps": 500,
+        "expectedRevision": 1
+      }
+    ],
+    "payments": [
+      {
+        "method": "cash",
+        "amountFils": 1000
+      }
+    ],
+    "expectedTotalFils": 1000,
+    "profileId": "1dfa2310-f539-4333-8427-118bc979e189",
+    "customer": null,
+    "cashTenderedFils": 1000,
+    "sourceTab": {
+      "id": "0b5b3384-7101-4282-9e07-6d7b9ab84dad",
+      "expectedRevision": 4
+    }
+  },
+  "offeredOrder": {
+    "id": "239b495e-616f-4208-95ea-53626193158a",
+    "branchId": "d923c7e0-de62-4fcd-ace9-be7dff26d134",
+    "deviceId": "e7c7a6e7-52ae-4cf0-ba58-ec03b5280f5d",
+    "shiftId": "c6513cdc-b5ba-48ba-bf37-d2ec59d69ca9",
+    "createdAt": "2026-10-16T03:59:14.086Z",
+    "serviceType": "dine_in",
+    "lines": [
+      {
+        "productId": "ef8ffc02-7685-40f3-aadf-591aec38da0a",
+        "quantityMilli": 1000,
+        "expectedUnitPriceFils": 1000,
+        "expectedTaxRateBps": 500,
+        "expectedRevision": 1
+      }
+    ],
+    "payments": [
+      {
+        "method": "cash",
+        "amountFils": 900
+      }
+    ],
+    "expectedTotalFils": 900,
+    "profileId": "1dfa2310-f539-4333-8427-118bc979e189",
+    "customer": null,
+    "cashTenderedFils": 1000,
+    "sourceTab": {
+      "id": "ec92587b-f17f-44bc-96ba-8a35d29e6a3a",
+      "expectedRevision": 1
+    },
+    "offerSelection": {
+      "offerId": "8b1dadd5-88c2-4513-afa8-294c6ee7cf92",
+      "expectedRevision": 1,
+      "couponCode": "TABPRIVATE",
+      "expectedDiscountFils": 100
+    }
+  }
+}

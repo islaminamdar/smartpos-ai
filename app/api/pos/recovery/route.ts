@@ -4,7 +4,7 @@ import { requirePilot, requireOrigin, recoveryBinding } from '@/lib/pos/server/l
 import { readBoundedBody } from '@/lib/pos/server/body'
 import { liveRecoverySchema } from '@/lib/pos/server/live-contracts'
 import { fiscalDocumentSchema } from '@/lib/pos/server/documents'
-import { invoiceMatchesSale } from '@/lib/pos/server/sale-ack'
+import { invoiceMatchesSale, settlementMatchesSale } from '@/lib/pos/server/sale-ack'
 import { posFailure, privateHeaders } from '@/lib/pos/server/http'
 export const dynamic = 'force-dynamic'
 export async function POST(request: Request) {
@@ -58,7 +58,8 @@ export async function POST(request: Request) {
       data.orderId === payload.id.toLowerCase() &&
       invoice.success &&
       invoice.data.actorId.toLowerCase() === user.id.toLowerCase() &&
-      invoiceMatchesSale(parsed.data.request, invoice.data)
+      invoiceMatchesSale(parsed.data.request, invoice.data) &&
+      settlementMatchesSale(parsed.data.request, data)
     const credit = fiscalDocumentSchema.safeParse(data?.creditNote)
     const command =
       parsed.data.kind === 'command' &&

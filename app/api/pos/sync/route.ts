@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticatedPosClient } from '@/lib/pos/server/client'
 import { liveOrderSchema } from '@/lib/pos/server/live-contracts'
 import { fiscalDocumentSchema } from '@/lib/pos/server/documents'
-import { invoiceMatchesSale } from '@/lib/pos/server/sale-ack'
+import { invoiceMatchesSale, settlementMatchesSale } from '@/lib/pos/server/sale-ack'
 import { requirePilot, requireOrigin, requireDevice } from '@/lib/pos/server/live-access'
 import { posFailure, privateHeaders } from '@/lib/pos/server/http'
 
@@ -52,6 +52,12 @@ export async function POST(request: NextRequest) {
         'POS_OFFER_UNAVAILABLE',
         'POS_OFFER_LIMIT_REACHED',
         'POS_DISCOUNT_MISMATCH',
+        'POS_TAB_CHANGED',
+        'POS_TAB_NOT_FOUND',
+        'POS_TAB_STATE_INVALID',
+        'POS_TAB_ALREADY_SETTLED',
+        'POS_TAB_CONTENT_CHANGED',
+        'POS_TAB_SOURCE_REQUIRED',
       ]
       const authorizationCodes = ['POS_ACCESS_DENIED', 'POS_DEVICE_INVALID', 'POS_SHIFT_INVALID']
       const validationCodes = [
@@ -86,7 +92,8 @@ export async function POST(request: NextRequest) {
       data.orderId !== parsed.data.order.id.toLowerCase() ||
       !receipt.success ||
       receipt.data.actorId.toLowerCase() !== user.id.toLowerCase() ||
-      !invoiceMatchesSale(parsed.data.order, receipt.data)
+      !invoiceMatchesSale(parsed.data.order, receipt.data) ||
+      !settlementMatchesSale(parsed.data.order, data)
     )
       throw new Error('Invalid synchronization acknowledgement')
     return NextResponse.json(data, { headers: privateHeaders })

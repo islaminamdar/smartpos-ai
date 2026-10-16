@@ -69,9 +69,9 @@ const availability = [
     ready: true,
   },
   {
-    title: 'Shared kitchen preparation',
+    title: 'Shared orders, tables & kitchen',
     detail:
-      'Track confirmed paid orders from queued to served across branch devices. Open tabs and tables are still in development.',
+      'Save unpaid orders across counters, manage tables and settle each bill once. Track paid orders from queued to served in the kitchen.',
     status: 'Online pilot',
     ready: true,
   },
