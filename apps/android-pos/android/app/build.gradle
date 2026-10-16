@@ -1,6 +1,8 @@
 apply plugin: 'com.android.application'
 
 android {
+    // Synthetic protocol/calculation fixtures belong only in the instrumentation test APK.
+    sourceSets.androidTest.assets.srcDir '../../../../tests/fixtures'
     namespace = "info.internext.pos"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
@@ -15,6 +17,9 @@ android {
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
+    }
+    sourceSets {
+        test.resources.srcDir "../../../../tests/fixtures"
     }
     buildTypes {
         release {
@@ -37,6 +42,7 @@ dependencies {
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
+    testImplementation "org.json:json:20240303"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')

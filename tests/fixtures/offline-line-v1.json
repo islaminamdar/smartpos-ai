@@ -1,0 +1,717 @@
+{
+  "version": "offline-line-v1",
+  "vectors": [
+    {
+      "name": "cash-piece",
+      "input": {
+        "calculationVersion": "offline-line-v1",
+        "taxInclusive": true,
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "piece",
+            "quantityMilli": 1000,
+            "unitPriceFils": 1050,
+            "taxRateBps": 500
+          }
+        ],
+        "cashTenderedFils": 1100,
+        "recordedCardFils": 0
+      },
+      "expected": {
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "piece",
+            "quantityMilli": 1000,
+            "unitPriceFils": 1050,
+            "taxRateBps": 500,
+            "lineNumber": 1,
+            "grossFils": 1050,
+            "netFils": 1000,
+            "taxFils": 50
+          }
+        ],
+        "totals": {
+          "grossFils": 1050,
+          "netFils": 1000,
+          "taxFils": 50
+        },
+        "payments": [
+          {
+            "method": "cash",
+            "amountFils": 1050
+          }
+        ],
+        "cashTenderedFils": 1100,
+        "changeFils": 50,
+        "requiresBuyerDetails": false
+      }
+    },
+    {
+      "name": "weighted-half-fils",
+      "input": {
+        "calculationVersion": "offline-line-v1",
+        "taxInclusive": true,
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "kg",
+            "quantityMilli": 500,
+            "unitPriceFils": 101,
+            "taxRateBps": 500
+          }
+        ],
+        "cashTenderedFils": 100,
+        "recordedCardFils": 0
+      },
+      "expected": {
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "kg",
+            "quantityMilli": 500,
+            "unitPriceFils": 101,
+            "taxRateBps": 500,
+            "lineNumber": 1,
+            "grossFils": 51,
+            "netFils": 49,
+            "taxFils": 2
+          }
+        ],
+        "totals": {
+          "grossFils": 51,
+          "netFils": 49,
+          "taxFils": 2
+        },
+        "payments": [
+          {
+            "method": "cash",
+            "amountFils": 51
+          }
+        ],
+        "cashTenderedFils": 100,
+        "changeFils": 49,
+        "requiresBuyerDetails": false
+      }
+    },
+    {
+      "name": "tax-half-fils",
+      "input": {
+        "calculationVersion": "offline-line-v1",
+        "taxInclusive": true,
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "piece",
+            "quantityMilli": 1000,
+            "unitPriceFils": 21,
+            "taxRateBps": 10000
+          }
+        ],
+        "cashTenderedFils": 21,
+        "recordedCardFils": 0
+      },
+      "expected": {
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "piece",
+            "quantityMilli": 1000,
+            "unitPriceFils": 21,
+            "taxRateBps": 10000,
+            "lineNumber": 1,
+            "grossFils": 21,
+            "netFils": 10,
+            "taxFils": 11
+          }
+        ],
+        "totals": {
+          "grossFils": 21,
+          "netFils": 10,
+          "taxFils": 11
+        },
+        "payments": [
+          {
+            "method": "cash",
+            "amountFils": 21
+          }
+        ],
+        "cashTenderedFils": 21,
+        "changeFils": 0,
+        "requiresBuyerDetails": false
+      }
+    },
+    {
+      "name": "mixed-units-split-tender",
+      "input": {
+        "calculationVersion": "offline-line-v1",
+        "taxInclusive": true,
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "piece",
+            "quantityMilli": 3000,
+            "unitPriceFils": 450,
+            "taxRateBps": 500
+          },
+          {
+            "productId": "00000000-0000-4000-8000-000000000002",
+            "name": "Synthetic product 2",
+            "unit": "kg",
+            "quantityMilli": 125,
+            "unitPriceFils": 6999,
+            "taxRateBps": 500
+          },
+          {
+            "productId": "00000000-0000-4000-8000-000000000003",
+            "name": "Synthetic product 3",
+            "unit": "pack",
+            "quantityMilli": 2000,
+            "unitPriceFils": 1050,
+            "taxRateBps": 500
+          }
+        ],
+        "cashTenderedFils": 3500,
+        "recordedCardFils": 1325
+      },
+      "expected": {
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "piece",
+            "quantityMilli": 3000,
+            "unitPriceFils": 450,
+            "taxRateBps": 500,
+            "lineNumber": 1,
+            "grossFils": 1350,
+            "netFils": 1286,
+            "taxFils": 64
+          },
+          {
+            "productId": "00000000-0000-4000-8000-000000000002",
+            "name": "Synthetic product 2",
+            "unit": "kg",
+            "quantityMilli": 125,
+            "unitPriceFils": 6999,
+            "taxRateBps": 500,
+            "lineNumber": 2,
+            "grossFils": 875,
+            "netFils": 833,
+            "taxFils": 42
+          },
+          {
+            "productId": "00000000-0000-4000-8000-000000000003",
+            "name": "Synthetic product 3",
+            "unit": "pack",
+            "quantityMilli": 2000,
+            "unitPriceFils": 1050,
+            "taxRateBps": 500,
+            "lineNumber": 3,
+            "grossFils": 2100,
+            "netFils": 2000,
+            "taxFils": 100
+          }
+        ],
+        "totals": {
+          "grossFils": 4325,
+          "netFils": 4119,
+          "taxFils": 206
+        },
+        "payments": [
+          {
+            "method": "cash",
+            "amountFils": 3000
+          },
+          {
+            "method": "card",
+            "amountFils": 1325
+          }
+        ],
+        "cashTenderedFils": 3500,
+        "changeFils": 500,
+        "requiresBuyerDetails": false
+      }
+    },
+    {
+      "name": "per-line-tax-rounding",
+      "input": {
+        "calculationVersion": "offline-line-v1",
+        "taxInclusive": true,
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "piece",
+            "quantityMilli": 1000,
+            "unitPriceFils": 11,
+            "taxRateBps": 500
+          },
+          {
+            "productId": "00000000-0000-4000-8000-000000000002",
+            "name": "Synthetic product 2",
+            "unit": "pack",
+            "quantityMilli": 1000,
+            "unitPriceFils": 11,
+            "taxRateBps": 500
+          }
+        ],
+        "cashTenderedFils": 22,
+        "recordedCardFils": 0
+      },
+      "expected": {
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "piece",
+            "quantityMilli": 1000,
+            "unitPriceFils": 11,
+            "taxRateBps": 500,
+            "lineNumber": 1,
+            "grossFils": 11,
+            "netFils": 10,
+            "taxFils": 1
+          },
+          {
+            "productId": "00000000-0000-4000-8000-000000000002",
+            "name": "Synthetic product 2",
+            "unit": "pack",
+            "quantityMilli": 1000,
+            "unitPriceFils": 11,
+            "taxRateBps": 500,
+            "lineNumber": 2,
+            "grossFils": 11,
+            "netFils": 10,
+            "taxFils": 1
+          }
+        ],
+        "totals": {
+          "grossFils": 22,
+          "netFils": 20,
+          "taxFils": 2
+        },
+        "payments": [
+          {
+            "method": "cash",
+            "amountFils": 22
+          }
+        ],
+        "cashTenderedFils": 22,
+        "changeFils": 0,
+        "requiresBuyerDetails": false
+      }
+    },
+    {
+      "name": "recorded-card-zero-tax",
+      "input": {
+        "calculationVersion": "offline-line-v1",
+        "taxInclusive": true,
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "piece",
+            "quantityMilli": 2000,
+            "unitPriceFils": 250,
+            "taxRateBps": 0
+          }
+        ],
+        "cashTenderedFils": 0,
+        "recordedCardFils": 500
+      },
+      "expected": {
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "piece",
+            "quantityMilli": 2000,
+            "unitPriceFils": 250,
+            "taxRateBps": 0,
+            "lineNumber": 1,
+            "grossFils": 500,
+            "netFils": 500,
+            "taxFils": 0
+          }
+        ],
+        "totals": {
+          "grossFils": 500,
+          "netFils": 500,
+          "taxFils": 0
+        },
+        "payments": [
+          {
+            "method": "card",
+            "amountFils": 500
+          }
+        ],
+        "cashTenderedFils": 0,
+        "changeFils": 0,
+        "requiresBuyerDetails": false
+      }
+    },
+    {
+      "name": "mixed-tax-rates",
+      "input": {
+        "calculationVersion": "offline-line-v1",
+        "taxInclusive": true,
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "piece",
+            "quantityMilli": 1000,
+            "unitPriceFils": 1050,
+            "taxRateBps": 500
+          },
+          {
+            "productId": "00000000-0000-4000-8000-000000000002",
+            "name": "Synthetic product 2",
+            "unit": "pack",
+            "quantityMilli": 1000,
+            "unitPriceFils": 1100,
+            "taxRateBps": 1000
+          },
+          {
+            "productId": "00000000-0000-4000-8000-000000000003",
+            "name": "Synthetic product 3",
+            "unit": "kg",
+            "quantityMilli": 1000,
+            "unitPriceFils": 1000,
+            "taxRateBps": 0
+          }
+        ],
+        "cashTenderedFils": 0,
+        "recordedCardFils": 3150
+      },
+      "expected": {
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "piece",
+            "quantityMilli": 1000,
+            "unitPriceFils": 1050,
+            "taxRateBps": 500,
+            "lineNumber": 1,
+            "grossFils": 1050,
+            "netFils": 1000,
+            "taxFils": 50
+          },
+          {
+            "productId": "00000000-0000-4000-8000-000000000002",
+            "name": "Synthetic product 2",
+            "unit": "pack",
+            "quantityMilli": 1000,
+            "unitPriceFils": 1100,
+            "taxRateBps": 1000,
+            "lineNumber": 2,
+            "grossFils": 1100,
+            "netFils": 1000,
+            "taxFils": 100
+          },
+          {
+            "productId": "00000000-0000-4000-8000-000000000003",
+            "name": "Synthetic product 3",
+            "unit": "kg",
+            "quantityMilli": 1000,
+            "unitPriceFils": 1000,
+            "taxRateBps": 0,
+            "lineNumber": 3,
+            "grossFils": 1000,
+            "netFils": 1000,
+            "taxFils": 0
+          }
+        ],
+        "totals": {
+          "grossFils": 3150,
+          "netFils": 3000,
+          "taxFils": 150
+        },
+        "payments": [
+          {
+            "method": "card",
+            "amountFils": 3150
+          }
+        ],
+        "cashTenderedFils": 0,
+        "changeFils": 0,
+        "requiresBuyerDetails": false
+      }
+    },
+    {
+      "name": "minimum-weight",
+      "input": {
+        "calculationVersion": "offline-line-v1",
+        "taxInclusive": true,
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "kg",
+            "quantityMilli": 1,
+            "unitPriceFils": 1000,
+            "taxRateBps": 500
+          }
+        ],
+        "cashTenderedFils": 1,
+        "recordedCardFils": 0
+      },
+      "expected": {
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "kg",
+            "quantityMilli": 1,
+            "unitPriceFils": 1000,
+            "taxRateBps": 500,
+            "lineNumber": 1,
+            "grossFils": 1,
+            "netFils": 1,
+            "taxFils": 0
+          }
+        ],
+        "totals": {
+          "grossFils": 1,
+          "netFils": 1,
+          "taxFils": 0
+        },
+        "payments": [
+          {
+            "method": "cash",
+            "amountFils": 1
+          }
+        ],
+        "cashTenderedFils": 1,
+        "changeFils": 0,
+        "requiresBuyerDetails": false
+      }
+    },
+    {
+      "name": "zero-value-line",
+      "input": {
+        "calculationVersion": "offline-line-v1",
+        "taxInclusive": true,
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "piece",
+            "quantityMilli": 1000,
+            "unitPriceFils": 0,
+            "taxRateBps": 500
+          },
+          {
+            "productId": "00000000-0000-4000-8000-000000000002",
+            "name": "Synthetic product 2",
+            "unit": "piece",
+            "quantityMilli": 1000,
+            "unitPriceFils": 1050,
+            "taxRateBps": 500
+          }
+        ],
+        "cashTenderedFils": 1050,
+        "recordedCardFils": 0
+      },
+      "expected": {
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "piece",
+            "quantityMilli": 1000,
+            "unitPriceFils": 0,
+            "taxRateBps": 500,
+            "lineNumber": 1,
+            "grossFils": 0,
+            "netFils": 0,
+            "taxFils": 0
+          },
+          {
+            "productId": "00000000-0000-4000-8000-000000000002",
+            "name": "Synthetic product 2",
+            "unit": "piece",
+            "quantityMilli": 1000,
+            "unitPriceFils": 1050,
+            "taxRateBps": 500,
+            "lineNumber": 2,
+            "grossFils": 1050,
+            "netFils": 1000,
+            "taxFils": 50
+          }
+        ],
+        "totals": {
+          "grossFils": 1050,
+          "netFils": 1000,
+          "taxFils": 50
+        },
+        "payments": [
+          {
+            "method": "cash",
+            "amountFils": 1050
+          }
+        ],
+        "cashTenderedFils": 1050,
+        "changeFils": 0,
+        "requiresBuyerDetails": false
+      }
+    },
+    {
+      "name": "maximum-invoice",
+      "input": {
+        "calculationVersion": "offline-line-v1",
+        "taxInclusive": true,
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "piece",
+            "quantityMilli": 1000,
+            "unitPriceFils": 100000000,
+            "taxRateBps": 500
+          }
+        ],
+        "cashTenderedFils": 0,
+        "recordedCardFils": 100000000
+      },
+      "expected": {
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "piece",
+            "quantityMilli": 1000,
+            "unitPriceFils": 100000000,
+            "taxRateBps": 500,
+            "lineNumber": 1,
+            "grossFils": 100000000,
+            "netFils": 95238095,
+            "taxFils": 4761905
+          }
+        ],
+        "totals": {
+          "grossFils": 100000000,
+          "netFils": 95238095,
+          "taxFils": 4761905
+        },
+        "payments": [
+          {
+            "method": "card",
+            "amountFils": 100000000
+          }
+        ],
+        "cashTenderedFils": 0,
+        "changeFils": 0,
+        "requiresBuyerDetails": true
+      }
+    },
+    {
+      "name": "buyer-details-boundary",
+      "input": {
+        "calculationVersion": "offline-line-v1",
+        "taxInclusive": true,
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "piece",
+            "quantityMilli": 1000,
+            "unitPriceFils": 1000000,
+            "taxRateBps": 500
+          }
+        ],
+        "cashTenderedFils": 1000000,
+        "recordedCardFils": 0
+      },
+      "expected": {
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "piece",
+            "quantityMilli": 1000,
+            "unitPriceFils": 1000000,
+            "taxRateBps": 500,
+            "lineNumber": 1,
+            "grossFils": 1000000,
+            "netFils": 952381,
+            "taxFils": 47619
+          }
+        ],
+        "totals": {
+          "grossFils": 1000000,
+          "netFils": 952381,
+          "taxFils": 47619
+        },
+        "payments": [
+          {
+            "method": "cash",
+            "amountFils": 1000000
+          }
+        ],
+        "cashTenderedFils": 1000000,
+        "changeFils": 0,
+        "requiresBuyerDetails": false
+      }
+    },
+    {
+      "name": "buyer-details-required",
+      "input": {
+        "calculationVersion": "offline-line-v1",
+        "taxInclusive": true,
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "piece",
+            "quantityMilli": 1000,
+            "unitPriceFils": 1000001,
+            "taxRateBps": 500
+          }
+        ],
+        "cashTenderedFils": 1000001,
+        "recordedCardFils": 0
+      },
+      "expected": {
+        "lines": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000001",
+            "name": "Synthetic product 1",
+            "unit": "piece",
+            "quantityMilli": 1000,
+            "unitPriceFils": 1000001,
+            "taxRateBps": 500,
+            "lineNumber": 1,
+            "grossFils": 1000001,
+            "netFils": 952382,
+            "taxFils": 47619
+          }
+        ],
+        "totals": {
+          "grossFils": 1000001,
+          "netFils": 952382,
+          "taxFils": 47619
+        },
+        "payments": [
+          {
+            "method": "cash",
+            "amountFils": 1000001
+          }
+        ],
+        "cashTenderedFils": 1000001,
+        "changeFils": 0,
+        "requiresBuyerDetails": true
+      }
+    }
+  ]
+}

@@ -2,6 +2,8 @@
 
 Status: implementation contract, 2026-10-16. This document does not enable live offline sales. Server grant allocation, historical reconciliation, native integration and acceptance remain release gates. Browser training records must never be imported as live invoices.
 
+Implemented boundaries: the native calculator and strict signed-payload reader have shared financial/signature fixtures with TypeScript. `lib/pos/offline/validation.ts` independently recomputes historical financial fields and provides a pure import decision for exact retries, conflicting identity, device-chain order and cumulative grant budgets. This decision does not import anything or establish custody. A database implementation must lock the historical epoch and grant, query all matching identity/number/sequence keys, persist reconciliation exceptions, and commit documents, provenance, counters and the original acknowledgement together. Its adapter must suppress delayed cloud kitchen preparation for imported offline bills. None of these helpers enables an issuing WebView bridge or removes the remaining release gates.
+
 ## Wire signature and canonical bytes
 
 `SignedEnvelope = {format:'pos-signed-v1', alg:'ECDSA-P256-SHA256-DER', keyId:string, payloadBase64Url:string, signatureBase64Url:string}`. No extra properties. Base64url is unpadded and canonical. Payload is UTF-8 JSON with recursively sorted object keys, arrays in original order, integer safe numbers only, no undefined/nonfinite values or lone UTF-16 surrogates; no Unicode normalization. Signed bytes are exactly decoded payload bytes, not a reconstructed subset. This is a private envelope format, not JWS. Maximum decoded payload 1 MiB; keyId 1–120 ASCII letters/digits/dot/underscore/hyphen.

@@ -1,0 +1,124 @@
+{
+  "provenance": "Synthetic Node.js crypto P-256 signatures; no private key retained; not a production trust anchor.",
+  "publicKeyBase64Url": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEMeKBSDtjIYVSL2_8toc6aSWPS3DwOvydhcjrR50u9dXqOLXM1RG93RDPLEaJDoVOby49exHjUexDZmfE87Usbg",
+  "fingerprint": "f6b4b4f30e194f535462f1e607fd6ac94fbe4c1a323a39754afe4d3eee1f7574",
+  "cases": [
+    {
+      "name": "unicode",
+      "valid": true,
+      "payload": "{\"a\":{\"b\":1,\"y\":\"مثال 🍰\"},\"z\":[3,1]}",
+      "payloadSha256": "7510222c3bb11bf67f00a6c72d2eb9840180e5493cba26efdfa0ee1d195f0d83",
+      "envelope": {
+        "format": "pos-signed-v1",
+        "alg": "ECDSA-P256-SHA256-DER",
+        "keyId": "synthetic-node-v1",
+        "payloadBase64Url": "eyJhIjp7ImIiOjEsInkiOiLZhdir2KfZhCDwn42wIn0sInoiOlszLDFdfQ",
+        "signatureBase64Url": "MEUCIQClx2h2sRL3nppWHHWypWhk7v_2nAmc9WcK8zsb7D4n_QIgLn3C3mtUfa6xrg4mfWIrsPkky2DU4Ed2Fz8gC713Qvo"
+      }
+    },
+    {
+      "name": "escaping",
+      "valid": true,
+      "payload": "{\"a\":\"</script>  \\n\\t\\b\\f\\r\\u0000\\\"\\\\\",\"n\":9007199254740991,\"z\":null}",
+      "payloadSha256": "9fd93b9f56d8d38e11ef2a30ee876e50f8d622f3e9bdbd221243f54380471c88",
+      "envelope": {
+        "format": "pos-signed-v1",
+        "alg": "ECDSA-P256-SHA256-DER",
+        "keyId": "synthetic-node-v1",
+        "payloadBase64Url": "eyJhIjoiPC9zY3JpcHQ-4oCo4oCpXG5cdFxiXGZcclx1MDAwMFwiXFwiLCJuIjo5MDA3MTk5MjU0NzQwOTkxLCJ6IjpudWxsfQ",
+        "signatureBase64Url": "MEYCIQDWMV3ci2PP_qvcTMr2_pQlJCC4fA60p0tgSkQVHJAh6QIhAIKD2RSUQ9473iYUjO6Cf90nUZM7cpPU4m6haveovYhs"
+      }
+    },
+    {
+      "name": "unordered",
+      "valid": false,
+      "payload": "{\"z\":1,\"a\":2}",
+      "payloadSha256": "c5c2b1fdd0d4a83cda3ff79c9c74f2c72e2a92920afda20bcafc90c1a72f86a9",
+      "envelope": {
+        "format": "pos-signed-v1",
+        "alg": "ECDSA-P256-SHA256-DER",
+        "keyId": "synthetic-node-v1",
+        "payloadBase64Url": "eyJ6IjoxLCJhIjoyfQ",
+        "signatureBase64Url": "MEYCIQDxX2m9ijPMBw1pzbT_0vBW6wnUMAHtDsvVl7mvlYSC3AIhAO0gh81jn1LY3NJK-Oc3c_iHC5Va61-0u9TbNfeirVw3"
+      }
+    },
+    {
+      "name": "duplicate",
+      "valid": false,
+      "payload": "{\"a\":1,\"a\":1}",
+      "payloadSha256": "e0921f1cf7632d7464378881cc0d323779c1f0812953b740093128741b4fb94d",
+      "envelope": {
+        "format": "pos-signed-v1",
+        "alg": "ECDSA-P256-SHA256-DER",
+        "keyId": "synthetic-node-v1",
+        "payloadBase64Url": "eyJhIjoxLCJhIjoxfQ",
+        "signatureBase64Url": "MEYCIQCM21QIkHcFMN292R-yMT6Ijuabrfui6ofO0OS8GaQAuAIhAO5_FxBeyX4G-RDckUYYT1ZIaax6js4rjsvuy1VvEIFR"
+      }
+    },
+    {
+      "name": "fraction",
+      "valid": false,
+      "payload": "{\"a\":1.25}",
+      "payloadSha256": "fe1a538e79df3c8fca6734c6fe6b6fb11436e9843ca482ca0b608cec642eaa54",
+      "envelope": {
+        "format": "pos-signed-v1",
+        "alg": "ECDSA-P256-SHA256-DER",
+        "keyId": "synthetic-node-v1",
+        "payloadBase64Url": "eyJhIjoxLjI1fQ",
+        "signatureBase64Url": "MEQCIBgnTaepDiAeSyr6yOVwmK10231Cm1GVFwDgYzB9tdJTAiATjaHbmDXIY6h5aKTFrszh_kDrci_7hbaYZ-cQ2JmRwA"
+      }
+    },
+    {
+      "name": "negative_zero",
+      "valid": false,
+      "payload": "{\"a\":-0}",
+      "payloadSha256": "dbd681e539ad171ed90bfe0b80b788200b28a669b886b868605c53fb1ee9a962",
+      "envelope": {
+        "format": "pos-signed-v1",
+        "alg": "ECDSA-P256-SHA256-DER",
+        "keyId": "synthetic-node-v1",
+        "payloadBase64Url": "eyJhIjotMH0",
+        "signatureBase64Url": "MEQCIBLvJ7mWYHmsoZO_PpAbYOCU3T681P1zvhfn2HBQbt2MAiBX9Iad-uNLN1Yje1JFGr08ZNNQnQS_3kKXNU60M4DAhA"
+      }
+    },
+    {
+      "name": "trailing",
+      "valid": false,
+      "payload": "{\"a\":1} false",
+      "payloadSha256": "71babf4533015471f4dd02751ae0402fecde121544db7b8ae59d3821180c4c78",
+      "envelope": {
+        "format": "pos-signed-v1",
+        "alg": "ECDSA-P256-SHA256-DER",
+        "keyId": "synthetic-node-v1",
+        "payloadBase64Url": "eyJhIjoxfSBmYWxzZQ",
+        "signatureBase64Url": "MEQCIH9pwIJoELXbyOeovRzC-6Kd0a9hxc3ARlyWNPrGnoWrAiBPPS-mjzdHT_S9ZY0P0UP8G_h6ZBxCD26_3CSO7NX-Jg"
+      }
+    },
+    {
+      "name": "surrogate",
+      "valid": false,
+      "payload": "{\"a\":\"\\ud800\"}",
+      "payloadSha256": "89f8ca88ea20e6cd48ed0ab6b731b66377cab0c8fb9a7187ea96ac6813ed24e4",
+      "envelope": {
+        "format": "pos-signed-v1",
+        "alg": "ECDSA-P256-SHA256-DER",
+        "keyId": "synthetic-node-v1",
+        "payloadBase64Url": "eyJhIjoiXHVkODAwIn0",
+        "signatureBase64Url": "MEUCIQD01dIOxUT-LFlRDBD1ipz7Idaf-uLv_tGsis7jWcchOgIgUlkVYs5sxZ94nUSuRWwY1p2I-3p-5U-Lq1HuldEjxj4"
+      }
+    },
+    {
+      "name": "large_integer",
+      "valid": false,
+      "payload": "{\"a\":9007199254740992}",
+      "payloadSha256": "65c07d758377f303542fde97a8fe78f29a66c1e062b8f80fed3106a6d106d88b",
+      "envelope": {
+        "format": "pos-signed-v1",
+        "alg": "ECDSA-P256-SHA256-DER",
+        "keyId": "synthetic-node-v1",
+        "payloadBase64Url": "eyJhIjo5MDA3MTk5MjU0NzQwOTkyfQ",
+        "signatureBase64Url": "MEYCIQDY74LmrSKo4KCUa-hbOS9M-WiaqtOdA9J1ZDShnF97ogIhAM3SwVbNV29zdMHJ_2qOTEI0DzWuT7vDKdp5xWOa6K9J"
+      }
+    }
+  ]
+}
