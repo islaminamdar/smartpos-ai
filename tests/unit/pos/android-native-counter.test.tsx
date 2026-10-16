@@ -899,3 +899,82 @@ it('blocks receipt confirmation during drawer-close recovery but retains no-mone
   expect(screen.getByText('No money was received')).toBeVisible()
   expect(bridge.confirmNativePaymentIntent).not.toHaveBeenCalled()
 })
+
+const privateCustomer = {
+  name: 'Synthetic private buyer',
+  address: 'Synthetic private delivery address',
+  trn: '100000000000099',
+}
+const privateReceipt = { ...receipt, customer: privateCustomer }
+
+it.each(['native lock', 'pagehide', 'account change'] as const)(
+  'removes the complete cached receipt and buyer details on %s',
+  async (transition) => {
+    bridge.readNativeCheckout.mockResolvedValue({
+      ...state,
+      lastReceiptId: privateReceipt.id,
+      lastReceipt: privateReceipt,
+    })
+    const p = props()
+    const view = render(<NativeCounter {...p} />)
+    await screen.findByRole('heading', { name: privateReceipt.documentNumber })
+    for (const value of Object.values(privateCustomer))
+      expect(view.container).toHaveTextContent(value)
+    expect(view.container).toHaveTextContent('AED 5.25')
+
+    if (transition === 'account change')
+      view.rerender(<NativeCounter {...p} ready={false} revision={2} />)
+    else
+      act(() => {
+        if (transition === 'native lock') bridge.subscribeNativeCheckoutLock.mock.calls[0][0]()
+        else window.dispatchEvent(new Event('pagehide'))
+      })
+
+    for (const value of [
+      ...Object.values(privateCustomer),
+      privateReceipt.documentNumber,
+      privateReceipt.merchant.legalName,
+      'QA Milk cake',
+      'AED 5.25',
+    ])
+      expect(view.container).not.toHaveTextContent(value)
+    expect(bridge.unlockNativeOffline).not.toHaveBeenCalled()
+    expect(bridge.confirmNativePaymentIntent).not.toHaveBeenCalled()
+  }
+)
+
+it.each(['receipt', 'pending payment'] as const)(
+  'does not restore private %s details from a status read completed after native lock',
+  async (kind) => {
+    let resolve!: (value: unknown) => void
+    bridge.readNativeCheckout.mockReturnValue(new Promise((done) => (resolve = done)))
+    const p = props()
+    const view = render(<NativeCounter {...p} />)
+    await waitFor(() => expect(bridge.readNativeCheckout).toHaveBeenCalledTimes(1))
+    act(() => bridge.subscribeNativeCheckoutLock.mock.calls[0][0]())
+    await act(async () =>
+      resolve(
+        kind === 'receipt'
+          ? { ...state, lastReceiptId: privateReceipt.id, lastReceipt: privateReceipt }
+          : {
+              ...state,
+              canIssue: false,
+              pendingIntentId: intent.intentId,
+              unresolvedIntent: intent,
+              reasonCode: 'payment_reconciliation_required',
+            }
+      )
+    )
+    for (const value of [
+      ...Object.values(privateCustomer),
+      privateReceipt.documentNumber,
+      'QA Milk cake',
+      'AED 5.25',
+    ])
+      expect(view.container).not.toHaveTextContent(value)
+    expect(screen.queryByRole('heading', { name: 'Review the saved payment' })).toBeNull()
+    expect(p.onHoldChange).toHaveBeenLastCalledWith(true)
+    expect(bridge.readNativeCheckout).toHaveBeenCalledTimes(1)
+    expect(bridge.confirmNativePaymentIntent).not.toHaveBeenCalled()
+  }
+)

@@ -329,6 +329,8 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
     }
 
     public synchronized void lock(){unlock.lock();}
+    /** Native host notification hooks only; never exposed as a WebView operation. */
+    public void sessionExpiryCallbacks(Runnable invalidate,Runnable notify){unlock.sessionExpiryCallbacks(invalidate,notify);}
     /** Local-only counter boundary. Retained custody alone never authenticates a reader. */
     synchronized NativeCheckoutCoordinator.CheckoutContext checkoutContext(boolean requireUnlocked)throws Exception{
         JSONObject state=session.nativeState(),offline=state.optJSONObject("offline");

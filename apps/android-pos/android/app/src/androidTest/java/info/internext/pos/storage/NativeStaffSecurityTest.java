@@ -14,6 +14,7 @@ import org.junit.runner.RunWith;
 import java.security.KeyStore;
 import java.util.Arrays;
 import java.util.UUID;
+import java.util.ArrayList;
 import static org.junit.Assert.*;
 
 /** Every fixture owns unique synthetic files/aliases and verifies cleanup. No production
@@ -34,11 +35,12 @@ public class NativeStaffSecurityTest {
         final MutableClock source=new MutableClock();
         final OfflineBundle.Binding binding=new OfflineBundle.Binding(id(),id(),id(),id(),id(),id(),"a".repeat(64));
         NativeClockSource clock;NativeStaffUnlock auth;
-        Fixture() throws Exception {try{journal.bindDeviceKey(binding.deviceKeySha256);clock=new NativeClockSource(context,journal,clockDb,clockAlias,source);auth=new NativeStaffUnlock(context,journal,clock,authDb,authAlias);}catch(Exception error){try{close();}catch(Exception cleanup){error.addSuppressed(cleanup);}throw error;}}
+        final Tasks tasks=new Tasks();
+        Fixture() throws Exception {try{journal.bindDeviceKey(binding.deviceKeySha256);clock=new NativeClockSource(context,journal,clockDb,clockAlias,source);auth=new NativeStaffUnlock(context,journal,clock,authDb,authAlias,tasks,()->source.elapsed);}catch(Exception error){try{close();}catch(Exception cleanup){error.addSuppressed(cleanup);}throw error;}}
         static String id(){return UUID.randomUUID().toString();}
         void provision() throws Exception {auth.provisionVerifiedStaff(binding,PIN.toCharArray());}
         void unlock() throws Exception {auth.unlock(binding,PIN.toCharArray());}
-        void restartAuth() throws Exception {auth.close();auth=new NativeStaffUnlock(context,journal,clock,authDb,authAlias);}
+        void restartAuth() throws Exception {auth.close();auth=new NativeStaffUnlock(context,journal,clock,authDb,authAlias,tasks,()->source.elapsed);}
         void restartClock() throws Exception {clock.close();clock=new NativeClockSource(context,journal,clockDb,clockAlias,source);}
         JSONObject credential() throws Exception {try(SQLiteDatabase db=context.openOrCreateDatabase(authDb,0,null);Cursor c=db.rawQuery("SELECT payload FROM credentials",null)){assertTrue(c.moveToFirst());return new JSONObject(c.getString(0));}}
         @Override public void close() throws Exception {
@@ -47,6 +49,12 @@ public class NativeStaffSecurityTest {
             for(String alias:new String[]{clockAlias,authAlias}){if(keys.containsAlias(alias))keys.deleteEntry(alias);assertFalse(keys.containsAlias(alias));}
             for(String file:new String[]{ledger,clockDb,authDb}){context.deleteDatabase(file);assertFalse(context.getDatabasePath(file).exists());}
         }
+    }
+    private static final class Tasks implements NativeSessionExpiry.Scheduler {
+        final ArrayList<Runnable> all=new ArrayList<>();
+        public void post(Runnable task,long delay){all.add(task);}
+        public void remove(Runnable task){} // Exercise even callbacks already dequeued by Android.
+        void run(int i){all.get(i).run();}
     }
     private static void fails(String code,org.junit.function.ThrowingRunnable action){Exception e=assertThrows(Exception.class,action);assertEquals(code,e.getMessage());}
 
@@ -67,6 +75,57 @@ public class NativeStaffSecurityTest {
             f.source.advance(NativeStaffUnlock.SESSION_MS);fails("pin_unlock_required",()->f.auth.requireUnlocked(changed));
             f.unlock();f.restartAuth();fails("pin_unlock_required",()->f.auth.requireUnlocked(f.binding));
             f.unlock();f.source.boot++;f.source.elapsed=1;f.source.wall+=10000;fails("pin_unlock_required",()->f.auth.requireUnlocked(f.binding));
+        }
+    }
+    @Test public void foregroundExpiryRevokesWithoutAnotherGuardAndNotifiesOnce() throws Exception {
+        try(Fixture f=new Fixture()) {
+            int[] invalidations={0},notifications={0};f.auth.sessionExpiryCallbacks(()->invalidations[0]++,()->notifications[0]++);
+            f.provision();f.unlock();JSONObject before=f.credential();f.source.advance(NativeStaffUnlock.SESSION_MS);f.tasks.run(0);
+            assertEquals(1,invalidations[0]);assertEquals(0,notifications[0]);
+            fails("pin_unlock_required",()->f.auth.requireUnlocked(f.binding));fails("pin_unlock_required",()->f.auth.requireUnlocked(f.binding));
+            f.tasks.run(1);f.tasks.run(1);assertEquals(1,notifications[0]);assertEquals(before.toString(),f.credential().toString());
+        }
+    }
+    @Test public void repeatedLazyExpiryReadsDoNotCancelTheQueuedNotification() throws Exception {
+        try(Fixture f=new Fixture()) {
+            int[] invalidations={0},notifications={0};f.auth.sessionExpiryCallbacks(()->invalidations[0]++,()->notifications[0]++);
+            f.provision();f.unlock();f.source.advance(NativeStaffUnlock.SESSION_MS);
+            fails("pin_unlock_required",()->f.auth.requireUnlocked(f.binding));fails("pin_unlock_required",()->f.auth.requireUnlocked(f.binding));
+            assertEquals(1,invalidations[0]);f.tasks.run(0);f.tasks.run(1);assertEquals(1,notifications[0]);
+        }
+    }
+    @Test public void successfulReunlockSuppressesOldTimerAndOldQueuedDelivery() throws Exception {
+        try(Fixture f=new Fixture()) {
+            int[] notifications={0};f.auth.sessionExpiryCallbacks(()->{},()->notifications[0]++);
+            f.provision();f.unlock();f.source.advance(NativeStaffUnlock.SESSION_MS);f.tasks.run(0);
+            f.unlock();f.tasks.run(0);f.tasks.run(1);f.auth.requireUnlocked(f.binding);assertEquals(0,notifications[0]);
+            f.source.advance(NativeStaffUnlock.SESSION_MS);f.tasks.run(2);f.tasks.run(3);assertEquals(1,notifications[0]);
+        }
+    }
+    @Test public void failedReunlockDoesNotCancelAlreadyQueuedExpiryNotification() throws Exception {
+        try(Fixture f=new Fixture()) {
+            int[] notifications={0};f.auth.sessionExpiryCallbacks(()->{},()->notifications[0]++);
+            f.provision();f.unlock();f.source.advance(NativeStaffUnlock.SESSION_MS);f.tasks.run(0);
+            fails("pin_incorrect",()->f.auth.unlock(f.binding,"87654321".toCharArray()));
+            f.tasks.run(1);assertEquals(1,notifications[0]);fails("pin_unlock_required",()->f.auth.requireUnlocked(f.binding));
+        }
+    }
+    @Test public void expiryNotificationDoesNotWaitForCredentialMonitor() throws Exception {
+        try(Fixture f=new Fixture()) {
+            java.util.concurrent.CountDownLatch notified=new java.util.concurrent.CountDownLatch(1);
+            f.auth.sessionExpiryCallbacks(()->{},notified::countDown);f.provision();f.unlock();f.source.advance(NativeStaffUnlock.SESSION_MS);
+            Thread callback=new Thread(()->{f.tasks.run(0);f.tasks.run(1);});
+            synchronized(NativeStaffUnlock.class){callback.start();assertTrue(notified.await(2,java.util.concurrent.TimeUnit.SECONDS));}
+            callback.join(2000);assertFalse(callback.isAlive());
+        }
+    }
+    @Test public void failedAttemptBeforeDeadlineKeepsOriginalExpiryNotice() throws Exception {
+        try(Fixture f=new Fixture()) {
+            int[] notifications={0};f.auth.sessionExpiryCallbacks(()->{},()->notifications[0]++);
+            f.provision();f.unlock();f.source.advance(NativeStaffUnlock.SESSION_MS-1);
+            fails("pin_incorrect",()->f.auth.unlock(f.binding,"87654321".toCharArray()));
+            fails("pin_unlock_required",()->f.auth.requireUnlocked(f.binding));
+            f.source.advance(1);f.tasks.run(0);f.tasks.run(1);assertEquals(1,notifications[0]);
         }
     }
     @Test public void failuresAndCooldownSurviveRestartRebootAndWallClockForwardChanges() throws Exception {

@@ -1143,6 +1143,7 @@ it('completes PIN recovery, refreshes preparation, preserves the completion and 
   })
   await waitFor(() => expect(consent).toBeEnabled())
   fireEvent.click(consent)
+  await waitFor(() => expect(start).toBeEnabled())
   fireEvent.click(start)
   await screen.findByText(/PIN recovery complete\./)
   await waitFor(() =>

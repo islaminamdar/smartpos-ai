@@ -37,6 +37,7 @@ public final class NativeStaffUnlock implements NativeCheckoutEngine.UnlockGuard
     private final NativeSecurityKey key;
     private final Store store;
     private final String installationId;
+    private final NativeSessionExpiry expiry;
     private String sessionBinding,sessionScope,sessionBoot;
     private long sessionExpires,sessionRevision;
 
@@ -45,12 +46,24 @@ public final class NativeStaffUnlock implements NativeCheckoutEngine.UnlockGuard
     }
     // Package-private isolated test seam; native host is the trust boundary, never JS.
     NativeStaffUnlock(Context context,NativeJournal journal,NativeCheckoutEngine.ClockSource clock,String database,String alias) throws Exception {
+        this(context,journal,clock,database,alias,mainScheduler(),android.os.SystemClock::elapsedRealtime);
+    }
+    NativeStaffUnlock(Context context,NativeJournal journal,NativeCheckoutEngine.ClockSource clock,String database,String alias,NativeSessionExpiry.Scheduler scheduler,java.util.function.LongSupplier elapsed) throws Exception {
         if(clock==null)throw failure("pin_clock_unavailable");this.journal=journal;this.clock=clock;installationId=journal.installationId();
+        expiry=new NativeSessionExpiry(scheduler,elapsed);
         if(Build.VERSION.SDK_INT<26)throw failure("pin_kdf_unsupported");
         try { SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256"); } catch(Exception e) { throw failure("pin_kdf_unsupported"); }
         key=new NativeSecurityKey(alias,context.getDatabasePath(database).exists(),!journal.hasCustody());
         store=new Store(context,database);try {store.getWritableDatabase();}catch(Exception error){store.close();throw error;}
     }
+    static NativeSessionExpiry.Scheduler mainScheduler(){
+        android.os.Handler handler=new android.os.Handler(android.os.Looper.getMainLooper());
+        return new NativeSessionExpiry.Scheduler(){
+            public void post(Runnable task,long delay){if(!handler.postDelayed(task,delay))throw failure("pin_unlock_required");}
+            public void remove(Runnable task){handler.removeCallbacks(task);}
+        };
+    }
+    void sessionExpiryCallbacks(Runnable invalidate,Runnable notify){expiry.callbacks(invalidate,notify);}
     private final class Store extends SQLiteOpenHelper {
         Store(Context c,String name) {super(c,name,null,2);setWriteAheadLoggingEnabled(true);}
         @Override public void onConfigure(SQLiteDatabase db) {db.execSQL("PRAGMA synchronous=FULL");db.execSQL("PRAGMA recursive_triggers=ON");}
@@ -110,7 +123,9 @@ public final class NativeStaffUnlock implements NativeCheckoutEngine.UnlockGuard
         try {
             assertDevice(binding);
             synchronized(NativeStaffUnlock.class) {
-                clearSession();requireNoRecovery();String scope=scope(binding);SQLiteDatabase db=store.getWritableDatabase();JSONObject charged;
+                // Keep the previous notification deadline through a failed attempt;
+                // only a successful unlock may replace it. Authorization fields clear now.
+                clearSessionFields();requireNoRecovery();String scope=scope(binding);SQLiteDatabase db=store.getWritableDatabase();JSONObject charged;
                 OfflineClock.Reading start=clock.read();String rejected=null;
                 // Charge the attempt durably BEFORE KDF verification. Killing the process at
                 // any subsequent point cannot grant free guesses or erase failed attempts.
@@ -146,24 +161,29 @@ public final class NativeStaffUnlock implements NativeCheckoutEngine.UnlockGuard
                     save(db,scope,current);db.setTransactionSuccessful();sessionRevision=current.getLong("revision");
                 }finally{db.endTransaction();}
                 sessionScope=scope;sessionBinding=bindingKey(binding);sessionBoot=finish.bootId;sessionExpires=Math.addExact(finish.elapsedRealtimeMs,SESSION_MS);
+                expiry.arm(finish.elapsedRealtimeMs,SESSION_MS);
+                if(!expiry.active())throw failure("pin_unlock_required");
             }
-        }catch(Exception error){lock();throw error;}finally{wipe(pin);}
+        }catch(Exception error){synchronized(NativeStaffUnlock.class){clearSessionFields();}throw error;}finally{wipe(pin);}
     }
 
     @Override public void requireUnlocked(OfflineBundle.Binding binding) throws Exception {
         assertDevice(binding);
         synchronized(NativeStaffUnlock.class) {
+            boolean expired=false;
             try {
                 requireNoRecovery();OfflineClock.Reading now=clock.read();
-                if(sessionBinding==null||!sessionBinding.equals(bindingKey(binding))||!now.bootId.equals(sessionBoot)||now.elapsedRealtimeMs>=sessionExpires)throw failure("pin_unlock_required");
+                expired=sessionBinding!=null&&(!now.bootId.equals(sessionBoot)||now.elapsedRealtimeMs>=sessionExpires||!expiry.active());
+                if(expired||sessionBinding==null||!sessionBinding.equals(bindingKey(binding)))throw failure("pin_unlock_required");
                 JSONObject current=load(store.getReadableDatabase(),sessionScope);
                 if(current==null||current.getLong("revision")!=sessionRevision||current.getLong("failures")!=0)throw failure("pin_unlock_required");
-            }catch(Exception error){clearSession();throw error;}
+            }catch(Exception error){clearSessionFields();if(expired)expiry.expire();throw error;}
         }
     }
     void lock(){synchronized(NativeStaffUnlock.class){clearSession();}}
-    private void clearSession(){sessionBinding=null;sessionScope=null;sessionBoot=null;sessionExpires=0;sessionRevision=0;}
-    @Override public void close(){synchronized(NativeStaffUnlock.class){clearSession();store.close();}}
+    private void clearSessionFields(){sessionBinding=null;sessionScope=null;sessionBoot=null;sessionExpires=0;sessionRevision=0;}
+    private void clearSession(){clearSessionFields();expiry.clear();}
+    @Override public void close(){synchronized(NativeStaffUnlock.class){clearSession();expiry.close();store.close();}}
 
     private static final String[] RECOVERY_TABLES={"pin_recovery_requests","pin_recovery_proofs","pin_recovery_expired","pin_recovery_approvals","pin_recovery_applied"};
     /** All methods use the existing auth monitor. Never call journal while holding it. */

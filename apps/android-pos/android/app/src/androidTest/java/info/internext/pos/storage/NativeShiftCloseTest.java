@@ -57,7 +57,7 @@ public class NativeShiftCloseTest {
         if(coordinator!=null)coordinator.close();store=new SecureSessionStore(context,vaultFile,aliases.get(0));
         session=new NativeSession(store,new NativePosHttp(store,Fake::new),journal);
         clock=new NativeClockSource(context,journal,databases.get(1),aliases.get(2),()->new NativeClockSource.Observation(boot,elapsed,now));
-        unlock=new NativeStaffUnlock(context,journal,clock,databases.get(2),aliases.get(3));
+        unlock=new NativeStaffUnlock(context,journal,clock,databases.get(2),aliases.get(3),NativeStaffUnlock.mainScheduler(),()->elapsed);
         coordinator=new NativeOfflineCoordinator(journal,session,identity,clock,unlock,Collections.singletonMap("synthetic-server",server.getPublic()));closer=new NativeShiftClose(journal,session,coordinator);
     }
     @After public void cleanup()throws Exception{

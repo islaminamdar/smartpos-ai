@@ -266,3 +266,50 @@ it('rejects a late Android check/PIN response after background lock', async () =
   expect(p.onPendingChange).toHaveBeenLastCalledWith(true)
   expect(bridge.closeNativeShift).not.toHaveBeenCalled()
 })
+
+it.each(['pending', 'closed'] as const)(
+  'removes already displayed %s drawer cash details on native lock without another read',
+  async (status) => {
+    bridge.getNativeShiftCloseState.mockResolvedValue(status === 'closed' ? closed : pending)
+    const p = props()
+    const view = render(<NativeShiftClose {...p} />)
+    await screen.findByText(
+      status === 'closed' ? 'Original drawer closed' : 'Original close request needs confirmation'
+    )
+    expect(view.container).toHaveTextContent('AED 123.45')
+    if (status === 'closed') {
+      expect(view.container).toHaveTextContent('AED 125.00')
+      expect(view.container).toHaveTextContent('AED -1.55')
+    }
+
+    act(() => bridge.subscribeNativeCheckoutLock.mock.calls[0][0]())
+
+    for (const amount of ['AED 123.45', 'AED 125.00', 'AED -1.55'])
+      expect(view.container).not.toHaveTextContent(amount)
+    expect(screen.getByText(id(2))).toBeInTheDocument()
+    expect(p.onPendingChange).toHaveBeenLastCalledWith(true)
+    expect(bridge.getNativeShiftCloseState).toHaveBeenCalledTimes(1)
+    expect(bridge.checkNativeShiftClose).not.toHaveBeenCalled()
+    expect(bridge.closeNativeShift).not.toHaveBeenCalled()
+    expect(bridge.retryNativeShiftClose).not.toHaveBeenCalled()
+  }
+)
+
+it.each(['pending', 'closed'] as const)(
+  'does not reveal %s cash details from an initial local read completed after native lock',
+  async (status) => {
+    let resolve!: (value: unknown) => void
+    bridge.getNativeShiftCloseState.mockReturnValue(new Promise((done) => (resolve = done)))
+    const p = props()
+    const view = render(<NativeShiftClose {...p} />)
+    await waitFor(() => expect(bridge.getNativeShiftCloseState).toHaveBeenCalledTimes(1))
+    act(() => bridge.subscribeNativeCheckoutLock.mock.calls[0][0]())
+    await act(async () => resolve(status === 'closed' ? closed : pending))
+    for (const amount of ['AED 123.45', 'AED 125.00', 'AED -1.55'])
+      expect(view.container).not.toHaveTextContent(amount)
+    expect(p.onPendingChange).toHaveBeenLastCalledWith(true)
+    expect(p.onCheckedVersion).not.toHaveBeenCalled()
+    expect(p.onChanged).not.toHaveBeenCalled()
+    expect(bridge.getNativeShiftCloseState).toHaveBeenCalledTimes(1)
+  }
+)

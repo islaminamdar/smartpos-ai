@@ -49,7 +49,7 @@ public final class NativeLedgerPlugin extends Plugin {
         if(session==null)session=new NativeSession(getContext(),journal);
         return session;
     }
-    private NativeOfflineCoordinator offline()throws Exception{if(offline==null)offline=new NativeOfflineCoordinator(getContext(),journal,session());return offline;}
+    private NativeOfflineCoordinator offline()throws Exception{if(offline==null){offline=new NativeOfflineCoordinator(getContext(),journal,session());offline.sessionExpiryCallbacks(this::invalidateCheckoutAccess,this::publishCheckoutLocked);}return offline;}
     private NativeReconciliation reconciliation()throws Exception{if(reconciliation==null)reconciliation=new NativeReconciliation(getContext(),journal,session());return reconciliation;}
     private NativeCheckoutCoordinator checkout()throws Exception{if(checkout==null)checkout=new NativeCheckoutCoordinator(journal,offline());return checkout;}
     private NativeBundleRecovery bundleRecovery()throws Exception{if(bundleRecovery==null)bundleRecovery=new NativeBundleRecovery(getContext(),journal,session());return bundleRecovery;}
@@ -183,7 +183,9 @@ public final class NativeLedgerPlugin extends Plugin {
             return result;
         }catch(Exception error){throw new NativeAccessError(NativeCheckoutCoordinator.code(error));}},true);
     }
-    private void notifyCheckoutLocked(){checkoutEpoch.incrementAndGet();if(shiftClose!=null)shiftClose.invalidateCheck();if(pinRecovery!=null)pinRecovery.invalidate();notifyListeners("nativeCheckoutLocked",new JSObject().put("schemaVersion",1),true);}
+    private void invalidateCheckoutAccess(){checkoutEpoch.incrementAndGet();if(shiftClose!=null)shiftClose.invalidateCheck();if(pinRecovery!=null)pinRecovery.invalidate();}
+    private void publishCheckoutLocked(){if(!destroyed)notifyListeners("nativeCheckoutLocked",new JSObject().put("schemaVersion",1),true);}
+    private void notifyCheckoutLocked(){invalidateCheckoutAccess();publishCheckoutLocked();}
     @PluginMethod public void getCheckoutState(PluginCall call){checkoutCall(call,()->checkout().getState());}
     @PluginMethod public void quoteBasket(PluginCall call){checkoutCall(call,()->checkout().quoteBasket(call.getData()),"authorityId","serviceType","customer","lines","tenderMode","cashTenderedFils","recordedCardFils");}
     @PluginMethod public void beginPaymentIntent(PluginCall call){checkoutCall(call,()->checkout().beginPaymentIntent(call.getData().getString("intentId"),call.getData().getJSONObject("request")),"intentId","request");}
