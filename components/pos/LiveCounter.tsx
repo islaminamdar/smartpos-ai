@@ -24,12 +24,24 @@ import CatalogueManager from './CatalogueManager'
 import BranchReports from './reports/BranchReports'
 import OfferManager from './offers/OfferManager'
 import OfferPicker from './offers/OfferPicker'
+import StaffManager from './staff/StaffManager'
+import AccountSettings from './staff/AccountSettings'
+import PendingAccessRecovery from './staff/PendingAccessRecovery'
 import type { OfferSelection, EligibleOfferQuote } from '@/lib/pos/server/offers'
 import { invoiceMatchesSale } from '@/lib/pos/server/sale-ack'
 
 type Product = LiveBootstrap['catalogue'][number]
 type BasketLine = { product: Product; quantityMilli: number }
-type View = 'sell' | 'receipts' | 'shift' | 'branch' | 'menu' | 'offers' | 'reports'
+type View =
+  | 'sell'
+  | 'receipts'
+  | 'shift'
+  | 'branch'
+  | 'menu'
+  | 'offers'
+  | 'reports'
+  | 'staff'
+  | 'account'
 class ApiError extends Error {
   constructor(
     public status: number,
@@ -293,8 +305,8 @@ export default function LiveCounter() {
     await confirmRequest(request, result)
   }
   async function recover(request: PendingOnlineRequest) {
-    if (!boot || request.actorId !== boot.userId || request.deviceId !== boot.device?.id)
-      throw new Error('Use the original account and enrolled counter to resolve this request.')
+    if (!boot || request.actorId !== boot.userId)
+      throw new Error('Use the original account and browser to resolve this request.')
     const kind = request.endpoint === '/api/pos/sync' ? 'sale' : 'command'
     const original =
       kind === 'sale'
@@ -569,6 +581,7 @@ export default function LiveCounter() {
         <section className="lc-login">
           <h1>Counter setup</h1>
           <p role="alert">{error || 'The account service is not ready yet.'}</p>
+          <PendingAccessRecovery />
           <button
             onClick={() =>
               void run(async () => {
@@ -711,8 +724,9 @@ export default function LiveCounter() {
                 'sell',
                 'receipts',
                 'shift',
-                ...(manager ? ['menu', 'offers', 'reports'] : []),
+                ...(manager ? ['menu', 'offers', 'reports', 'staff'] : []),
                 'branch',
+                'account',
               ] as View[]
             ).map((item) => (
               <button
@@ -729,6 +743,8 @@ export default function LiveCounter() {
                     menu: 'Menu',
                     offers: 'Offers',
                     reports: 'Reports',
+                    staff: 'Staff',
+                    account: 'Account',
                   }[item]
                 }
               </button>
@@ -736,6 +752,21 @@ export default function LiveCounter() {
             <span>{boot.device.name}</span>
           </nav>
           <main className="lc-main">
+            {view === 'staff' && manager && (
+              <StaffManager
+                key={`${boot.userId}:${branchId}`}
+                actorId={boot.userId}
+                branchId={branchId}
+                deviceId={boot.device.id}
+                disabled={busy || !!pending || !online}
+                onChanged={async () => {
+                  await refresh()
+                }}
+              />
+            )}
+            {view === 'account' && (
+              <AccountSettings disabled={busy || !!pending || !online || !!shift} />
+            )}
             {view === 'reports' && manager && branch && (
               <BranchReports
                 key={`${boot.userId}:${branchId}`}

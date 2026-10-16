@@ -1,0 +1,256 @@
+// Isolated embedded PostgreSQL fixture; never connects to an existing database.
+import { readFile, writeFile } from 'node:fs/promises'
+import { pathToFileURL } from 'node:url'
+import assert from 'node:assert/strict'
+const { PGlite } = await import(pathToFileURL(process.argv[2]).href)
+const db = new PGlite()
+process.on('uncaughtException',error=>{console.error(error.message,error.where??'');process.exit(1)})
+await db.exec(`create role anon;create role authenticated;create role service_role;create schema auth;
+ create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz);
+ create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('app.user_id',true),'')::uuid$$;
+ grant usage on schema auth to authenticated;grant execute on function auth.uid() to authenticated;`)
+for(const number of ['001','002','003','004','005','006','008','010','011','012','013']){
+ const files={ '001':'platform','002':'operations','003':'live_documents','004':'online_access','005':'request_recovery','006':'cash_out_balance','008':'catalogue_management','010':'sale_lock_order','011':'branch_reports','012':'offers','013':'staff_access' }
+ await db.exec(await readFile(new URL(`../../supabase/migrations/202610160${number}00_pos_${files[number]}.sql`,import.meta.url),'utf8'))
+}
+const ids=Object.fromEntries(['owner','manager','cashier','otherCashier','newUser','unverified','foreignOwner','scopedOwner','org','branch','branch2','foreignOrg','foreignBranch','profile','product'].map(k=>[k,crypto.randomUUID()]))
+const {owner,manager,cashier,otherCashier,newUser,unverified,foreignOwner,scopedOwner,org,branch,branch2,foreignOrg,foreignBranch,profile,product}=ids
+await db.query(`insert into auth.users(id,email,email_confirmed_at) select v::uuid,k||'@example.test',case when k='unverified' then null else now() end from jsonb_each_text($1) as x(k,v) where k=any($2::text[])`,[JSON.stringify(ids),['owner','manager','cashier','otherCashier','newUser','unverified','foreignOwner','scopedOwner']])
+await db.exec(`insert into public.pos_organizations(id,legal_name) values('${org}','Synthetic access'),('${foreignOrg}','Other synthetic');
+ insert into public.pos_branches(id,organization_id,name) values('${branch}','${org}','First'),('${branch2}','${org}','Second'),('${foreignBranch}','${foreignOrg}','Other');
+ insert into public.pos_staff(organization_id,user_id,branch_id,role) values
+ ('${org}','${owner}',null,'owner'),('${org}','${manager}','${branch}','manager'),('${org}','${cashier}','${branch}','cashier'),
+ ('${org}','${otherCashier}','${branch2}','cashier'),('${org}','${scopedOwner}','${branch}','owner'),('${foreignOrg}','${foreignOwner}',null,'owner');
+ insert into public.pos_merchant_profiles(id,organization_id,branch_id,legal_name,branch_name,address,phone,trn,tax_registered,tax_inclusive,confirmed_by)
+ values('${profile}','${org}','${branch}','Synthetic','First','Test address','Test contact','100000000000001',true,true,'${owner}');
+ insert into public.pos_branch_receipt_config values('${branch}','${org}','${profile}','TEST',true);
+ insert into public.pos_products(id,organization_id,branch_id,name,category,unit_price_fils,tax_rate_bps) values('${product}','${org}','${branch}','Test item','Test',1000,500);`)
+const scalar=async(sql,params=[])=>Object.values((await db.query(sql,params)).rows[0])[0]
+const user=async(id)=>db.exec(`set role authenticated;set app.user_id='${id}'`)
+const admin=async(fn)=>{await db.exec('reset role');try{return await fn()}finally{await user(owner)}}
+const binding='a'.repeat(64),managerBinding='b'.repeat(64),cashierBinding='c'.repeat(64)
+await user(owner)
+const device=await scalar('select public.pos_enroll_device($1,$2,$3)',[branch,'Owner',binding])
+await user(manager)
+const managerDevice=await scalar('select public.pos_enroll_device($1,$2,$3)',[branch,'Manager',managerBinding])
+await user(cashier)
+const cashierDevice=await scalar('select public.pos_enroll_device($1,$2,$3)',[branch,'Cashier',cashierBinding])
+await user(owner)
+const rpc=(name,cmd,key=binding)=>scalar(`select public.${name}($1::jsonb,$2)`,[JSON.stringify(cmd),key])
+const base=(extra={})=>({id:crypto.randomUUID(),branchId:branch,deviceId:device.id,reason:'Synthetic test',...extra})
+const update=(extra={})=>base({targetUserId:cashier,expectedRevision:1,active:true,role:'cashier',assignedBranchId:branch,displayName:'Cashier name',...extra})
+const invitation=(extra={})=>base({email:'newuser@example.test',displayName:'New colleague',role:'cashier',assignedBranchId:branch,expiresAt:new Date(Date.now()+86400000).toISOString(),...extra})
+const invite=(cmd,hash='1'.repeat(64),key=binding)=>scalar('select public.pos_create_staff_invitation($1::jsonb,$2,$3)',[JSON.stringify(cmd),key,hash])
+const accept=(hash='1'.repeat(64))=>scalar('select public.pos_accept_staff_invitation($1)',[hash])
+const list=()=>scalar('select public.pos_list_staff($1)',[branch])
+let checks=0
+const rejects=async(p,pattern)=>{await assert.rejects(p,pattern);checks++}
+assert.equal((await list()).actorRole,'owner')
+assert.equal((await list()).organizationId,org)
+assert.equal((await list()).staff.length,4)
+const changed=update(),changedAck=await rpc('pos_manage_staff',changed)
+assert.equal(changedAck.staff.revision,2)
+assert.deepEqual(await rpc('pos_manage_staff',changed),{...changedAck,replayed:true})
+await rejects(rpc('pos_manage_staff',{...changed,reason:'different'}),/POS_IDEMPOTENCY_CONFLICT/)
+await rejects(rpc('pos_manage_staff',update()),/POS_STAFF_CHANGED/)
+for(const targetUserId of [owner,scopedOwner])await rejects(rpc('pos_manage_staff',update({targetUserId})),/POS_STAFF_TARGET_FORBIDDEN/)
+await rejects(rpc('pos_manage_staff',update({expectedRevision:2,role:'owner'})),/POS_STAFF_SCOPE_FORBIDDEN/)
+await rejects(rpc('pos_manage_staff',update({expectedRevision:2,assignedBranchId:foreignBranch})),/POS_STAFF_SCOPE_FORBIDDEN/)
+await rejects(rpc('pos_manage_staff',update({expectedRevision:2,active:'false'})),/POS_INVALID_STAFF_COMMAND/)
+await user(manager)
+assert.deepEqual((await list()).staff.map(s=>s.userId),[cashier])
+await rejects(invite(invitation({deviceId:managerDevice.id,role:'manager'}),'2'.repeat(64),managerBinding),/POS_STAFF_SCOPE_FORBIDDEN/)
+await rejects(rpc('pos_manage_staff',update({deviceId:managerDevice.id,targetUserId:otherCashier,assignedBranchId:branch2}),managerBinding),/POS_STAFF_TARGET_FORBIDDEN/)
+await user(scopedOwner)
+const scopedBinding='d'.repeat(64),scopedDevice=await scalar('select public.pos_enroll_device($1,$2,$3)',[branch,'Scoped owner',scopedBinding])
+await rejects(invite(invitation({deviceId:scopedDevice.id,role:'manager',assignedBranchId:null}),'3'.repeat(64),scopedBinding),/POS_STAFF_SCOPE_FORBIDDEN/)
+await user(foreignOwner)
+await rejects(list(),/POS_ACCESS_DENIED/)
+await user(owner)
+const inviteCommand=invitation(),invited=await invite(inviteCommand)
+assert.equal(invited.invitation.id,inviteCommand.id)
+assert.deepEqual(await invite(inviteCommand),{...invited,replayed:true})
+await rejects(invite(inviteCommand,'4'.repeat(64)),/POS_IDEMPOTENCY_CONFLICT/)
+await rejects(invite(invitation(),'5'.repeat(64)),/POS_INVITATION_PENDING/)
+await rejects(invite(invitation({email:'owner@example.test'}),'5'.repeat(64)),/POS_STAFF_MEMBERSHIP_EXISTS/)
+await rejects(invite(invitation({email:'expired@example.test',expiresAt:new Date(Date.now()-1000).toISOString()}),'5'.repeat(64)),/POS_INVITATION_EXPIRY_INVALID/)
+await user(cashier)
+await rejects(accept(),/POS_INVITATION_IDENTITY_MISMATCH/)
+await user(newUser)
+const accepted=await accept()
+assert.equal(accepted.status,'accepted')
+assert.deepEqual(await accept(),{...accepted,replayed:true})
+await user(owner)
+await rejects(rpc('pos_revoke_staff_invitation',base({invitationId:inviteCommand.id})),/POS_INVITATION_ACCEPTED/)
+const unverifiedInvite=await invite(invitation({email:'unverified@example.test'}),'6'.repeat(64))
+await user(unverified)
+await rejects(accept('6'.repeat(64)),/POS_INVITATION_IDENTITY_MISMATCH/)
+await user(owner)
+const revoke=base({invitationId:unverifiedInvite.invitation.id}),revoked=await rpc('pos_revoke_staff_invitation',revoke)
+assert.deepEqual(await rpc('pos_revoke_staff_invitation',revoke),{...revoked,replayed:true})
+await admin(()=>db.query('update auth.users set email_confirmed_at=now() where id=$1',[unverified]))
+await user(unverified)
+await rejects(accept('6'.repeat(64)),/POS_INVITATION_UNAVAILABLE/)
+await user(owner)
+// In-flight financial scope is preserved; a name change does not revoke bindings.
+await user(cashier)
+const cashierCommand=(extra)=>({id:crypto.randomUUID(),branchId:branch,deviceId:cashierDevice.id,...extra}),shift=crypto.randomUUID()
+const opened=await rpc('pos_execute_live_command',cashierCommand({type:'shift.open',shiftId:shift,openingCashFils:1000}),cashierBinding).catch(error=>{throw error})
+await user(owner)
+assert.equal((await list()).staff.find(s=>s.userId===cashier).openShifts[0].expectedCashFils,1000)
+for(const patch of [{active:false},{role:'manager'},{assignedBranchId:branch2}])await rejects(rpc('pos_manage_staff',update({expectedRevision:2,...patch})),/POS_STAFF_OPEN_SHIFT/)
+const renamed=await rpc('pos_manage_staff',update({expectedRevision:2,displayName:'Renamed with open shift'}))
+assert.equal(renamed.staff.revision,3)
+await user(cashier)
+assert.equal((await scalar('select public.pos_bound_device($1)',[cashierBinding])).id,cashierDevice.id)
+const sale={id:crypto.randomUUID(),branchId:branch,deviceId:cashierDevice.id,shiftId:shift,createdAt:new Date().toISOString(),serviceType:'takeaway',lines:[{productId:product,quantityMilli:1000,expectedUnitPriceFils:1000,expectedTaxRateBps:500,expectedRevision:1}],payments:[{method:'cash',amountFils:1000}],expectedTotalFils:1000,profileId:profile,customer:null,cashTenderedFils:1000}
+const paid=await rpc('pos_record_live_order',sale,cashierBinding)
+await user(owner)
+const offer={id:crypto.randomUUID(),name:'Recovery offer',active:true,benefit:{kind:'percentage',basisPoints:1000,maximumDiscountFils:null,eligibility:{scope:'all'}},schedule:{timezone:'Asia/Dubai',startsAt:null,endsAt:null,windows:[]},minimumSpendFils:0,serviceTypes:['dine_in','takeaway','delivery'],managerOnly:false,coupon:'PRIVATE10',totalRedemptionsLimit:null,perCustomerLimit:null}
+await rpc('pos_manage_offer',base({offer,expectedRevision:0}))
+await user(cashier)
+const offered={...sale,id:crypto.randomUUID(),payments:[{method:'cash',amountFils:900}],expectedTotalFils:900,offerSelection:{offerId:offer.id,expectedRevision:1,couponCode:'PRIVATE10',expectedDiscountFils:100}}
+const offeredPaid=await rpc('pos_record_live_order',offered,cashierBinding)
+const close=cashierCommand({type:'shift.close',shiftId:shift,countedCashFils:2900})
+const closed=await rpc('pos_execute_live_command',close,cashierBinding)
+await user(owner)
+const disabled=await rpc('pos_manage_staff',update({expectedRevision:3,active:false}))
+assert.equal(disabled.staff.revision,4)
+await user(cashier)
+assert.equal(await scalar('select public.pos_bound_device($1)',[cashierBinding]),null)
+const lookup=(kind,request,key=cashierBinding)=>scalar('select public.pos_lookup_own_committed_request($1,$2::jsonb,$3)',[kind,JSON.stringify(request),key])
+const recover=(kind,request,key=cashierBinding)=>scalar('select public.pos_resolve_live_request($1,$2::jsonb,$3)',[kind,JSON.stringify(request),key])
+assert.deepEqual(await lookup('sale',sale),{...paid,replayed:true})
+assert.deepEqual(await lookup('sale',offered),{...offeredPaid,replayed:true})
+assert.deepEqual(await lookup('command',close),{...closed,replayed:true})
+await rejects(lookup('sale',{...offered,offerSelection:{...offered.offerSelection,couponCode:'private10'}}),/POS_IDEMPOTENCY_CONFLICT/)
+await rejects(lookup('sale',sale,binding),/POS_DEVICE_INVALID/)
+const unsaved={...sale,id:crypto.randomUUID()}
+await rejects(lookup('sale',unsaved),/POS_STAFF_INACTIVE/)
+await rejects(recover('sale',unsaved),/POS_ACCESS_DENIED/)
+for(const [name,payload] of [['pos_record_live_order',sale],['pos_execute_live_command',close],['pos_manage_catalogue',base()],['pos_manage_offer',base()],['pos_manage_staff',update()]])await rejects(rpc(name,payload,cashierBinding),/POS_ACCESS_DENIED/)
+await rejects(scalar('select public.pos_record_paid_order($1::jsonb)',[JSON.stringify(sale)]),/POS_ACCESS_DENIED/)
+await rejects(scalar('select public.pos_execute_command($1::jsonb)',[JSON.stringify(close)]),/POS_ACCESS_DENIED/)
+await rejects(scalar('select public.pos_enroll_device($1,$2,$3)',[branch,'Denied','f'.repeat(64)]),/POS_ACCESS_DENIED/)
+assert.equal(await scalar('select count(*) from public.pos_documents'),0,'inactive general RLS read blocked')
+await user(owner)
+const reactivated=await rpc('pos_manage_staff',update({expectedRevision:4,active:true}))
+assert.equal(reactivated.staff.revision,5)
+await user(cashier)
+assert.equal(await scalar('select public.pos_bound_device($1)',[cashierBinding]),null,'reactivation never resurrects an old binding')
+assert.equal((await recover('sale',unsaved)).status,'cancelled','restored access can safely cancel old journal with original historical binding')
+assert.equal((await recover('sale',unsaved)).replayed,true)
+await rejects(rpc('pos_record_live_order',unsaved,cashierBinding),/POS_DEVICE_INVALID/)
+assert.deepEqual(await recover('sale',sale),{...paid,replayed:true})
+const newCashierBinding='b2'.repeat(32)
+await scalar('select public.pos_enroll_device($1,$2,$3)',[branch,'Replacement cashier',newCashierBinding])
+await rejects(recover('sale',sale,newCashierBinding),/POS_DEVICE_INVALID/)
+await user(owner)
+await rejects(lookup('sale',sale),/POS_DEVICE_INVALID/)
+await rejects(rpc('pos_manage_staff',update({expectedRevision:100})),/POS_STAFF_REVISION_AHEAD/)
+// Inviter authority is checked at acceptance, not just when the link was created.
+await user(manager)
+const managerInvite=invitation({deviceId:managerDevice.id,email:'unverified@example.test'})
+await invite(managerInvite,'7'.repeat(64),managerBinding)
+await user(owner)
+await rpc('pos_manage_staff',update({targetUserId:manager,expectedRevision:1,active:false,role:'manager'}))
+await user(unverified)
+await rejects(accept('7'.repeat(64)),/POS_INVITATION_UNAVAILABLE/)
+await user(owner)
+// Private tables and old financial entry points cannot bypass the shared authority gate.
+for(const table of ['pos_staff_commands','pos_staff_invitations'])await rejects(db.query(`select * from public.${table}`),/permission denied/)
+for(const sql of [
+ "select public.pos_lock_staff_authority(null)","select public.pos_staff_manager(null,null)",
+ "select public.pos_record_live_order_before_staff('{}',null)","select public.pos_execute_live_command_before_staff('{}',null)",
+ "select public.pos_record_paid_order_before_staff('{}')","select public.pos_execute_command_before_staff('{}')",
+ "select public.pos_resolve_live_request_before_staff('sale','{}',null)","select public.pos_manage_catalogue_before_staff('{}',null)",
+ "select public.pos_manage_offer_before_staff('{}',null)","select public.pos_enroll_device_before_staff(null,null,null)",
+ "select public.pos_staff_check_capacity(null,null,null)","select public.pos_validate_staff_command('{}',array[]::text[])"
+])await rejects(db.query(sql),/permission denied/)
+// History is explicitly truncated; pending invitations remain visible and future invitations stay usable.
+await admin(async()=>db.query(`insert into public.pos_staff_invitations(id,organization_id,management_branch_id,branch_id,invited_by,email,display_name,role,token_hash,status,expires_at)
+ select gen_random_uuid(),$1,$2,$2,$3,'history'||n||'@example.test','Historical invite','cashier',lpad(to_hex(n+1000),64,'0'),'revoked',now()+interval '1 day' from generate_series(1,105) n`,[org,branch,owner]))
+const history=await list()
+assert.equal(history.invitationHistoryTruncated,true)
+assert.equal(history.invitations.filter(i=>i.status!=='pending').length,100)
+assert.equal(history.invitations.filter(i=>i.status==='pending').length,1)
+const nextInvite=await invite(invitation({email:'afterhistory@example.test'}),'8'.repeat(64))
+assert.equal(nextInvite.status,'invited')
+// No invitation hash/email is copied into branch-readable audit details.
+assert.equal(await scalar("select exists(select 1 from public.pos_audit_events where details::text like '%example.test%' or details::text like '%1111111111111111%')"),false)
+// Command history is immutable even under elevated database writes.
+await admin(async()=>{
+ await rejects(db.query('update public.pos_staff_commands set result=$1 where id=$2',['{}',changed.id]),/POS_IMMUTABLE_DOCUMENT/)
+ assert.equal(await scalar('select count(*) from auth.users'),8,'inviting never creates an Auth identity')
+ assert.equal(await scalar('select count(*) from public.pos_request_cancellations where request_id=$1',[unsaved.id]),1)
+})
+// A scoped owner may see global staff identity, but not other-branch drawers or invitations.
+const otherDevice=crypto.randomUUID(),otherShift=crypto.randomUUID()
+await admin(()=>db.exec(`update public.pos_staff set branch_id=null where organization_id='${org}' and user_id='${manager}';
+ insert into public.pos_devices(id,organization_id,branch_id,name) values('${otherDevice}','${org}','${branch2}','Private other-branch drawer');
+ insert into public.pos_shifts(id,organization_id,branch_id,device_id,opened_by,opening_cash_fils) values('${otherShift}','${org}','${branch2}','${otherDevice}','${manager}',98765);`))
+const otherInvite=await invite(invitation({email:'branch2invite@example.test',assignedBranchId:branch2}),'9'.repeat(64))
+assert.equal((await list()).staff.find(s=>s.userId===manager).openShifts[0].expectedCashFils,98765)
+await user(scopedOwner)
+const scopedList=await list()
+assert.equal(scopedList.staff.find(s=>s.userId===manager).openShifts.length,0)
+assert(!scopedList.invitations.some(i=>i.id===otherInvite.invitation.id))
+await user(owner)
+await writeFile('/tmp/pos-staff-fixtures.json',JSON.stringify({list:await list(),updated:changedAck,invited,accepted,revoked},null,2))
+// Staff resolution uses one shared request lock and never restores selling credentials.
+const resolveStaff=(kind,command,key=binding,hash=null)=>scalar('select public.pos_resolve_staff_request($1,$2::jsonb,$3,$4)',[kind,JSON.stringify(command),key,hash])
+assert.deepEqual(await resolveStaff('staff.update',changed),{...changedAck,replayed:true})
+assert.deepEqual(await resolveStaff('invitation.create',inviteCommand,binding,'1'.repeat(64)),{...invited,replayed:true})
+assert.deepEqual(await resolveStaff('invitation.revoke',revoke),{...revoked,replayed:true})
+await rejects(resolveStaff('invitation.create',inviteCommand,binding,'2'.repeat(64)),/POS_IDEMPOTENCY_CONFLICT/)
+await rejects(resolveStaff('staff.update',{...changed,displayName:'Different'}),/POS_IDEMPOTENCY_CONFLICT/)
+const unsavedStaff=update({expectedRevision:5}),unsavedInvite=invitation({email:'cancelled@example.test'}),unsavedRevoke=base({invitationId:nextInvite.invitation.id})
+for(const [kind,command,hash] of [['staff.update',unsavedStaff,null],['invitation.create',unsavedInvite,'0'.repeat(64)],['invitation.revoke',unsavedRevoke,null]]){
+ const cancelled=await resolveStaff(kind,command,binding,hash)
+ assert.deepEqual(cancelled,{status:'cancelled',requestId:command.id,kind,replayed:false})
+ assert.deepEqual(await resolveStaff(kind,command,binding,hash),{...cancelled,replayed:true})
+ await rejects(resolveStaff(kind,{...command,reason:'changed'},binding,hash),/POS_IDEMPOTENCY_CONFLICT/)
+}
+await rejects(rpc('pos_manage_staff',unsavedStaff),/POS_REQUEST_CANCELLED/)
+await rejects(invite(unsavedInvite,'0'.repeat(64)),/POS_REQUEST_CANCELLED/)
+await rejects(rpc('pos_revoke_staff_invitation',unsavedRevoke),/POS_REQUEST_CANCELLED/)
+const replacementBinding='f'.repeat(64)
+await scalar('select public.pos_enroll_device($1,$2,$3)',[branch,'Replacement owner counter',replacementBinding])
+assert.deepEqual(await resolveStaff('staff.update',changed,replacementBinding),{...changedAck,replayed:true})
+assert.equal((await resolveStaff('staff.update',unsavedStaff,replacementBinding)).status,'cancelled')
+const replacementUnsaved=update({expectedRevision:5})
+assert.equal((await resolveStaff('staff.update',replacementUnsaved,replacementBinding)).status,'cancelled')
+const branch2Binding='e'.repeat(64)
+await scalar('select public.pos_enroll_device($1,$2,$3)',[branch2,'Other branch counter',branch2Binding])
+await rejects(resolveStaff('staff.update',changed,branch2Binding),/POS_DEVICE_INVALID/)
+await user(scopedOwner)
+await rejects(resolveStaff('staff.update',changed,scopedBinding),/POS_DEVICE_INVALID/)
+await user(owner)
+await admin(()=>db.query('update public.pos_staff set active=false where user_id=$1 and organization_id=$2',[owner,org]))
+assert.deepEqual(await resolveStaff('staff.update',changed),{...changedAck,replayed:true},'inactive original actor can recover exact committed staff ACK')
+await rejects(resolveStaff('staff.update',update({expectedRevision:5})),/POS_MANAGER_REQUIRED/)
+await rejects(resolveStaff('staff.update',changed,replacementBinding),/POS_DEVICE_INVALID/)
+await admin(()=>db.query('update public.pos_staff set active=true where user_id=$1 and organization_id=$2',[owner,org]))
+await rejects(db.query('select * from public.pos_staff_request_cancellations'),/permission denied/)
+await rejects(db.query("select public.pos_assert_staff_not_cancelled('staff.update',null,null,'{}')"),/permission denied/)
+await admin(()=>rejects(db.query('delete from public.pos_staff_request_cancellations where request_id=$1',[unsavedStaff.id]),/POS_IMMUTABLE_DOCUMENT/))
+assert.equal((await list()).invitations.some(i=>i.id===unsavedInvite.id),false,'cancelling an invitation never creates it')
+await writeFile('/tmp/pos-staff-recovery-fixtures.json',JSON.stringify({updated:await resolveStaff('staff.update',changed),invited:await resolveStaff('invitation.create',inviteCommand,binding,'1'.repeat(64)),revoked:await resolveStaff('invitation.revoke',revoke),cancelled:await resolveStaff('staff.update',unsavedStaff)},null,2))
+// All pending invitations remain visible at the cap; history never prevents a new action.
+await admin(()=>db.query(`insert into public.pos_staff_invitations(id,organization_id,management_branch_id,branch_id,invited_by,email,display_name,role,token_hash,expires_at)
+ select gen_random_uuid(),$1,$2,$2,$3,'pending'||n||'@example.test','Pending invite','cashier',lpad(to_hex(n+2000),64,'0'),now()+interval '1 day' from generate_series(1,97) n`,[org,branch,owner]))
+assert.equal((await list()).invitations.length,200)
+assert.equal((await list()).invitations.filter(i=>i.status==='pending').length,100)
+await rejects(invite(invitation({email:'overcap@example.test'}),'e'.repeat(64)),/POS_INVITATION_LIMIT_REACHED/)
+// Acceptance rechecks current capacity; earlier invitations do not reserve an unbounded seat.
+await admin(async()=>{
+ await db.exec(`insert into auth.users(id,email,email_confirmed_at) select gen_random_uuid(),'seat'||n||'@example.test',now() from generate_series(1,495) n;
+ insert into public.pos_staff(organization_id,user_id,branch_id,role) select '${org}',id,'${branch}','cashier' from auth.users where email like 'seat%@example.test';`)
+})
+const capRecipient=crypto.randomUUID()
+await admin(()=>db.query('insert into auth.users values($1,$2,now())',[capRecipient,'afterhistory@example.test']))
+await user(capRecipient)
+await rejects(accept('8'.repeat(64)),/POS_STAFF_LIMIT_REACHED/)
+await user(owner)
+console.log(JSON.stringify({status:'passed',negativeBoundaryChecks:checks,coverage:['role and branch limits','revision and canonical replay','recipient verified identity','inviter revocation','open-shift continuity','v1/v2 private exact recovery','historical-binding cancellation after reactivation','private helper ACL','bounded invitation history','staff committed lookup and atomic cancellation','replacement management device only','no Auth identity creation']}))
+await db.close()

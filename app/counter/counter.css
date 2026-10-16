@@ -90,6 +90,10 @@
   color: white;
 }
 .lc-wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 44px;
   font-size: 22px;
   font-weight: 700;
   text-decoration: none;

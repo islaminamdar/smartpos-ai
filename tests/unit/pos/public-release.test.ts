@@ -108,6 +108,12 @@ it('limits new manager and recurring billing surfaces to exact methods', () => {
     '/api/pos/offers': ['GET', 'POST'],
     '/api/pos/offers/quote': ['POST'],
     '/api/pos/reports': ['GET'],
+    '/api/pos/staff': ['GET', 'POST'],
+    '/api/pos/staff/invitations': ['POST'],
+    '/api/pos/staff/recovery': ['POST'],
+    '/api/pos/staff/invitations/revoke': ['POST'],
+    '/api/pos/staff/invitations/accept': ['POST'],
+    '/api/pos/account/password': ['POST'],
     '/api/billing/paypal/status': ['GET'],
     '/api/billing/paypal/checkout': ['POST'],
     '/api/billing/paypal/reconcile': ['POST'],
@@ -121,4 +127,7 @@ it('limits new manager and recurring billing surfaces to exact methods', () => {
   expect(publicReleaseAccess('/billing', 'GET', true)).toBe('allow')
   expect(publicReleaseAccess('/billing', 'POST', true)).toBe('not_found')
   expect(publicReleaseAccess('/billing', 'GET', false)).toBe('not_found')
+  expect(publicReleaseAccess('/staff/accept', 'GET', true)).toBe('allow')
+  expect(publicReleaseAccess('/staff/accept', 'POST', true)).toBe('not_found')
+  expect(publicReleaseAccess('/staff/accept', 'GET', false)).toBe('not_found')
 })

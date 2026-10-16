@@ -1,0 +1,1143 @@
+{
+  "list": {
+    "staff": [
+      {
+        "role": "cashier",
+        "email": "cashier@example.test",
+        "active": true,
+        "userId": "dc2990f3-5337-4c4e-a092-f8465ba4ea19",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "revision": 5,
+        "openShifts": [],
+        "displayName": "Cashier name"
+      },
+      {
+        "role": "cashier",
+        "email": "newUser@example.test",
+        "active": true,
+        "userId": "ad75b176-fa26-4d62-b61f-387225367aca",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "revision": 1,
+        "openShifts": [],
+        "displayName": "New colleague"
+      },
+      {
+        "role": "manager",
+        "email": "manager@example.test",
+        "active": false,
+        "userId": "644802ec-2f01-43cd-8a3e-68ad6b52e4da",
+        "branchId": null,
+        "revision": 2,
+        "openShifts": [
+          {
+            "id": "ef1e9148-6034-472b-8d22-d5393691c55e",
+            "deviceId": "be3b701d-eeba-487d-9fdf-93437f397f32",
+            "openedAt": "2026-10-16T06:42:04.396+04:00",
+            "deviceName": "Private other-branch drawer",
+            "expectedCashFils": 98765
+          }
+        ],
+        "displayName": "Cashier name"
+      },
+      {
+        "role": "owner",
+        "email": "owner@example.test",
+        "active": true,
+        "userId": "b3804fe1-3d31-4053-bba6-409c07f3883e",
+        "branchId": null,
+        "revision": 1,
+        "openShifts": [],
+        "displayName": null
+      },
+      {
+        "role": "owner",
+        "email": "scopedOwner@example.test",
+        "active": true,
+        "userId": "fefc9cdf-1bde-4925-9848-537be50ccd63",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "revision": 1,
+        "openShifts": [],
+        "displayName": null
+      }
+    ],
+    "status": "ready",
+    "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+    "actorRole": "owner",
+    "invitations": [
+      {
+        "id": "de1b8a3a-0937-4427-8e94-eb17b20ad5b7",
+        "role": "cashier",
+        "email": "branch2invite@example.test",
+        "status": "pending",
+        "branchId": "48ea471b-d207-47be-b7af-68430754c8b3",
+        "createdAt": "2026-10-16T06:42:04.397+04:00",
+        "expiresAt": "2026-10-17T06:42:04.397+04:00",
+        "displayName": "New colleague"
+      },
+      {
+        "id": "da2837fa-f204-4056-a474-d657860bc22a",
+        "role": "cashier",
+        "email": "afterhistory@example.test",
+        "status": "pending",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.392+04:00",
+        "expiresAt": "2026-10-17T06:42:04.392+04:00",
+        "displayName": "New colleague"
+      },
+      {
+        "id": "02550a9a-c449-447c-931d-706529bc81ef",
+        "role": "cashier",
+        "email": "history98@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "05f7a2bb-ffe0-4b2b-8844-f994c71732dd",
+        "role": "cashier",
+        "email": "history104@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "065846f3-4d8d-4792-a167-ab4fe0402089",
+        "role": "cashier",
+        "email": "history29@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "0b274e8f-1a49-4fdb-8a8b-33308e403f06",
+        "role": "cashier",
+        "email": "history11@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "0c58975f-604e-4757-8b5d-e7c4902e7d24",
+        "role": "cashier",
+        "email": "history89@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "0f8868ad-23af-4836-869f-f31b72d574f3",
+        "role": "cashier",
+        "email": "history83@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "13dac8be-5c27-4921-b602-34726d1acca1",
+        "role": "cashier",
+        "email": "history79@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "14f90988-84c3-4377-aed2-38e881025147",
+        "role": "cashier",
+        "email": "history90@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "169969c5-8896-4e79-9ac8-aa1a3d59d761",
+        "role": "cashier",
+        "email": "history42@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "17d6b1a3-1a80-4687-b862-8333b6bfc2ea",
+        "role": "cashier",
+        "email": "history57@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "1b06150c-a9bc-42f8-820a-a4523fe4c253",
+        "role": "cashier",
+        "email": "history5@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "1b2bfc22-7930-4051-a715-cd37d3c59f99",
+        "role": "cashier",
+        "email": "history30@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "1bfaf45d-b96b-4b6f-9852-971e71c81ee7",
+        "role": "cashier",
+        "email": "history2@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "212a0033-5f55-454a-9e85-04b5f145b5bd",
+        "role": "cashier",
+        "email": "history68@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "235680a3-c966-4bff-a128-dd80732b70f0",
+        "role": "cashier",
+        "email": "history14@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "251e62f9-d94b-4671-887a-7a1203277966",
+        "role": "cashier",
+        "email": "history25@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "287df016-c7e0-405b-8f4a-f662cba75995",
+        "role": "cashier",
+        "email": "history77@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "2a64b429-0bcd-4a4a-9fce-d8c096b342d1",
+        "role": "cashier",
+        "email": "history6@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "2becd868-187f-4662-9fc0-3ca293d2ec08",
+        "role": "cashier",
+        "email": "history48@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "336aaaa0-1718-4057-b0ff-e753f3a89cdb",
+        "role": "cashier",
+        "email": "history58@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "34c025be-0041-411f-b78b-b454e6dd7630",
+        "role": "cashier",
+        "email": "history8@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "38051e6d-8d7f-463a-95a9-0cec224e7c94",
+        "role": "cashier",
+        "email": "history72@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "39a1325b-56d7-4ba1-b53e-80cc06fca81e",
+        "role": "cashier",
+        "email": "history53@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "39f98cb3-abb8-4801-a29f-34b17204be6b",
+        "role": "cashier",
+        "email": "history86@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "3d270027-b772-4e9c-bc65-1a424fc57a51",
+        "role": "cashier",
+        "email": "history69@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "3fd5ad04-74ef-4621-b09c-d137e80b495e",
+        "role": "cashier",
+        "email": "history76@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "43051be7-2ad7-49c9-8ef5-c5e779507454",
+        "role": "cashier",
+        "email": "history73@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "433858af-60ef-4555-b1f5-fe791f1c1c8f",
+        "role": "cashier",
+        "email": "history87@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "4d97f55e-3522-4967-b081-14e189fd363c",
+        "role": "cashier",
+        "email": "history88@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "4e9e45a4-d686-4ae1-85b2-0d6b6c92fa26",
+        "role": "cashier",
+        "email": "history91@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "4f3ea2e3-46cd-4d37-8b13-8d50af4240ce",
+        "role": "cashier",
+        "email": "history43@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "521ac759-ccc9-4e06-b6ef-0a152005182b",
+        "role": "cashier",
+        "email": "history102@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "57d44ee9-e469-4499-bfb6-6176f40530a0",
+        "role": "cashier",
+        "email": "history3@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "57ea6529-e866-4241-adcc-688c97a3d69b",
+        "role": "cashier",
+        "email": "history18@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "5a913908-8d8e-44ee-a14e-6f0cdcded9a9",
+        "role": "cashier",
+        "email": "history40@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "5c83e63f-c119-4d3d-a610-006b376654b8",
+        "role": "cashier",
+        "email": "history39@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "5de64c1d-44d6-4150-82f1-2be50bd269f1",
+        "role": "cashier",
+        "email": "history59@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "5e4f3f11-4e35-478f-801f-f9ae78f2b006",
+        "role": "cashier",
+        "email": "history20@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "5e5f4ecc-3294-4d56-902a-ea86659edecc",
+        "role": "cashier",
+        "email": "history49@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "5edbe7d0-3e68-497c-a521-a34d9400b53c",
+        "role": "cashier",
+        "email": "history37@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "5f363573-9921-465b-b9a7-93cdff845d37",
+        "role": "cashier",
+        "email": "history33@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "62edabb5-8110-430b-823b-f2eb3d664ade",
+        "role": "cashier",
+        "email": "history61@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "647c8a5b-9383-46d0-b8c0-f7481649c428",
+        "role": "cashier",
+        "email": "history96@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "64d966f3-0b9c-4edf-b6ef-3c160f701314",
+        "role": "cashier",
+        "email": "history51@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "64f9dfda-c158-441f-bfc1-927b4131bfc5",
+        "role": "cashier",
+        "email": "history85@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "6ab5667e-5b7f-4178-8aa5-32cca15362cc",
+        "role": "cashier",
+        "email": "history27@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "6bbc7121-89e6-440e-8024-e07878383832",
+        "role": "cashier",
+        "email": "history12@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "6d697804-5bce-4689-9768-0b569724df68",
+        "role": "cashier",
+        "email": "history78@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "6fa6d458-2189-4fb1-8794-a41e9ec37804",
+        "role": "cashier",
+        "email": "history47@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "728c9d4c-5677-4d5f-b661-a520f95413fb",
+        "role": "cashier",
+        "email": "history74@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "75d67a60-d7c6-4f76-ac46-c7eef8fed2cd",
+        "role": "cashier",
+        "email": "history65@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "79ddd94a-1e46-450e-b802-6f246e383111",
+        "role": "cashier",
+        "email": "history70@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "7ad4e94c-9eff-402c-bcb1-93c4e5309734",
+        "role": "cashier",
+        "email": "history32@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "7bf53cd4-c6c4-4a46-8543-6810722eaf73",
+        "role": "cashier",
+        "email": "history17@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "7d951bfd-ec93-4c6a-8adc-475a3c67cfa6",
+        "role": "cashier",
+        "email": "history1@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "7e00e6aa-3e90-43bb-94cd-761f63ba1f03",
+        "role": "cashier",
+        "email": "history100@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "7f376407-3294-42da-8669-31b1f9513140",
+        "role": "cashier",
+        "email": "history92@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "849f1296-cca8-493f-ab91-6d3dfa92f534",
+        "role": "cashier",
+        "email": "history41@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "88351a7a-5b6b-41ef-babe-f1ade0bb3c7b",
+        "role": "cashier",
+        "email": "history4@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "8a588b59-4515-4ec6-a5a6-9568c759966e",
+        "role": "cashier",
+        "email": "history105@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "8d1891a9-41b8-4f21-9d04-303f8f64002b",
+        "role": "cashier",
+        "email": "history24@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "8e250a33-8df6-4ab6-9f2a-442827c76808",
+        "role": "cashier",
+        "email": "history81@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "8e678d5a-7a61-4de1-81b2-06200cdac488",
+        "role": "cashier",
+        "email": "history50@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "8e815fa1-e302-4a6e-a84d-6332bf8ab771",
+        "role": "cashier",
+        "email": "history15@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "8f286c69-a04e-4583-ab72-597780aed7f7",
+        "role": "cashier",
+        "email": "history93@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "95c65f6b-1868-49d6-a469-81155eaa5711",
+        "role": "cashier",
+        "email": "history31@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "966efe75-332d-477b-93e2-7cf0bfde4089",
+        "role": "cashier",
+        "email": "history67@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "9703f81f-6c2b-4efa-b551-937e3f8af486",
+        "role": "cashier",
+        "email": "history99@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "988b8fd7-24bb-471b-8c84-9ff2053cd40c",
+        "role": "cashier",
+        "email": "history19@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "9a0c9208-0b64-42a1-b159-523c30d369bd",
+        "role": "cashier",
+        "email": "history71@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "a4ad1072-ec38-413e-beb9-abcd189503a3",
+        "role": "cashier",
+        "email": "history38@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "a6c8ff49-ccba-470b-b274-cdc0083b34f4",
+        "role": "cashier",
+        "email": "history26@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "a8d0c974-687e-4025-8e98-7fd3756ce71e",
+        "role": "cashier",
+        "email": "history94@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "aa790c7a-9a7e-4dca-84c5-4e28c5068b89",
+        "role": "cashier",
+        "email": "history10@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "ab96dba6-a831-484c-b377-b2c2dc44cf48",
+        "role": "cashier",
+        "email": "history7@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "affdf716-e06b-41f9-ad6f-5f565dbd5426",
+        "role": "cashier",
+        "email": "history63@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "b0021eb3-7c29-4a57-b114-0f2fc56beaac",
+        "role": "cashier",
+        "email": "history23@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "b4adc763-5a6e-4a17-bd0d-25dc0724fa97",
+        "role": "cashier",
+        "email": "history97@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "b6ff365e-2dfa-4a75-8f09-aa4bec047d0a",
+        "role": "cashier",
+        "email": "history44@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "bba3f061-83f7-48d5-9105-229295e5f484",
+        "role": "cashier",
+        "email": "history64@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "c11dfb62-f609-4127-9873-166289020c5a",
+        "role": "cashier",
+        "email": "history82@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "c458450f-ad71-4d17-9ccd-0c726c2024e0",
+        "role": "cashier",
+        "email": "history62@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "c6eb7282-f440-46d9-8514-d8fa69dce31d",
+        "role": "cashier",
+        "email": "history16@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "c880d60a-af7a-42be-888f-7a84bdbaeb28",
+        "role": "cashier",
+        "email": "history9@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "c9e1ac92-7c08-4b97-8899-e39426b2f7a0",
+        "role": "cashier",
+        "email": "history35@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "c9f39e57-bdd6-4fb1-8400-60822b155c12",
+        "role": "cashier",
+        "email": "history45@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "cc20e402-a3e3-4965-9f49-804c257626e4",
+        "role": "cashier",
+        "email": "history22@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "d0ec3a6d-42b0-4343-be1f-56df7e7bb8f8",
+        "role": "cashier",
+        "email": "history103@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "d713ef2b-16c5-491b-a0fd-18a03e871810",
+        "role": "cashier",
+        "email": "history13@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "d729f52f-c42e-4ced-83a4-9f36229aec53",
+        "role": "cashier",
+        "email": "history75@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "db586b45-b79c-4535-a9e2-0a92114418f1",
+        "role": "cashier",
+        "email": "history46@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "ded1d9df-b617-432c-bdef-751b69f94540",
+        "role": "cashier",
+        "email": "history55@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "e149ac1d-c168-4402-b22b-9a92f50a7271",
+        "role": "cashier",
+        "email": "history28@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "e4bcfa0d-18cb-4791-a535-6b6dd4010147",
+        "role": "cashier",
+        "email": "history36@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "e8d520d0-351d-4985-9b91-ab53d9494fa0",
+        "role": "cashier",
+        "email": "history34@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "ed7597a5-3b17-4a5a-9fe9-04e9bc4c5ef1",
+        "role": "cashier",
+        "email": "history52@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "ee2b6f0b-3534-491b-a0de-90d69fbf79e8",
+        "role": "cashier",
+        "email": "history80@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "ef3bb03a-7551-414c-9f0c-725db1dd51b7",
+        "role": "cashier",
+        "email": "history54@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "f0537ce5-201c-44f1-a958-50f603dfcf11",
+        "role": "cashier",
+        "email": "history56@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "f2d9c525-964a-4c9f-a5bf-de130f16fbe7",
+        "role": "cashier",
+        "email": "history84@example.test",
+        "status": "revoked",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.381+04:00",
+        "expiresAt": "2026-10-17T06:42:04.381+04:00",
+        "displayName": "Historical invite"
+      },
+      {
+        "id": "b840cb11-cd31-4128-8f21-cde312a6a994",
+        "role": "cashier",
+        "email": "unverified@example.test",
+        "status": "pending",
+        "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+        "createdAt": "2026-10-16T06:42:04.374+04:00",
+        "expiresAt": "2026-10-17T06:42:04.374+04:00",
+        "displayName": "New colleague"
+      }
+    ],
+    "organizationId": "e3b8fc80-e729-43d9-a620-787ba9f17318",
+    "invitationHistoryTruncated": true
+  },
+  "updated": {
+    "staff": {
+      "role": "cashier",
+      "email": "cashier@example.test",
+      "active": true,
+      "userId": "dc2990f3-5337-4c4e-a092-f8465ba4ea19",
+      "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+      "revision": 2,
+      "displayName": "Cashier name"
+    },
+    "status": "updated",
+    "replayed": false,
+    "requestId": "c5e394c2-c084-458e-8008-30ab2f28fa40"
+  },
+  "invited": {
+    "status": "invited",
+    "replayed": false,
+    "requestId": "181a7c22-cd15-4a98-bf81-12b3edc5bf5d",
+    "invitation": {
+      "id": "181a7c22-cd15-4a98-bf81-12b3edc5bf5d",
+      "role": "cashier",
+      "email": "newuser@example.test",
+      "status": "pending",
+      "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+      "createdAt": "2026-10-16T06:42:04.294+04:00",
+      "expiresAt": "2026-10-17T06:42:04.294+04:00",
+      "displayName": "New colleague"
+    }
+  },
+  "accepted": {
+    "role": "cashier",
+    "status": "accepted",
+    "branchId": "5bb40962-ea45-44dd-ad43-0e79f7c7da0e",
+    "replayed": false,
+    "invitationId": "181a7c22-cd15-4a98-bf81-12b3edc5bf5d"
+  },
+  "revoked": {
+    "status": "revoked",
+    "replayed": false,
+    "requestId": "ac1542bf-24c2-4017-99f1-587b8ab54616",
+    "invitationId": "d129fd52-fd1c-47eb-9a20-b310074a7b9e"
+  }
+}

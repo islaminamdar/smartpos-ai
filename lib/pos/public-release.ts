@@ -11,7 +11,9 @@ export function publicReleaseAccess(
       (path === '/counter' ||
         path === '/counter/' ||
         path === '/billing' ||
-        path === '/billing/') &&
+        path === '/billing/' ||
+        path === '/staff/accept' ||
+        path === '/staff/accept/') &&
       read
     )
       return 'allow'
@@ -24,6 +26,12 @@ export function publicReleaseAccess(
       '/api/pos/session': ['GET', 'POST', 'DELETE'],
       '/api/pos/catalogue': ['GET', 'POST'],
       '/api/pos/offers': ['GET', 'POST'],
+      '/api/pos/staff': ['GET', 'POST'],
+      '/api/pos/staff/invitations': ['POST'],
+      '/api/pos/staff/recovery': ['POST'],
+      '/api/pos/staff/invitations/revoke': ['POST'],
+      '/api/pos/staff/invitations/accept': ['POST'],
+      '/api/pos/account/password': ['POST'],
       '/api/pos/offers/quote': ['POST'],
       '/api/pos/bootstrap': ['GET'],
       '/api/pos/receipts': ['GET'],

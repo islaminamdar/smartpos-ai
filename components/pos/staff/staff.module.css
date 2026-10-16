@@ -1,0 +1,254 @@
+.staff,
+.account,
+.join {
+  color: #142d4e;
+  min-width: 0;
+}
+.staff {
+  max-width: 1120px;
+  margin: auto;
+}
+.heading,
+.actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.heading h2 {
+  margin-bottom: 6px;
+}
+.staff p,
+.account p,
+.join p {
+  max-width: 75ch;
+  line-height: 1.5;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(250px, 1fr) minmax(0, 1.4fr);
+  gap: 24px;
+  margin-top: 20px;
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-self: start;
+}
+.list button {
+  display: grid;
+  gap: 5px;
+  text-align: left;
+}
+.list small {
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+.staff button,
+.account button,
+.join button,
+.account a,
+.join a {
+  min-height: 44px;
+  border: 1px solid #bccbdc;
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: white;
+  color: #142d4e;
+  font: inherit;
+  cursor: pointer;
+}
+.staff button:disabled,
+.account button:disabled,
+.join button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.staff .primary,
+.account .primary,
+.join .primary {
+  background: #165dcc;
+  color: white;
+  border-color: #165dcc;
+}
+.staff label,
+.account label,
+.join label {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+  font-weight: 600;
+  min-width: 0;
+}
+.staff input,
+.staff select,
+.staff textarea,
+.account input,
+.join input {
+  min-height: 46px;
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #aebccd;
+  border-radius: 8px;
+  background: white;
+  color: #142d4e;
+  font: inherit;
+  box-sizing: border-box;
+}
+.staff fieldset {
+  min-width: 0;
+  border: 1px solid #dce3eb;
+  border-radius: 10px;
+  padding: 16px;
+  margin: 0 0 18px;
+}
+.staff legend {
+  font-weight: 700;
+}
+.staff .check {
+  display: flex;
+  flex-direction: row;
+  gap: 9px;
+  align-items: center;
+  min-height: 44px;
+}
+.staff .check input {
+  width: 20px;
+  min-height: 20px;
+  height: 20px;
+  accent-color: #165dcc;
+}
+.help {
+  color: #526176;
+  font-size: 0.88rem;
+}
+.error,
+.notice,
+.pending {
+  padding: 14px;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+.error {
+  background: #fff0ed;
+  color: #812b22;
+  border: 1px solid #e2b0a8;
+}
+.notice {
+  background: #edf6ef;
+  border: 1px solid #adcdb7;
+}
+.pending {
+  background: #fff5df;
+  border: 1px solid #dcc28b;
+}
+.badge {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.account {
+  max-width: 520px;
+}
+.join {
+  max-width: 520px;
+  margin: 8vh auto;
+  padding: 24px;
+  background: white;
+  border: 1px solid #dce3eb;
+  border-radius: 12px;
+}
+.join a,
+.account a {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+.secret {
+  overflow-wrap: anywhere;
+}
+.fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.staff :focus-visible,
+.account :focus-visible,
+.join :focus-visible {
+  outline: 3px solid #165dcc;
+  outline-offset: 2px;
+}
+.staff .list button[aria-pressed='true'] {
+  border: 2px solid #165dcc;
+  background: #eef4ff;
+}
+.staff .readonly {
+  background: #f4f7fb;
+  padding: 12px;
+  border-radius: 8px;
+}
+.linkPanel {
+  padding: 16px;
+  border: 1px solid #adcdb7;
+  border-radius: 10px;
+  background: #edf6ef;
+  margin: 16px 0;
+}
+.linkPanel textarea {
+  min-height: 80px;
+  font-size: 0.85rem;
+}
+.staff hr {
+  border: 0;
+  border-top: 1px solid #dce3eb;
+  margin: 22px 0;
+}
+@media (max-width: 700px) {
+  .layout,
+  .fields {
+    grid-template-columns: 1fr;
+  }
+  .list {
+    max-height: 340px;
+    overflow: auto;
+  }
+  .join {
+    margin: 20px 12px;
+    padding: 18px;
+  }
+  .actions {
+    align-items: stretch;
+  }
+  .actions > * {
+    flex-grow: 1;
+  }
+  .staff fieldset {
+    padding: 12px;
+  }
+}
+/* Preserve each staff card's full contents inside the mobile scroll area. */
+.list > * {
+  flex-shrink: 0;
+}
+.staff summary {
+  min-height: 44px;
+  padding: 12px 0;
+  cursor: pointer;
+}
+.join h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 24px 0 12px;
+}
+.join h2 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 24px 0 8px;
+}
+.join p {
+  margin: 12px 0;
+}

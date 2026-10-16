@@ -49,3 +49,13 @@ These are feature references, not claims that this implementation matches or exc
 - [Toast automatic discounts](https://doc.toasttab.com/doc/platformguide/adminAutoApplyDiscounts.html)
 
 Private deployment evidence, credentials and restaurant financial records must remain outside this repository.
+
+## Staff access candidate update
+
+The staff release adds branch-scoped cashier administration, owner-scoped manager administration, application invitations for existing verified accounts, and own password changes with current-password verification. New-account verification and forgotten-password email delivery remain unavailable because outgoing email is not configured. Application links do not authenticate their holder and never contain provider login/reset credentials. Managers cannot see or reset another person's password.
+
+Role/scope/deactivation changes require the affected staff member to close open shifts. Revoked device bindings cannot resume sales. An inactive actor can recover only their own exact committed financial acknowledgement; restoring branch access permits cancellation of an unsaved request with the historical binding. Resolve a financial request before re-enrolling, because enrollment replaces its device cookie. Staff management requests have a separate exact-result/cancellation flow that can use the same actor's replacement device in that branch.
+
+Password change requires current credentials and checks for open shifts, then revokes provider refresh sessions and clears local cookies. The external provider update and shift check are not one database transaction; another device can open a shift concurrently. Already-issued access tokens follow the provider's expiry semantics. If the password changes but sign-out is unconfirmed, the UI explicitly says to use the new password.
+
+Release status and exact test/deployment evidence are recorded privately; this source description does not establish production activation or email delivery.
