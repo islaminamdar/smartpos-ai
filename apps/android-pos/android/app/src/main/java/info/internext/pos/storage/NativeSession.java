@@ -118,6 +118,11 @@ public final class NativeSession {
         JSONObject current=store.read();custody(current);if(current.isNull("actorId")||current.getBoolean("logoutPending"))throw new NativeAccessError("native_session_expired");
         return http.request(method,path,body);
     }
+    /** Historical signed evidence remains uploadable after sign-out or access revocation. */
+    synchronized JSONObject historicalRequest(String path,JSONObject envelope)throws Exception{
+        if(!path.equals("/api/pos/offline/import")&&!path.equals("/api/pos/offline/seal"))throw new NativeAccessError("native_access_unavailable");
+        return http.request("POST",path,envelope);
+    }
     private static boolean sameDevice(JSONObject a,JSONObject b)throws Exception{return a.getString("id").equals(b.getString("id"))&&a.getString("branchId").equals(b.getString("branchId"));}
     private static JSONObject counter(String actor,JSONObject device)throws Exception{return AccessContext.device(device).put("actorId",actor);}
     private static boolean hasSession(JSONObject state)throws Exception{JSONObject cookies=state.getJSONObject("cookies");return cookies.has("pos-access")||cookies.has("pos-refresh");}

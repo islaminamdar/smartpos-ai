@@ -31,6 +31,7 @@ public class NativeOfflineCoordinatorTest {
     private SecureSessionStore store;private NativeSession session;private NativeOfflineCoordinator coordinator;private CookieHandler priorCookies;
     private KeyPair server;private JSONObject snapshot,authority,deviceIdentity;private String actor,org,branch,device,epoch,shift;
     private long now=1_792_132_200_000L,elapsed=1000;private int boot=5;private boolean wrongContextChallenge,wrongContextScope,wrongPreparedChallenge,wrongPreparedScope;
+    private int enrollmentErrorMode;private JSONObject acceptedEnrollment;private final List<Boolean> expiredFlagsAtSend=new ArrayList<>();
     private boolean rotateCookies;private String loseNextPath;private JSONObject preparedResponse;private final List<Sent> sent=new ArrayList<>();
     private static final String PIN="18473926";
     private static final class Sent {final String path;final JSONObject body;Sent(String p,JSONObject b){path=p;body=b;}}
@@ -81,6 +82,7 @@ public class NativeOfflineCoordinatorTest {
             return new JSONObject().put("status","applied").put("commandId",command.getString("id")).put("shiftId",shift).put("replayed",replay);
         }
         if(path.equals("/api/pos/offline/enroll")){
+            if(acceptedEnrollment!=null)assertEquals(canonical(acceptedEnrollment),canonical(request));else acceptedEnrollment=new JSONObject(request.toString());
             JSONObject proof=(JSONObject)SignedProtocol.verify(request.getJSONObject("proof").toString(),Collections.singletonMap(deviceIdentity.getString("deviceKeySha256"),SignedProtocol.publicKey(SignedProtocol.decode(deviceIdentity.getString("publicKeySpkiBase64Url"),256)))).payload();
             assertEquals(actor,proof.getString("actorId"));assertEquals(request.getString("requestId"),proof.getString("requestId"));
             return new JSONObject().put("keyEpoch",epoch).put("deviceId",device).put("deviceKeySha256",deviceIdentity.getString("deviceKeySha256")).put("publicKeySpki",deviceIdentity.getString("publicKeySpkiBase64Url"));
@@ -172,11 +174,52 @@ public class NativeOfflineCoordinatorTest {
         JSONObject again=new SecureSessionStore(context,vaultFile,aliases.get(0)).read();assertEquals(canonical(actual),canonical(again));
         File disk=new File(context.getNoBackupFilesDir(),vaultFile);byte[] raw=new byte[(int)disk.length()];try(InputStream in=new FileInputStream(disk)){assertEquals(raw.length,in.read(raw));}assertFalse(new String(raw,StandardCharsets.UTF_8).contains("synthetic-refresh"));
     }
+    private JSONObject proof(JSONObject request)throws Exception{return (JSONObject)SignedProtocol.verify(request.getJSONObject("proof").toString(),Collections.singletonMap(deviceIdentity.getString("deviceKeySha256"),SignedProtocol.publicKey(SignedProtocol.decode(deviceIdentity.getString("publicKeySpkiBase64Url"),256)))).payload();}
+    private String seal(){try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT seal_envelope FROM offline_authority_state",null)){assertTrue(c.moveToFirst());return c.isNull(0)?null:c.getString(0);}}
+    @Test public void definitiveExpiredProofSurvivesRestartAndRefreshesOnlyAfterFreshVerifiedContext()throws Exception{
+        enrollmentErrorMode=1;code("offline_preparation_uncertain",coordinator::beginPreparation);JSONObject first=bodies("/api/pos/offline/enroll").get(0);assertTrue(store.read().getJSONObject("offline").getBoolean("enrollmentProofExpired"));assertTrue(store.read().getJSONObject("offline").isNull("keyEpoch"));
+        reopen();now+=600000;elapsed+=600000;wrongContextChallenge=true;assertThrows(IllegalArgumentException.class,coordinator::beginPreparation);assertEquals(1,bodies("/api/pos/offline/enroll").size());assertTrue(store.read().getJSONObject("offline").getBoolean("enrollmentProofExpired"));
+        wrongContextChallenge=false;coordinator.beginPreparation();JSONObject refreshed=bodies("/api/pos/offline/enroll").get(1);
+        for(String field:new String[]{"requestId","branchId","deviceId","publicKeySpki","deviceKeySha256"})assertEquals(first.get(field),refreshed.get(field));
+        assertNotEquals(proof(first).getString("issuedAt"),proof(refreshed).getString("issuedAt"));assertEquals(NativeCheckoutEngine.iso(now),proof(refreshed).getString("issuedAt"));
+        assertEquals(Arrays.asList(false,false),expiredFlagsAtSend);assertFalse(store.read().getJSONObject("offline").getBoolean("enrollmentProofExpired"));assertEquals(epoch,store.read().getJSONObject("offline").getString("keyEpoch"));
+    }
+    @Test public void lostRefreshedEnrollmentResponseKeepsNewProofExactlyAcrossFurtherRestart()throws Exception{
+        enrollmentErrorMode=1;code("offline_preparation_uncertain",coordinator::beginPreparation);JSONObject old=bodies("/api/pos/offline/enroll").get(0);reopen();now+=600000;elapsed+=600000;loseNextPath="/api/pos/offline/enroll";
+        code("offline_preparation_uncertain",coordinator::beginPreparation);JSONObject fresh=bodies("/api/pos/offline/enroll").get(1);assertFalse(store.read().getJSONObject("offline").getBoolean("enrollmentProofExpired"));assertTrue(store.read().getJSONObject("offline").isNull("keyEpoch"));
+        reopen();now+=600000;elapsed+=600000;coordinator.beginPreparation();JSONObject replay=bodies("/api/pos/offline/enroll").get(2);assertEquals(canonical(fresh),canonical(replay));assertEquals(old.getString("requestId"),fresh.getString("requestId"));assertNotEquals(proof(old).getString("issuedAt"),proof(fresh).getString("issuedAt"));assertEquals(Arrays.asList(false,false,false),expiredFlagsAtSend);
+    }
+    @Test public void genericExpiredLookingFailureNeverPermitsRefreshingPendingProof()throws Exception{
+        enrollmentErrorMode=2;code("offline_preparation_uncertain",coordinator::beginPreparation);JSONObject original=bodies("/api/pos/offline/enroll").get(0);assertFalse(store.read().getJSONObject("offline").getBoolean("enrollmentProofExpired"));
+        reopen();now+=600000;elapsed+=600000;enrollmentErrorMode=3;code("offline_preparation_uncertain",coordinator::beginPreparation);assertFalse(store.read().getJSONObject("offline").getBoolean("enrollmentProofExpired"));assertEquals(canonical(original),canonical(bodies("/api/pos/offline/enroll").get(1)));
+        coordinator.beginPreparation();assertEquals(canonical(original),canonical(bodies("/api/pos/offline/enroll").get(2)));assertEquals(epoch,store.read().getJSONObject("offline").getString("keyEpoch"));
+    }
+    @Test public void successfulOldEnrollmentReplayNeverChangesProofOrCreatesRecoveryFlag()throws Exception{
+        loseNextPath="/api/pos/offline/enroll";code("offline_preparation_uncertain",coordinator::beginPreparation);JSONObject first=bodies("/api/pos/offline/enroll").get(0);reopen();now+=86400000;elapsed+=86400000;coordinator.beginPreparation();
+        assertEquals(canonical(first),canonical(bodies("/api/pos/offline/enroll").get(1)));assertFalse(store.read().getJSONObject("offline").getBoolean("enrollmentProofExpired"));coordinator.beginPreparation();assertEquals(2,bodies("/api/pos/offline/enroll").size());
+    }
+    @Test public void finishCorrectAuthoritySignsOneStableLocalSealWithoutNetworkAndLocksStaff()throws Exception{
+        prepare();String authorityId=authority.getString("id");int requests=sent.size();char[] pin=PIN.toCharArray();coordinator.finishAuthorityWithPin(authorityId,pin);for(char c:pin)assertEquals('\0',c);assertEquals(requests,sent.size());String first=seal();assertNotNull(first);
+        JSONObject payload=(JSONObject)SignedProtocol.verify(first,Collections.singletonMap(deviceIdentity.getString("deviceKeySha256"),SignedProtocol.publicKey(SignedProtocol.decode(deviceIdentity.getString("publicKeySpkiBase64Url"),256)))).payload();assertEquals(authorityId,payload.getString("authorityId"));assertEquals(0,payload.getLong("finalSequence"));assertTrue(payload.isNull("finalEventSha256"));
+        coordinator.finishAuthorityWithPin(authorityId,PIN.toCharArray());assertEquals(first,seal());assertEquals("blocked",coordinator.getState().getString("status"));assertEquals(0,count("receipts"));assertEquals(1,count("offline_bundles"));
+    }
+    @Test public void finishRejectsWrongAuthorityIncorrectPinAndSignedOutOrPendingLogoutWithoutSeal()throws Exception{
+        prepare();String authorityId=authority.getString("id");char[] wrongIdPin=PIN.toCharArray();code("offline_context_changed",()->coordinator.finishAuthorityWithPin(UUID.randomUUID().toString(),wrongIdPin));for(char c:wrongIdPin)assertEquals('\0',c);assertNull(seal());
+        char[] wrongPin="00000000".toCharArray();assertEquals("pin_incorrect",assertThrows(IllegalStateException.class,()->coordinator.finishAuthorityWithPin(authorityId,wrongPin)).getMessage());for(char c:wrongPin)assertEquals('\0',c);assertNull(seal());
+        int requests=sent.size();JSONObject saved=store.read();for(boolean pending:new boolean[]{false,true}){JSONObject state=new JSONObject(saved.toString());if(pending)state.put("logoutPending",true);else state.put("actorId",JSONObject.NULL);store.write(state);char[] pin=PIN.toCharArray();code("pin_unlock_required",()->coordinator.finishAuthorityWithPin(authorityId,pin));for(char c:pin)assertEquals('\0',c);assertNull(seal());}
+        assertEquals(requests,sent.size());assertEquals(0,count("receipts"));
+    }
     private final class Fake extends HttpsURLConnection{
         private final ByteArrayOutputStream output=new ByteArrayOutputStream();private byte[] response;private boolean lose;
         Fake(URL url){super(url);}
         @Override public int getResponseCode()throws IOException{
-            try{JSONObject body=output.size()==0?null:new JSONObject(output.toString("UTF-8"));sent.add(new Sent(url.getPath(),body));response=respond(url.getPath(),body).toString().getBytes(StandardCharsets.UTF_8);lose=url.getPath().equals(loseNextPath);if(lose)loseNextPath=null;return 200;}
+            try{JSONObject body=output.size()==0?null:new JSONObject(output.toString("UTF-8"));sent.add(new Sent(url.getPath(),body));
+                if(url.getPath().equals("/api/pos/offline/enroll")){
+                    JSONObject persisted=store.read().getJSONObject("offline");assertEquals(canonical(body),canonical(persisted.getJSONObject("enrollmentRequest")));expiredFlagsAtSend.add(persisted.optBoolean("enrollmentProofExpired",false));
+                    if(enrollmentErrorMode!=0){int mode=enrollmentErrorMode;enrollmentErrorMode=0;JSONObject error=new JSONObject().put("status","not_enrolled").put("code","offline_enrollment_proof_expired").put("requestId",body.getString("requestId")).put("requestSha256",SignedProtocol.hash(CanonicalJson.bytes(body)));
+                        if(mode!=1)respond(url.getPath(),body);if(mode==2)error=new JSONObject().put("status","unavailable").put("code","pos_offline_proof_expired");response=error.toString().getBytes(StandardCharsets.UTF_8);return mode==3?503:409;}
+                }
+                response=respond(url.getPath(),body).toString().getBytes(StandardCharsets.UTF_8);lose=url.getPath().equals(loseNextPath);if(lose)loseNextPath=null;return 200;}
             catch(Exception error){throw new IOException("Synthetic handler failure",error);}
         }
         @Override public Map<String,List<String>> getHeaderFields(){return rotateCookies?Collections.singletonMap("Set-Cookie",Arrays.asList("pos-access=synthetic-rotated-access; Secure; HttpOnly; Path=/","pos-refresh=synthetic-rotated-refresh; Secure; HttpOnly; Path=/")):Collections.emptyMap();}
@@ -184,6 +227,7 @@ public class NativeOfflineCoordinatorTest {
         @Override public String getHeaderField(String name){return null;}
         @Override public long getContentLengthLong(){return -1;}
         @Override public InputStream getInputStream()throws IOException{if(lose)throw new IOException("Synthetic lost response after server commit");return new ByteArrayInputStream(response);}
+        @Override public InputStream getErrorStream(){return new ByteArrayInputStream(response);}
         @Override public OutputStream getOutputStream(){return output;}
         @Override public void disconnect(){}@Override public boolean usingProxy(){return false;}@Override public void connect(){}
         @Override public String getCipherSuite(){return "TLS_SYNTHETIC_ONLY";}@Override public Certificate[] getLocalCertificates(){return null;}@Override public Certificate[] getServerCertificates(){return new Certificate[0];}

@@ -178,5 +178,35 @@ public class NativeCheckoutEngineTest {
     @Test public void publicPreparedInstallRequiresNativeReferenceReading()throws Exception{
         prepareNextGrant();assertThrows(IllegalStateException.class,()->engine.installVerifiedBundle(snapshotEnvelope,authorityEnvelope,start,null));assertEquals(1,count("offline_bundles"));assertEquals(1,count("offline_authority_state"));
     }
+    private OfflineClock.Reading expireNow(){wall=start+3_600_000;elapsed=3_601_000;return new OfflineClock.Reading(boot,elapsed,wall);}
+    private String currentSeal()throws Exception{
+        try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT seal_envelope FROM offline_authority_state WHERE authority_id=?",new String[]{authority.getString("id")})){assertTrue(c.moveToFirst());return c.getString(0);}
+    }
+    @Test public void expiredUnusedGrantRetainsNonzeroHeadAndCannotIssueOrResetOnReplay()throws Exception{
+        String first=sell();String hash=SignedProtocol.verify(first,Collections.singletonMap(SignedProtocol.fingerprint(device),device)).payloadSha256;prepareNextGrant();
+        OfflineClock.Reading reference=expireNow();engine.retainExpiredUnusedBundle(snapshotEnvelope,authorityEnvelope,wall,reference);
+        String seal=currentSeal(),savedClock=currentGrantClock();JSONObject p=payload(seal);assertEquals(1,p.getLong("finalSequence"));assertEquals(hash,p.getString("finalEventSha256"));assertEquals(0,value("SELECT sum(blocked) FROM offline_authority_state"));assertEquals(0,value("SELECT gross_fils FROM offline_authority_state WHERE next_number=4"));
+        assertThrows(IllegalStateException.class,()->engine.beginPaymentIntent(id(),input()));assertEquals(1,count("receipts"));assertEquals(1,count("outbox"));int signed=signatures.get();
+        locked=true;wall+=9999;elapsed+=9999;engine.retainExpiredUnusedBundle(snapshotEnvelope,authorityEnvelope,wall,new OfflineClock.Reading(boot,elapsed,wall));assertEquals(seal,currentSeal());assertEquals(savedClock,currentGrantClock());assertEquals(signed,signatures.get());
+        locked=false;authority.put("id",id()).put("issuedAt",NativeCheckoutEngine.iso(wall)).put("notBefore",NativeCheckoutEngine.iso(wall)).put("expiresAt",NativeCheckoutEngine.iso(wall+3_600_000));authority.getJSONObject("invoiceRange").put("first",7).put("last",9);rebuild();engine.installVerifiedBundle(snapshotEnvelope,authorityEnvelope,wall,new OfflineClock.Reading(boot,elapsed,wall));assertEquals(2,payload(sell()).getLong("deviceSequence"));
+    }
+    @Test public void existingExpiredActiveGrantIsNeverSealedOrReanchoredByRetentionReplay()throws Exception{
+        String saved=currentGrantClock();int signed=signatures.get();OfflineClock.Reading reference=expireNow();locked=true;engine.retainExpiredUnusedBundle(snapshotEnvelope,authorityEnvelope,wall,reference);
+        assertNull(currentSeal());assertEquals(saved,currentGrantClock());assertEquals(signed,signatures.get());assertEquals(1,count("offline_bundles"));assertEquals(0,count("receipts"));
+    }
+    @Test public void unexpiredRetentionAndMissingReferenceCannotPersistBundle()throws Exception{
+        prepareNextGrant();assertThrows(IllegalStateException.class,()->engine.retainExpiredUnusedBundle(snapshotEnvelope,authorityEnvelope,start,new OfflineClock.Reading(boot,elapsed,wall)));assertThrows(IllegalStateException.class,()->engine.retainExpiredUnusedBundle(snapshotEnvelope,authorityEnvelope,start,null));assertEquals(1,count("offline_bundles"));assertEquals(1,count("offline_authority_state"));
+    }
+    @Test public void expiredRetentionRejectsWrongScopeLockAndChangedClockWithoutWrites()throws Exception{
+        prepareNextGrant();OfflineClock.Reading reference=expireNow();String shift=authority.getString("shiftId");authority.put("shiftId",id());rebuild();assertThrows(IllegalArgumentException.class,()->engine.retainExpiredUnusedBundle(snapshotEnvelope,authorityEnvelope,wall,reference));authority.put("shiftId",shift);rebuild();
+        locked=true;assertThrows(IllegalStateException.class,()->engine.retainExpiredUnusedBundle(snapshotEnvelope,authorityEnvelope,wall,reference));locked=false;String originalBoot=boot;boot=id();assertThrows(IllegalStateException.class,()->engine.retainExpiredUnusedBundle(snapshotEnvelope,authorityEnvelope,wall,reference));boot=originalBoot;elapsed--;assertThrows(IllegalStateException.class,()->engine.retainExpiredUnusedBundle(snapshotEnvelope,authorityEnvelope,wall,reference));elapsed++;wall--;assertThrows(IllegalStateException.class,()->engine.retainExpiredUnusedBundle(snapshotEnvelope,authorityEnvelope,start+3_600_000,reference));wall++;elapsed+=30001;assertThrows(IllegalStateException.class,()->engine.retainExpiredUnusedBundle(snapshotEnvelope,authorityEnvelope,wall,reference));assertEquals(1,count("offline_bundles"));assertEquals(1,count("offline_authority_state"));
+    }
+    @Test public void uncertainPriorPaymentPreventsExpiredRetention()throws Exception{
+        prepareNextGrant();journal.beginIntent(id(),"{}",NativeCheckoutEngine.iso(start));OfflineClock.Reading reference=expireNow();assertThrows(IllegalStateException.class,()->engine.retainExpiredUnusedBundle(snapshotEnvelope,authorityEnvelope,wall,reference));assertEquals(1,count("intents"));assertEquals(1,count("offline_bundles"));assertEquals(0,count("receipts"));
+    }
+    @Test public void expiredRetentionSigningFailureRollsBackEntireBundleAndRetriesZeroHead()throws Exception{
+        prepareNextGrant();OfflineClock.Reading reference=expireNow();failSigning=true;assertThrows(IllegalStateException.class,()->engine.retainExpiredUnusedBundle(snapshotEnvelope,authorityEnvelope,wall,reference));assertEquals(1,count("offline_bundles"));assertEquals(1,count("offline_authority_state"));assertEquals(0,value("SELECT sequence FROM offline_chain"));
+        failSigning=false;engine.retainExpiredUnusedBundle(snapshotEnvelope,authorityEnvelope,wall,reference);assertEquals(2,count("offline_bundles"));JSONObject seal=payload(currentSeal());assertEquals(0,seal.getLong("finalSequence"));assertTrue(seal.isNull("finalEventSha256"));assertEquals(0,count("receipts"));assertEquals(0,count("outbox"));
+    }
     private void sellAfterCancellation(String id)throws Exception{engine.cancelUncollectedIntent(id,"No payment collected");sell();}
 }

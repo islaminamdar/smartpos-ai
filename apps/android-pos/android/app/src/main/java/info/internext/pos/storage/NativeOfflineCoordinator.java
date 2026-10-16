@@ -49,7 +49,8 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
             display.put("authority",new JSONObject().put("id",authorityId).put("expiresAt",NativeCheckoutEngine.iso(bundle.expiresAtMs)).put("firstInvoice",bundle.firstInvoice).put("lastInvoice",bundle.lastInvoice));
             try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT clock_json,blocked,seal_envelope FROM offline_authority_state WHERE authority_id=?",new String[]{authorityId})){
                 if(!c.moveToFirst())throw fail("native_storage_unavailable");
-                if(c.getInt(1)!=0||!c.isNull(2))return display.put("status","blocked").put("stage","recover").put("noticeCode","offline_context_changed");
+                if(!c.isNull(2))return display.put("status","blocked").put("stage","recover").put("noticeCode","offline_allocation_finished");
+                if(c.getInt(1)!=0)return display.put("status","blocked").put("stage","recover").put("noticeCode","offline_context_changed");
                 try{OfflineClock.advance(OfflineClock.State.fromJson(c.getString(0)),clock.read(),bundle.notBeforeMs,bundle.expiresAtMs);}
                 catch(Exception error){return display.put("status","blocked").put("stage","recover").put("noticeCode",error instanceof OfflineClock.ClockException&&((OfflineClock.ClockException)error).code.equals("clock_expired")?"offline_permission_expired":"clock_source_blocked");}
             }
@@ -68,18 +69,23 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
         JSONObject reservation=offline.optJSONObject("reservation");if(reservation!=null&&storedBundle(offline,reservation.getString("requestId"))!=null)return getState();
         if(offline.isNull("keyEpoch")){
             JSONObject request=offline.optJSONObject("enrollmentRequest");
-            if(request==null){
-                String requestId=UUID.randomUUID().toString();JSONObject scope=offline.getJSONObject("scope");
+            if(request==null||offline.optBoolean("enrollmentProofExpired",false)){
+                String requestId=request==null?UUID.randomUUID().toString():request.getString("requestId");JSONObject scope=offline.getJSONObject("scope");
                 JSONObject proof=new JSONObject().put("kind","offline-enrollment").put("schemaVersion",1).put("requestId",requestId).put("branchId",scope.getString("branchId")).put("deviceId",scope.getString("deviceId")).put("actorId",scope.getString("actorId")).put("deviceKeySha256",deviceIdentity.getString("deviceKeySha256")).put("issuedAt",NativeCheckoutEngine.iso(context.freshTimeMs));
                 request=new JSONObject().put("requestId",requestId).put("branchId",scope.getString("branchId")).put("deviceId",scope.getString("deviceId")).put("publicKeySpki",deviceIdentity.getString("publicKeySpkiBase64Url")).put("deviceKeySha256",deviceIdentity.getString("deviceKeySha256")).put("proof",new JSONObject(sign(proof)));
-                offline.put("enrollmentRequest",request);session.saveOffline(offline);
+                offline.put("enrollmentRequest",request).put("enrollmentProofExpired",false);session.saveOffline(offline);
             }
             try{
                 JSONObject result=session.nativeRequest("POST","/api/pos/offline/enroll",request);
                 fields(result,"keyEpoch","deviceId","deviceKeySha256","publicKeySpki");uuid(result.getString("keyEpoch"));
                 if(!request.getString("deviceId").equals(result.getString("deviceId"))||!request.getString("deviceKeySha256").equals(result.getString("deviceKeySha256"))||!request.getString("publicKeySpki").equals(result.getString("publicKeySpki")))throw fail("offline_context_changed");
                 offline.put("keyEpoch",result.getString("keyEpoch"));session.saveOffline(offline);
-            }catch(Exception error){throw fail("offline_preparation_uncertain");}
+            }catch(Exception error){
+                if(error instanceof NativeAccessError&&((NativeAccessError)error).code.equals("offline_enrollment_proof_expired")){
+                    offline.put("enrollmentProofExpired",true);session.saveOffline(offline);
+                }
+                throw fail("offline_preparation_uncertain");
+            }
         }
         return getState();
     }
@@ -105,7 +111,11 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
             String snapshot=response.getJSONObject("snapshotEnvelope").toString(),authority=response.getJSONObject("authorityEnvelope").toString();
             OfflineBundle bundle=OfflineBundle.verify(snapshot,authority,keys,binding);
             NativeHandoff.Prepared prepared=NativeHandoff.verifyPrepared(response.getJSONObject("handoff").toString(),keys,challenge,binding,reservation.getString("requestId"),bundle,before,after);
-            engine(binding).installVerifiedBundle(snapshot,authority,prepared.freshTimeMs,after);
+            try{engine(binding).installVerifiedBundle(snapshot,authority,prepared.freshTimeMs,after);}
+            catch(OfflineClock.ClockException error){
+                if(!error.code.equals("clock_expired"))throw error;
+                engine(binding).retainExpiredUnusedBundle(snapshot,authority,prepared.freshTimeMs,after);
+            }
             return getState();
         }catch(Exception error){unlock.lock();throw error;}finally{if(pin!=null)Arrays.fill(pin,'\0');if(confirmation!=null)Arrays.fill(confirmation,'\0');}
     }
@@ -129,6 +139,16 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
         try{JSONObject state=session.nativeState(),offline=state.optJSONObject("offline");if(offline==null||state.isNull("actorId")||state.getBoolean("logoutPending"))throw fail("pin_unlock_required");checkStoredScope(state,offline);
             JSONObject reservation=offline.optJSONObject("reservation");if(reservation==null||storedBundle(offline,reservation.getString("requestId"))==null)throw fail("offline_preparation_uncertain");unlock.unlock(binding(offline),pin);pin=null;return getState();
         }finally{if(pin!=null)Arrays.fill(pin,'\0');}
+    }
+    /** Explicit terminal action for this staff member's current allocation, not a shift close. */
+    public synchronized void finishAuthorityWithPin(String authorityId,char[] pin)throws Exception{
+        try{
+            JSONObject state=session.nativeState(),offline=state.optJSONObject("offline");
+            if(offline==null||state.isNull("actorId")||state.getBoolean("logoutPending"))throw fail("pin_unlock_required");
+            checkStoredScope(state,offline);JSONObject reservation=offline.optJSONObject("reservation");
+            if(reservation==null||!reservation.getString("requestId").equals(authorityId)||storedBundle(offline,authorityId)==null)throw fail("offline_context_changed");
+            unlock.unlock(binding(offline),pin);pin=null;engine(binding(offline)).sealAuthority(authorityId);
+        }finally{unlock.lock();if(pin!=null)Arrays.fill(pin,'\0');}
     }
     public synchronized void lock(){unlock.lock();}
     @Override public synchronized void close(){unlock.close();clock.close();}

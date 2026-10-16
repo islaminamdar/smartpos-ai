@@ -8,7 +8,7 @@ vi.mock('@/lib/pos/server/client', async original => ({
 import { invoice } from '../../../fixtures/pos-invoice'
 import { canonicalBytes, decodeBase64Url, encodeBase64Url, parseCanonicalPayload, sha256Hex } from '@/lib/pos/offline/canonical'
 import { publicKeyFingerprint, signEnvelope } from '@/lib/pos/offline/authority'
-import { enrollOfflineDevice, importOfflineReceipt, reserveOfflineAuthority, sealOfflineAuthority, limitOfflineRecovery } from '@/lib/pos/offline/server'
+import { OfflineEnrollmentProofExpired, enrollOfflineDevice, importOfflineReceipt, reserveOfflineAuthority, sealOfflineAuthority, limitOfflineRecovery } from '@/lib/pos/offline/server'
 import { offlineServerKeys } from '@/lib/pos/offline/server-keys'
 import type { OfflineAuthority, OfflineSnapshot, SignedEnvelope } from '@/lib/pos/offline/contracts'
 
@@ -137,5 +137,30 @@ describe('historical offline custody',()=>{
     m.rpc.mockClear()
     await expect(limitOfflineRecovery(new Request('https://pos.internext.info/api/pos/offline/import'))).rejects.toMatchObject({status:503})
     expect(m.rpc).not.toHaveBeenCalled()
+  })
+})
+
+describe('definitive enrollment proof expiry',()=>{
+  it('binds only exact SQLSTATE P0001 freshness rejection to the verified full request hash',async()=>{
+    const f=await fixture();m.rpc.mockResolvedValue({data:null,error:{code:'P0001',message:'POS_OFFLINE_PROOF_EXPIRED'}})
+    const result=await enrollOfflineDevice(f.enrollment).catch(error=>error)
+    expect(result).toBeInstanceOf(OfflineEnrollmentProofExpired)
+    expect(result).toMatchObject({code:'offline_enrollment_proof_expired',status:409,requestId:f.enrollment.requestId,requestSha256:await sha256Hex(canonicalBytes(f.enrollment))})
+    expect(m.rpc).toHaveBeenCalledTimes(1)
+  })
+  it('does not label generic, altered, missing-SQLSTATE or transport errors as definitive',async()=>{
+    const f=await fixture()
+    for(const error of [{code:'P0001',message:'prefix POS_OFFLINE_PROOF_EXPIRED'},{code:'XX000',message:'POS_OFFLINE_PROOF_EXPIRED'},{message:'POS_OFFLINE_PROOF_EXPIRED'},{code:'P0001',message:'POS_IDEMPOTENCY_CONFLICT'}]){
+      m.rpc.mockResolvedValue({data:null,error});expect(await enrollOfflineDevice(f.enrollment).catch(error=>error)).not.toBeInstanceOf(OfflineEnrollmentProofExpired)
+    }
+    m.rpc.mockRejectedValue(new Error('network outcome unknown'));expect(await enrollOfflineDevice(f.enrollment).catch(error=>error)).not.toBeInstanceOf(OfflineEnrollmentProofExpired)
+  })
+  it('still verifies expired proofs and preserves exact successful replay without a local age rejection',async()=>{
+    const f=await fixture();m.rpc.mockResolvedValue({data:{keyEpoch:id,deviceId:id,deviceKeySha256:f.fingerprint,publicKeySpki:f.row.publicKeySpki},error:null})
+    const oldProof={kind:'offline-enrollment',schemaVersion:1,requestId:id,branchId:id,deviceId:id,actorId:id,deviceKeySha256:f.fingerprint,issuedAt:'2000-01-01T00:00:00.000Z'}
+    f.enrollment.proof=await signEnvelope(oldProof,f.fingerprint,f.device.privateKey)
+    expect(await enrollOfflineDevice(f.enrollment)).toMatchObject({keyEpoch:id})
+    const bad={...f.enrollment,proof:await signEnvelope({kind:'offline-enrollment',schemaVersion:1,requestId:id,branchId:id,deviceId:id,actorId:id,deviceKeySha256:f.fingerprint,issuedAt:at},f.fingerprint,f.server.privateKey)}
+    m.rpc.mockClear();await expect(enrollOfflineDevice(bad)).rejects.toMatchObject({code:'offline_device_proof_invalid'});expect(m.rpc).not.toHaveBeenCalled()
   })
 })

@@ -1,6 +1,8 @@
 package info.internext.pos.storage;
 
 import android.content.Context;
+import info.internext.pos.offline.CanonicalJson;
+import info.internext.pos.offline.SignedProtocol;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import org.json.JSONObject;
@@ -57,7 +59,7 @@ public class NativePosHttpAndroidTest {
         assertFalse(response.getUseCaches());assertTrue(response.disconnected);
     }
     @Test public void rejectsUnlistedPathsMethodsAndBodiesBeforeOpening()throws Exception{
-        for(String path:new String[]{"https://evil.invalid/","/api/pos/native/access?redirect=1","/api/pos/native/../devices","/api/pos/bootstrap"})
+        for(String path:new String[]{"https://evil.invalid/","/api/pos/native/access?redirect=1","/api/pos/native/../devices","/api/pos/bootstrap","/api/pos/offline/import","/api/pos/offline/seal"})
             assertThrows(NativeAccessError.class,()->http.request("GET",path,null));
         assertThrows(NativeAccessError.class,()->http.request("PUT","/api/pos/native/access",null));
         assertThrows(NativeAccessError.class,()->http.request("GET","/api/pos/native/access",new JSONObject()));
@@ -119,8 +121,63 @@ public class NativePosHttpAndroidTest {
         assertTrue(file.delete());assertThrows(NativeAccessError.class,()->new SecureSessionStore(context,name,alias));assertFalse(file.exists());
     }
 
+    private JSONObject enrollmentBody()throws Exception{return new JSONObject().put("requestId",ACTOR).put("proof",new JSONObject().put("fixture","proof"));}
+    private JSONObject definitive(JSONObject body)throws Exception{return new JSONObject().put("status","not_enrolled").put("code","offline_enrollment_proof_expired").put("requestId",ACTOR).put("requestSha256",SignedProtocol.hash(CanonicalJson.bytes(body)));}
+    private JSONObject post(String path,JSONObject body)throws Exception{return new NativePosHttp(store,url->{opens++;assertEquals("https://pos.internext.info"+path,url.toString());return response;}).request("POST",path,body);}
+    private void errorBody(JSONObject body)throws Exception{response.status=409;response.body=body.toString().getBytes(StandardCharsets.UTF_8);}
+    private String postError(String path,JSONObject body){return assertThrows(NativeAccessError.class,()->post(path,body)).code;}
+    @Test public void definitiveEnrollmentExpiryRequiresExactRequestDigestAndRetainsVault()throws Exception{
+        JSONObject body=enrollmentBody();cookie("pos-refresh","before");JSONObject state=store.read();state.put("offline",new JSONObject().put("pendingFixture",body));store.write(state);errorBody(definitive(body));
+        response.setCookie("pos-refresh=rotated; Secure; HttpOnly; Path=/");assertEquals("offline_enrollment_proof_expired",postError("/api/pos/offline/enroll",body));
+        assertEquals("rotated",store.read().getJSONObject("cookies").getString("pos-refresh"));assertArrayEquals(CanonicalJson.bytes(body),CanonicalJson.bytes(store.read().getJSONObject("offline").getJSONObject("pendingFixture")));assertTrue(response.disconnected);
+    }
+    @Test public void enrollmentExpiryNeverTrustsWrongScopeDigestExtraFieldsOrGenericErrors()throws Exception{
+        JSONObject body=enrollmentBody(),valid=definitive(body);
+        for(JSONObject error:new JSONObject[]{new JSONObject(valid.toString()).put("requestId",UUID.randomUUID().toString()),new JSONObject(valid.toString()).put("requestSha256","b".repeat(64)),new JSONObject(valid.toString()).put("extra",true),new JSONObject(valid.toString()).put("status","unavailable"),new JSONObject(valid.toString()).put("code","pos_offline_proof_expired"),new JSONObject(valid.toString()).put("requestSha256",42)}){
+            response=new FakeConnection();errorBody(error);assertEquals("native_access_unavailable",postError("/api/pos/offline/enroll",body));
+        }
+        response=new FakeConnection();errorBody(valid);response.status=503;assertEquals("native_access_unavailable",postError("/api/pos/offline/enroll",body));assertEquals(0,response.reads);
+        response=new FakeConnection();errorBody(valid);assertEquals("native_access_unavailable",postError("/api/pos/offline/seal",body));assertEquals(0,response.reads);
+        response=new FakeConnection();errorBody(valid);response.status=200;assertEquals("not_enrolled",post("/api/pos/offline/enroll",body).getString("status"));
+    }
+    @Test public void malformedOrLostDefinitiveErrorBodyStaysUncertain()throws Exception{
+        JSONObject body=enrollmentBody();
+        for(byte[] raw:new byte[][]{"{\"status\":\"not_enrolled\",\"status\":\"not_enrolled\"}".getBytes(StandardCharsets.UTF_8),new byte[]{(byte)0xc0,(byte)0xaf},new byte[1025]}){
+            response=new FakeConnection();response.status=409;response.body=raw;assertEquals("native_access_unavailable",postError("/api/pos/offline/enroll",body));
+        }
+        response=new FakeConnection();errorBody(definitive(body));response.noErrorStream=true;assertEquals("native_access_unavailable",postError("/api/pos/offline/enroll",body));
+        response=new FakeConnection();errorBody(definitive(body));response.errorReadFailure=true;assertEquals("native_network_unavailable",postError("/api/pos/offline/enroll",body));
+        response=new FakeConnection();errorBody(definitive(body));response.type="text/html";assertEquals("native_access_unavailable",postError("/api/pos/offline/enroll",body));assertEquals(0,response.reads);
+    }
+    @Test public void historicalUploadsNeverSendCookiesOrApplyResponseCookiesEvenWhenLoggedOut()throws Exception{
+        cookie("pos-access","private-session");cookie("pos-refresh","private-refresh");JSONObject before=store.read();before.put("logoutPending",true);store.write(before);
+        for(String path:new String[]{"/api/pos/offline/import","/api/pos/offline/seal"}){
+            response=new FakeConnection();response.setCookie("pos-access=unexpected; Domain=evil.invalid; Path=/");post(path,new JSONObject().put("signed","fixture"));assertNull(header("Cookie"));
+            assertEquals(new String(CanonicalJson.bytes(before),StandardCharsets.UTF_8),new String(CanonicalJson.bytes(store.read()),StandardCharsets.UTF_8));
+        }
+        response=new FakeConnection();response.status=401;response.setCookie("pos-access=; Max-Age=0; Secure; HttpOnly; Path=/");assertEquals("native_access_unavailable",postError("/api/pos/offline/import",new JSONObject()));assertEquals("private-session",store.read().getJSONObject("cookies").getString("pos-access"));
+    }
+    @Test public void historicalImportReturnsOnlyStrictKnownReconciliationWithoutAcknowledgingAnything()throws Exception{
+        JSONObject valid=new JSONObject().put("status","reconciliation_required").put("exceptionId",ACTOR).put("code","chain");errorBody(valid);
+        assertArrayEquals(CanonicalJson.bytes(valid),CanonicalJson.bytes(post("/api/pos/offline/import",new JSONObject())));assertNull(header("Cookie"));
+        for(JSONObject bad:new JSONObject[]{new JSONObject(valid.toString()).put("code","private backend content"),new JSONObject(valid.toString()).put("code","unknown_future_code"),new JSONObject(valid.toString()).put("extra",true),new JSONObject(valid.toString()).put("exceptionId","invalid"),new JSONObject(valid.toString()).put("status","accepted")}){
+            response=new FakeConnection();errorBody(bad);assertEquals("native_access_unavailable",postError("/api/pos/offline/import",new JSONObject()));
+        }
+    }
+    @Test public void historicalEnvelopeWrapperMayExceedOneMiBButEndpointLimitsRemainStrict()throws Exception{
+        JSONObject large=new JSONObject().put("payloadBase64Url","a".repeat(1_100_000)).put("signatureBase64Url","unchanged");post("/api/pos/offline/import",large);
+        JSONObject sent=new JSONObject(response.output.toString("UTF-8"));assertEquals(large.getString("payloadBase64Url"),sent.getString("payloadBase64Url"));assertEquals("unchanged",sent.getString("signatureBase64Url"));
+        int prior=opens;assertEquals("native_access_unavailable",postError("/api/pos/offline/import",new JSONObject().put("payload","a".repeat(1_400_000))));assertEquals(prior,opens);
+        assertEquals("native_access_unavailable",postError("/api/pos/offline/seal",new JSONObject().put("payload","a".repeat(16384))));assertEquals(prior,opens);
+        response=new FakeConnection();response.body=new JSONObject().put("receipt","a".repeat(1_100_000)).toString().getBytes(StandardCharsets.UTF_8);assertEquals(1_100_000,post("/api/pos/offline/import",new JSONObject()).getString("receipt").length());
+        for(String path:new String[]{"/api/pos/offline/import","/api/pos/offline/seal"}){
+            response=new FakeConnection();response.length=path.endsWith("import")?1_400_001:16385;assertEquals("native_access_unavailable",postError(path,new JSONObject()));assertEquals(0,response.reads);
+            response=new FakeConnection();response.body=new byte[path.endsWith("import")?1_400_001:16385];Arrays.fill(response.body,(byte)' ');assertEquals("native_access_unavailable",postError(path,new JSONObject()));
+        }
+    }
+
     private static final class FakeConnection extends HttpsURLConnection {
-        int status=200,reads;long length=-1;boolean disconnected;String type="application/json; charset=utf-8",encoding;
+        int status=200,reads;long length=-1;boolean disconnected,noErrorStream,errorReadFailure;String type="application/json; charset=utf-8",encoding;
         byte[] body="{\"ok\":true}".getBytes(StandardCharsets.UTF_8);
         final Map<String,List<String>> headers=new HashMap<>();final ByteArrayOutputStream output=new ByteArrayOutputStream();
         FakeConnection()throws Exception{super(new URL("https://pos.internext.info/api/pos/native/access"));}
@@ -131,6 +188,7 @@ public class NativePosHttpAndroidTest {
         @Override public String getHeaderField(String name){return name.equals("Content-Encoding")?encoding:null;}
         @Override public long getContentLengthLong(){return length;}
         @Override public InputStream getInputStream(){reads++;return new ByteArrayInputStream(body);}
+        @Override public InputStream getErrorStream(){reads++;if(noErrorStream)return null;if(errorReadFailure)return new InputStream(){@Override public int read()throws java.io.IOException{throw new java.io.IOException("synthetic lost body");}};return new ByteArrayInputStream(body);}
         @Override public OutputStream getOutputStream(){return output;}
         @Override public void disconnect(){disconnected=true;}
         @Override public boolean usingProxy(){return false;}

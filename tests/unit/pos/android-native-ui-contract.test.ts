@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  parseReconciliationState,
+  nativeReconciliationError,
+  knownReconciliationNotice,
   parseOfflineState,
   openingCashToFils,
   nativeOfflineError,
@@ -162,5 +165,37 @@ describe('Offline preparation native boundary', () => {
     expect(nativeOfflineError({ code: 'pin_locked' })).toContain('locked')
     expect(nativeOfflineError({ code: 'offline_not_configured' })).toContain('approved app update')
     expect(nativeOfflineError({ message: 'private unknown error' })).not.toContain('private')
+  })
+})
+
+describe('Native reconciliation boundary', () => {
+  const state = {
+    schemaVersion: 1,
+    pendingReceipts: 2,
+    unsealedAuthorities: 1,
+    pendingSeals: 1,
+    confirmedSeals: 3,
+    status: 'pending',
+    noticeCode: null,
+  }
+  it('preserves distinct counts and historical attention without assuming no records', () =>
+    expect(parseReconciliationState(state)).toEqual(state))
+  it.each([
+    { ...state, pendingReceipts: -1 },
+    { ...state, pendingSeals: 1.5 },
+    { ...state, confirmedSeals: null },
+    { ...state, status: 'success' },
+    { ...state, secret: true },
+  ])('rejects malformed reconciliation status', (value) =>
+    expect(() => parseReconciliationState(value)).toThrow()
+  )
+  it('unknown notice is handled as a general blocked action without exposing raw text', () => {
+    expect(knownReconciliationNotice('unexpected_internal')).toBe(false)
+    expect(nativeReconciliationError({ code: 'unexpected_internal' })).not.toContain(
+      'unexpected_internal'
+    )
+    expect(nativeReconciliationError({ code: 'offline_seal_uncertain' })).toContain(
+      'Upload saved records'
+    )
   })
 })

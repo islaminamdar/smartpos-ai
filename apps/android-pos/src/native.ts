@@ -28,6 +28,9 @@ export type DeviceSnapshot = {
   checkedAt: string
 }
 interface NativeLedgerPlugin {
+  getReconciliationState(): Promise<unknown>
+  reconcileOffline(): Promise<unknown>
+  finishOfflineAuthority(input: { authorityId: string }): Promise<unknown>
   getOfflineState(): Promise<unknown>
   openOfflineShift(input: { openingCashFils: number }): Promise<unknown>
   prepareOffline(): Promise<unknown>
@@ -329,6 +332,7 @@ export function parseOfflineState(value: unknown): NativeOfflineState {
       ![
         'offline_not_configured',
         'offline_permission_expired',
+        'offline_allocation_finished',
         'pin_confirmation_mismatch',
         'pin_kdf_unsupported',
         'offline_preparation_uncertain',
@@ -383,6 +387,8 @@ export function nativeOfflineError(error: unknown): string {
   switch (nativeOfflineErrorCode(error)) {
     case 'offline_not_configured':
       return 'Offline preparation is not configured in this app build. Ask your manager for the approved app update. Saved records are kept.'
+    case 'offline_allocation_finished':
+      return 'This invoice allocation is finished and cannot be used for new sales. Records are kept. Use Upload saved records for any pending confirmation. Preparing the next allocation is a separate step.'
     case 'offline_permission_expired':
       return 'Saved offline permission has expired. Keep this app’s data and contact your manager or support. Renewal is not available in this app version.'
     case 'pin_confirmation_mismatch':
@@ -438,4 +444,86 @@ export async function unlockNativeOffline(): Promise<NativeOfflineState> {
 export async function lockNativeOffline(): Promise<NativeOfflineState> {
   requireNativeAccess()
   return parseOfflineState(await ledger.lockOffline())
+}
+
+export type NativeReconciliationState = {
+  schemaVersion: 1
+  pendingReceipts: number
+  unsealedAuthorities: number
+  pendingSeals: number
+  confirmedSeals: number
+  status: 'idle' | 'pending' | 'attention'
+  noticeCode: string | null
+}
+export function parseReconciliationState(value: unknown): NativeReconciliationState {
+  const result = record(value, [
+    'schemaVersion',
+    'pendingReceipts',
+    'unsealedAuthorities',
+    'pendingSeals',
+    'confirmedSeals',
+    'status',
+    'noticeCode',
+  ])
+  if (
+    result.schemaVersion !== 1 ||
+    !['idle', 'pending', 'attention'].includes(String(result.status)) ||
+    ['pendingReceipts', 'unsealedAuthorities', 'pendingSeals', 'confirmedSeals'].some(
+      (key) => !Number.isSafeInteger(result[key]) || Number(result[key]) < 0
+    ) ||
+    (result.noticeCode !== null &&
+      (typeof result.noticeCode !== 'string' || !/^[a-z_]{1,100}$/.test(result.noticeCode)))
+  )
+    throw new Error('invalid_native_response')
+  return result as NativeReconciliationState
+}
+export function nativeReconciliationError(error: unknown): string {
+  switch (nativeOfflineErrorCode(error)) {
+    case 'offline_reconciliation_required':
+      return 'Saved records need reconciliation. Keep this app’s data and check the original payment records before taking any further payment.'
+    case 'offline_upload_uncertain':
+      return 'Receipt upload was not confirmed. Saved receipts remain on this device. Retry uploading these same records; do not collect payment again.'
+    case 'offline_seal_uncertain':
+      return 'The finished allocation has not been confirmed by the server. Keep its saved declaration and retry Upload saved records. Do not create a replacement declaration.'
+    case 'native_storage_unavailable':
+      return 'Saved records could not be read or updated. Keep this app’s data and contact your manager or support. Do not reinstall.'
+    case 'native_pin_cancelled':
+      return 'Android PIN dialog cancelled. No new finish request was confirmed.'
+    case 'pin_incorrect':
+    case 'pin_locked':
+    case 'pin_online_reset_required':
+    case 'clock_source_blocked':
+    case 'native_session_expired':
+    case 'native_network_unavailable':
+    case 'native_authentication_failed':
+      return nativeOfflineError(error)
+    default:
+      return 'Reconciliation could not be confirmed. Keep this app’s saved records and contact your manager or support.'
+  }
+}
+export function knownReconciliationNotice(code: string | null): boolean {
+  return (
+    code === null ||
+    [
+      'offline_reconciliation_required',
+      'offline_upload_uncertain',
+      'offline_seal_uncertain',
+      'native_storage_unavailable',
+    ].includes(code)
+  )
+}
+export async function readNativeReconciliation(): Promise<NativeReconciliationState> {
+  requireNativeAccess()
+  return parseReconciliationState(await ledger.getReconciliationState())
+}
+export async function reconcileNativeOffline(): Promise<NativeReconciliationState> {
+  requireNativeAccess()
+  return parseReconciliationState(await ledger.reconcileOffline())
+}
+export async function finishNativeOfflineAuthority(
+  authorityId: string
+): Promise<NativeReconciliationState> {
+  requireNativeAccess()
+  if (!uuid(authorityId)) throw new Error('invalid_native_input')
+  return parseReconciliationState(await ledger.finishOfflineAuthority({ authorityId }))
 }

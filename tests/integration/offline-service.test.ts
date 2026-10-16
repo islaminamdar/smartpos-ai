@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
 const m=vi.hoisted(()=>({rpc:vi.fn(),auth:vi.fn()}))
 vi.mock('@/lib/pos/server/client',async original=>({...await original<typeof import('@/lib/pos/server/client')>(),authenticatedPosClient:m.auth,posClient:()=>({rpc:m.rpc})}))
-import { enrollOfflineDevice, reserveOfflineAuthority, importOfflineReceipt, sealOfflineAuthority } from '@/lib/pos/offline/server'
+import { OfflineEnrollmentProofExpired, enrollOfflineDevice, reserveOfflineAuthority, importOfflineReceipt, sealOfflineAuthority } from '@/lib/pos/offline/server'
 import { encodeBase64Url, decodeBase64Url, parseCanonicalPayload, sha256Hex, canonicalBytes } from '@/lib/pos/offline/canonical'
 import { publicKeyFingerprint, signEnvelope, verifyOfflineBundle, verifySignedEnvelope } from '@/lib/pos/offline/authority'
 import { offlineAckSchema } from '@/lib/pos/offline/server-contracts'
@@ -45,11 +45,63 @@ beforeAll(async()=>{
     try {
       const params=Object.entries(args)
       return {data:await scalar(`select public.${name}(${params.map(([key],i)=>`${key} => $${i+1}`).join(',')})`,params.map(([,value])=>value!==null&&typeof value==='object'?JSON.stringify(value):value)),error:null}
-    } catch(error) {return {data:null,error:{message:(error as Error).message}}}
+    } catch(error) {return {data:null,error:{message:(error as Error).message,code:(error as Error & {code?:string}).code}}}
   })
   vi.stubEnv('POS_ONLINE_PILOT','true');vi.stubEnv('POS_LIVE_SALES_ENABLED','true');vi.stubEnv('POS_OFFLINE_ISSUANCE_ENABLED','true')
 })
 afterAll(async()=>{await db?.close();vi.unstubAllEnvs()})
+
+async function enrollmentFixture(ageMs=0) {
+  const server=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify'])
+  vi.stubEnv('POS_OFFLINE_SIGNING_KEY_ID','synthetic-server')
+  vi.stubEnv('POS_OFFLINE_SERVER_KEYS',JSON.stringify([{id:'synthetic-server',publicKeySpki:encodeBase64Url(new Uint8Array(await crypto.subtle.exportKey('spki',server.publicKey))),privateKeyPkcs8:encodeBase64Url(new Uint8Array(await crypto.subtle.exportKey('pkcs8',server.privateKey)))}]))
+  const deviceId=randomUUID(),requestId=randomUUID(),pair=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify'])
+  await admin(()=>db.query('insert into public.pos_devices(id,organization_id,branch_id,name) values($1,$2,$3,$4)',[deviceId,ids.org,ids.branch,'Synthetic enrollment expiry']))
+  const fingerprint=await publicKeyFingerprint(pair.publicKey),publicKeySpki=encodeBase64Url(new Uint8Array(await crypto.subtle.exportKey('spki',pair.publicKey)))
+  const serverNow=Number(await scalar('select extract(epoch from clock_timestamp())*1000'))
+  const payload={kind:'offline-enrollment',schemaVersion:1,requestId,branchId:ids.branch,deviceId,actorId:ids.actor,deviceKeySha256:fingerprint,issuedAt:new Date(serverNow-ageMs).toISOString()}
+  const request={requestId,branchId:ids.branch,deviceId,deviceKeySha256:fingerprint,publicKeySpki,proof:await signEnvelope(payload,fingerprint,pair.privateKey)}
+  return {pair,fingerprint,payload,request}
+}
+
+it('maps the actual SQL P0001 pre-insert expiry and safely refreshes the same request ID',async()=>{
+  const f=await enrollmentFixture(600_000)
+  const failure=await enrollOfflineDevice(f.request).catch(error=>error)
+  expect(failure).toBeInstanceOf(OfflineEnrollmentProofExpired)
+  expect(failure).toMatchObject({status:409,code:'offline_enrollment_proof_expired',requestId:f.request.requestId,requestSha256:await sha256Hex(canonicalBytes(f.request))})
+  const raw=await m.rpc.mock.results.at(-1)!.value
+  expect(raw).toEqual({data:null,error:{code:'P0001',message:'POS_OFFLINE_PROOF_EXPIRED'}})
+  expect(await admin(()=>scalar('select count(*)::int from public.pos_offline_key_epochs where request_id=$1 or device_id=$2',[f.request.requestId,f.request.deviceId]))).toBe(0)
+  const refreshed={...f.request,proof:await signEnvelope({...f.payload,issuedAt:new Date().toISOString()},f.fingerprint,f.pair.privateKey)}
+  const accepted=await enrollOfflineDevice(refreshed)
+  expect(await enrollOfflineDevice(refreshed)).toEqual(accepted)
+  expect(await admin(()=>scalar('select count(*)::int from public.pos_offline_key_epochs where request_id=$1 and device_id=$2',[f.request.requestId,f.request.deviceId]))).toBe(1)
+  // Once committed, changing the decoded proof payload is forbidden, including back to
+  // the original expired issuedAt. It is a conflict, never another refresh authorization.
+  const conflict=await enrollOfflineDevice(f.request).catch(error=>error)
+  expect(conflict).not.toBeInstanceOf(OfflineEnrollmentProofExpired)
+  expect(conflict).toMatchObject({status:409,code:'pos_idempotency_conflict'})
+  expect(await enrollOfflineDevice(refreshed)).toEqual(accepted)
+})
+
+it('recovers the original committed enrollment after natural proof expiry without rewriting it',async()=>{
+  // Five seconds of headroom avoids a race during initial crypto/SQL processing, while
+  // keeping actual wall-clock expiry verification bounded and independent of clock mocks.
+  const f=await enrollmentFixture(295_000),accepted=await enrollOfflineDevice(f.request)
+  const end=Date.parse(f.payload.issuedAt)+300_050
+  while(Date.now()<end)await new Promise(resolve=>setTimeout(resolve,Math.min(250,end-Date.now())))
+  expect(Number(await scalar('select extract(epoch from clock_timestamp())*1000'))-Date.parse(f.payload.issuedAt)).toBeGreaterThan(300_000)
+  expect(await enrollOfflineDevice(f.request)).toEqual(accepted)
+  const resigned={...f.request,proof:await signEnvelope(f.payload,f.fingerprint,f.pair.privateKey)}
+  expect(await enrollOfflineDevice(resigned)).toEqual(accepted)
+  const changed={...f.request,proof:await signEnvelope({...f.payload,issuedAt:new Date().toISOString()},f.fingerprint,f.pair.privateKey)}
+  const conflict=await enrollOfflineDevice(changed).catch(error=>error)
+  expect(conflict).not.toBeInstanceOf(OfflineEnrollmentProofExpired)
+  expect(conflict).toMatchObject({code:'pos_idempotency_conflict'})
+  expect(await enrollOfflineDevice(f.request)).toEqual(accepted)
+  const stored=await admin(()=>scalar('select request_payload from public.pos_offline_key_epochs where request_id=$1',[f.request.requestId]))
+  expect(stored).toEqual(f.request)
+})
 
 it('enrolls two real device keys, reserves disjoint numbers, recovers out-of-order historical bills and exact ACKs, then seals',async()=>{
   const server=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify'])

@@ -11,6 +11,12 @@ import {
   nativeAccessErrorCode,
   type NativeAccessState,
   type NativeOfflineState,
+  type NativeReconciliationState,
+  readNativeReconciliation,
+  reconcileNativeOffline,
+  finishNativeOfflineAuthority,
+  nativeReconciliationError,
+  knownReconciliationNotice,
   readOfflineState,
   openNativeOfflineShift,
   prepareNativeOffline,
@@ -29,6 +35,268 @@ const date = (value: string) =>
     timeZone: 'Asia/Dubai',
   }).format(new Date(value))
 
+function ReconciliationPanel({
+  available,
+  ready,
+  revision,
+  operationLock,
+  actorId,
+  authority,
+  onBusyChange,
+  onCheckedVersion,
+  onChanged,
+}: {
+  available: boolean
+  ready: boolean
+  revision: number
+  operationLock: { current: boolean }
+  actorId: string | null
+  authority: NativeOfflineState['authority']
+  onBusyChange: (busy: boolean) => void
+  onCheckedVersion: (version: number) => void
+  onChanged: () => void
+}) {
+  const [state, setState] = useState<NativeReconciliationState | null>(null)
+  const [checkedRevision, setCheckedRevision] = useState(-1)
+  const [fresh, setFresh] = useState(false)
+  const [busy, setBusy] = useState<'check' | 'upload' | 'finish' | null>(null)
+  const [error, setError] = useState('')
+  const [operationError, setOperationError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [consent, setConsent] = useState<string | null>(null)
+  const mounted = useRef(false)
+  const lock = useRef(false)
+  const scope =
+    actorId && authority
+      ? `${actorId}:${authority.id}:${authority.firstInvoice}:${authority.lastInvoice}`
+      : null
+  const check = useCallback(async () => {
+    if (!available || !ready || operationLock.current || lock.current) return
+    operationLock.current = true
+    lock.current = true
+    setBusy('check')
+    onBusyChange(true)
+    setFresh(false)
+    setError('')
+    try {
+      const next = await readNativeReconciliation()
+      if (mounted.current) {
+        setState(next)
+        setFresh(true)
+        setCheckedRevision(revision)
+      }
+    } catch (failure) {
+      if (mounted.current) setError(nativeReconciliationError(failure))
+    } finally {
+      operationLock.current = false
+      lock.current = false
+      if (mounted.current) {
+        setBusy(null)
+        onBusyChange(false)
+        setCheckedRevision(revision)
+        onCheckedVersion(revision)
+      }
+    }
+  }, [available, ready, operationLock, onBusyChange, onCheckedVersion, revision])
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+  useEffect(() => {
+    if (ready && checkedRevision !== revision) void check()
+  }, [ready, revision, checkedRevision, check])
+  const paused =
+    !ready ||
+    !fresh ||
+    checkedRevision !== revision ||
+    !!busy ||
+    !state ||
+    !knownReconciliationNotice(state.noticeCode) ||
+    state.noticeCode === 'native_storage_unavailable'
+  const mayFinish =
+    !!actorId &&
+    !!authority &&
+    !!state &&
+    state.unsealedAuthorities > 0 &&
+    state.noticeCode !== 'offline_reconciliation_required'
+  async function run(action: 'upload' | 'finish') {
+    if (paused || operationLock.current || lock.current) return
+    if (action === 'finish' && (!mayFinish || !scope || consent !== scope || !authority)) return
+    const selectedAuthority = authority?.id
+    operationLock.current = true
+    lock.current = true
+    setBusy(action)
+    onBusyChange(true)
+    setFresh(false)
+    setError('')
+    setNotice('')
+    setOperationError('')
+    setConsent(null)
+    try {
+      const next = await (action === 'upload'
+        ? reconcileNativeOffline()
+        : finishNativeOfflineAuthority(selectedAuthority!))
+      if (mounted.current) {
+        setState(next)
+        setFresh(true)
+        setCheckedRevision(revision)
+        setNotice(
+          next.pendingReceipts || next.pendingSeals || next.status === 'attention'
+            ? 'Saved records still need confirmation. Review the status below before retrying.'
+            : 'Saved-record status updated. Review the counts below.'
+        )
+      }
+    } catch (failure) {
+      if (mounted.current) {
+        if (nativeOfflineErrorCode(failure) === 'native_pin_cancelled')
+          setNotice(nativeReconciliationError(failure))
+        else setOperationError(nativeReconciliationError(failure))
+      }
+      try {
+        const next = await readNativeReconciliation()
+        if (mounted.current) {
+          setState(next)
+          setFresh(true)
+          setCheckedRevision(revision)
+        }
+      } catch {
+        if (mounted.current) setFresh(false)
+      }
+    } finally {
+      operationLock.current = false
+      lock.current = false
+      if (mounted.current) {
+        setBusy(null)
+        onBusyChange(false)
+        onChanged()
+      }
+    }
+  }
+  const failure = error || operationError
+  return (
+    <section className="reconciliation-panel" aria-labelledby="reconciliation-heading">
+      <h3 id="reconciliation-heading">Upload saved records</h3>
+      <p>
+        Send this device’s saved receipts and already finished allocation declarations for server
+        confirmation. This does not take payment or create another receipt.
+      </p>
+      {!available ? (
+        <p className="help">Saved-record upload is available in the installed Android app.</p>
+      ) : (
+        <>
+          {busy && (
+            <p role="status" className="access-note">
+              {busy === 'check'
+                ? 'Checking saved-record status…'
+                : busy === 'upload'
+                  ? 'Uploading saved records…'
+                  : 'Confirm in the Android PIN dialog, then wait for reconciliation…'}
+            </p>
+          )}
+          {failure && (
+            <div className="error" role="alert">
+              <strong>Reconciliation needs attention</strong>
+              <p>{failure}</p>
+            </div>
+          )}
+          {notice && (
+            <p role="status" className="access-note">
+              {notice}
+            </p>
+          )}
+          {state && (!fresh || checkedRevision !== revision) && (
+            <p className="help">
+              Last checked counts are shown. Check saved-record status before another action.
+            </p>
+          )}
+          {state?.noticeCode &&
+            nativeReconciliationError({ code: state.noticeCode }) !== failure && (
+              <p role="alert" className="access-note">
+                {nativeReconciliationError({ code: state.noticeCode })}
+              </p>
+            )}
+          {state?.status === 'attention' && !state.noticeCode && !failure && (
+            <p role="alert" className="access-note">
+              Saved records need attention. Check the counts and retry uploading saved records, or
+              contact support if this status does not clear.
+            </p>
+          )}
+          <dl className="record-values">
+            <div>
+              <dt>Receipts waiting for server confirmation</dt>
+              <dd>{state ? state.pendingReceipts : 'Unavailable'}</dd>
+            </div>
+            <div>
+              <dt>Prepared allocations still open</dt>
+              <dd>{state ? state.unsealedAuthorities : 'Unavailable'}</dd>
+            </div>
+            <div>
+              <dt>Finished allocations awaiting confirmation</dt>
+              <dd>{state ? state.pendingSeals : 'Unavailable'}</dd>
+            </div>
+            <div>
+              <dt>Confirmed finished allocations</dt>
+              <dd>{state ? state.confirmedSeals : 'Unavailable'}</dd>
+            </div>
+          </dl>
+          <div className="reconciliation-actions">
+            <button className="primary" disabled={paused} onClick={() => void run('upload')}>
+              Upload saved records
+            </button>
+            <button className="secondary" disabled={!ready || !!busy} onClick={() => void check()}>
+              Check saved-record status
+            </button>
+          </div>
+          <p className="help">
+            Upload requires internet, but no local PIN or new sign-in. It can upload historical
+            records even when offline preparation has expired. A status check only reads this
+            device.
+          </p>
+          {mayFinish && authority && (
+            <div className="finish-allocation">
+              <h4>Finish this invoice allocation</h4>
+              <p>
+                Invoice range{' '}
+                <strong>
+                  {authority.firstInvoice}–{authority.lastInvoice}
+                </strong>
+                . Finishing stops further use of this allocation and then uploads saved receipts and
+                its declaration. It keeps records, does not close the cash shift, and does not
+                prepare a new allocation.
+              </p>
+              <label className="cash-confirm">
+                <input
+                  type="checkbox"
+                  disabled={paused}
+                  checked={!!scope && consent === scope}
+                  onChange={(event) => setConsent(event.target.checked ? scope : null)}
+                />
+                <span>
+                  I confirm finishing invoice allocation {authority.firstInvoice}–
+                  {authority.lastInvoice} for this counter.
+                </span>
+              </label>
+              <button
+                className="secondary"
+                disabled={paused || !scope || consent !== scope}
+                onClick={() => void run('finish')}
+              >
+                Finish offline allocation
+              </button>
+              <p className="help">
+                Requires the same signed-in staff account and the Android PIN dialog. If upload
+                fails after finishing, use Upload saved records to retry its saved declaration.
+              </p>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
 function OfflinePreparation({
   available,
   accessBusy,
@@ -36,6 +304,8 @@ function OfflinePreparation({
   operationLock,
   onBusyChange,
   onCheckedVersion,
+  onStateRead,
+  actionsBlocked,
 }: {
   available: boolean
   accessBusy: boolean
@@ -43,6 +313,8 @@ function OfflinePreparation({
   operationLock: { current: boolean }
   onBusyChange: (busy: boolean) => void
   onCheckedVersion: (version: number) => void
+  onStateRead: (state: NativeOfflineState | null) => void
+  actionsBlocked: boolean
 }) {
   const [state, setState] = useState<NativeOfflineState | null>(null)
   const [fresh, setFresh] = useState(false)
@@ -62,11 +334,13 @@ function OfflinePreparation({
     setBusy(true)
     onBusyChange(true)
     setFresh(false)
+    onStateRead(null)
     setError('')
     try {
       const next = await readOfflineState()
       if (mounted.current) {
         setState(next)
+        onStateRead(next)
         setFresh(true)
         setCheckedVersion(accessVersion)
       }
@@ -78,10 +352,11 @@ function OfflinePreparation({
       if (mounted.current) {
         setBusy(false)
         onBusyChange(false)
+        setCheckedVersion(accessVersion)
         onCheckedVersion(accessVersion)
       }
     }
-  }, [available, operationLock, onBusyChange, onCheckedVersion, accessVersion])
+  }, [available, operationLock, onBusyChange, onCheckedVersion, onStateRead, accessVersion])
   useEffect(() => {
     mounted.current = true
     return () => {
@@ -92,7 +367,7 @@ function OfflinePreparation({
     if (!accessBusy && checkedVersion !== accessVersion) void check()
   }, [accessBusy, accessVersion, checkedVersion, check])
   const amount = openingCashToFils(openingCash)
-  const paused = !fresh || checkedVersion !== accessVersion || busy || accessBusy
+  const paused = !fresh || checkedVersion !== accessVersion || busy || accessBusy || actionsBlocked
   async function execute(action: 'open_shift' | 'prepare' | 'unlock' | 'lock', retry = false) {
     if (paused || !state || operationLock.current || localLock.current) return
     const savedAmount = retry ? state.pendingOpeningCashFils : amount
@@ -115,6 +390,7 @@ function OfflinePreparation({
     setBusy(true)
     onBusyChange(true)
     setFresh(false)
+    onStateRead(null)
     setError('')
     setNotice('')
     try {
@@ -127,6 +403,7 @@ function OfflinePreparation({
             : lockNativeOffline())
       if (mounted.current) {
         setState(next)
+        onStateRead(next)
         setFresh(true)
         setCheckedVersion(accessVersion)
         setConfirmedAmount(null)
@@ -149,6 +426,7 @@ function OfflinePreparation({
         const next = await readOfflineState()
         if (mounted.current) {
           setState(next)
+          onStateRead(next)
           setFresh(true)
           setCheckedVersion(accessVersion)
         }
@@ -200,7 +478,13 @@ function OfflinePreparation({
           {state && (
             <>
               <p className="offline-state">
-                <strong>{fresh ? labels[state.status] : 'Last checked setup — check again'}</strong>
+                <strong>
+                  {fresh
+                    ? state.noticeCode === 'offline_allocation_finished'
+                      ? 'Invoice allocation finished'
+                      : labels[state.status]
+                    : 'Last checked setup — check again'}
+                </strong>
               </p>
               {state.noticeCode && nativeOfflineError({ code: state.noticeCode }) !== error && (
                 <p className="help">{nativeOfflineError({ code: state.noticeCode })}</p>
@@ -349,13 +633,14 @@ function OfflinePreparation({
                       </button>
                     </>
                   )}
-                  {state.stage === 'recover' && (
-                    <p className="help">
-                      Keep this device’s records and contact your manager or support. This app
-                      cannot repair permission, time or counter changes. A local status check does
-                      not renew access.
-                    </p>
-                  )}
+                  {state.stage === 'recover' &&
+                    state.noticeCode !== 'offline_allocation_finished' && (
+                      <p className="help">
+                        Keep this device’s records and contact your manager or support. This app
+                        cannot repair permission, time or counter changes. A local status check does
+                        not renew access.
+                      </p>
+                    )}
                 </>
               )}
             </>
@@ -377,7 +662,13 @@ function OfflinePreparation({
   )
 }
 
-function NativeAccess({ available }: { available: boolean }) {
+function NativeAccess({
+  available,
+  onRecordsChanged,
+}: {
+  available: boolean
+  onRecordsChanged: () => void
+}) {
   const [access, setAccess] = useState<NativeAccessState | null>(null)
   const [fresh, setFresh] = useState(false)
   const [busy, setBusy] = useState<'check' | 'signin' | 'signout' | 'enroll' | null>(null)
@@ -385,8 +676,15 @@ function NativeAccess({ available }: { available: boolean }) {
   const [notice, setNotice] = useState('')
   const [pendingLogout, setPendingLogout] = useState(false)
   const [offlineBusy, setOfflineBusy] = useState(false)
+  const [reconciliationBusy, setReconciliationBusy] = useState(false)
+  const [reconciliationCheckedVersion, setReconciliationCheckedVersion] = useState(-1)
+  const [preparation, setPreparation] = useState<NativeOfflineState | null>(null)
   const [accessInitialized, setAccessInitialized] = useState(false)
   const [accessVersion, setAccessVersion] = useState(0)
+  const refreshPreparation = useCallback(() => {
+    setAccessVersion((version) => version + 1)
+    onRecordsChanged()
+  }, [onRecordsChanged])
   const [offlineCheckedVersion, setOfflineCheckedVersion] = useState(-1)
   const [branchId, setBranchId] = useState('')
   const [name, setName] = useState('')
@@ -441,7 +739,8 @@ function NativeAccess({ available }: { available: boolean }) {
       locked.current ||
       !fresh ||
       !access ||
-      offlineCheckedVersion !== accessVersion
+      offlineCheckedVersion !== accessVersion ||
+      reconciliationCheckedVersion !== accessVersion
     )
       return
     if (kind === 'signin' && (access.status !== 'signed_out' || pendingLogout)) return
@@ -512,7 +811,13 @@ function NativeAccess({ available }: { available: boolean }) {
       if (mounted.current) setBusy(null)
     }
   }
-  const paused = !!busy || offlineBusy || !fresh || offlineCheckedVersion !== accessVersion
+  const paused =
+    !!busy ||
+    offlineBusy ||
+    reconciliationBusy ||
+    !fresh ||
+    offlineCheckedVersion !== accessVersion ||
+    reconciliationCheckedVersion !== accessVersion
   return (
     <section className="setup-panel" aria-labelledby="setup-heading">
       <h2 id="setup-heading">
@@ -680,7 +985,7 @@ function NativeAccess({ available }: { available: boolean }) {
           )}
           <button
             className="secondary access-refresh"
-            disabled={!!busy || offlineBusy}
+            disabled={!!busy || offlineBusy || reconciliationBusy}
             onClick={() => void check()}
           >
             {busy === 'check' ? 'Checking access…' : 'Check access'}
@@ -689,11 +994,30 @@ function NativeAccess({ available }: { available: boolean }) {
       )}
       <OfflinePreparation
         available={available}
-        accessBusy={!!busy || !accessInitialized}
+        accessBusy={!!busy || !accessInitialized || reconciliationBusy}
         accessVersion={accessVersion}
         operationLock={locked}
         onBusyChange={setOfflineBusy}
         onCheckedVersion={setOfflineCheckedVersion}
+        onStateRead={setPreparation}
+        actionsBlocked={reconciliationCheckedVersion !== accessVersion}
+      />
+      <ReconciliationPanel
+        available={available}
+        ready={
+          accessInitialized && !busy && !offlineBusy && offlineCheckedVersion === accessVersion
+        }
+        revision={accessVersion}
+        operationLock={locked}
+        actorId={fresh && access?.status === 'signed_in' ? access.actorId : null}
+        authority={
+          preparation?.noticeCode === 'offline_allocation_finished'
+            ? null
+            : (preparation?.authority ?? null)
+        }
+        onBusyChange={setReconciliationBusy}
+        onCheckedVersion={setReconciliationCheckedVersion}
+        onChanged={refreshPreparation}
       />
       <a
         className="external-link"
@@ -823,7 +1147,7 @@ export default function App() {
             </p>
           )}
           <div className="device-layout" hidden={view !== 'device'}>
-            <NativeAccess available={native} />
+            <NativeAccess available={native} onRecordsChanged={refresh} />
             <section className="records-panel" aria-labelledby="records-heading">
               <h2 id="records-heading">Records on this device</h2>
               <dl className="record-values">

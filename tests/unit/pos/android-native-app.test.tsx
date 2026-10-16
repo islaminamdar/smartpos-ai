@@ -2,6 +2,9 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../../../apps/android-pos/node_modules/react', async () => await import('react'))
 const bridge = vi.hoisted(() => ({
+  readNativeReconciliation: vi.fn(),
+  reconcileNativeOffline: vi.fn(),
+  finishNativeOfflineAuthority: vi.fn(),
   readOfflineState: vi.fn(),
   openNativeOfflineShift: vi.fn(),
   prepareNativeOffline: vi.fn(),
@@ -87,7 +90,30 @@ const offlinePrepared = {
     lastInvoice: 200,
   },
 }
+const reconciliation = {
+  schemaVersion: 1,
+  pendingReceipts: 1,
+  unsealedAuthorities: 1,
+  pendingSeals: 0,
+  confirmedSeals: 0,
+  status: 'pending',
+  noticeCode: null,
+}
 beforeEach(() => {
+  bridge.readNativeReconciliation.mockResolvedValue(reconciliation)
+  bridge.reconcileNativeOffline.mockResolvedValue({
+    ...reconciliation,
+    pendingReceipts: 0,
+    status: 'idle',
+  })
+  bridge.finishNativeOfflineAuthority.mockResolvedValue({
+    ...reconciliation,
+    pendingReceipts: 0,
+    unsealedAuthorities: 0,
+    confirmedSeals: 1,
+    status: 'idle',
+  })
+
   bridge.readOfflineState.mockResolvedValue(offline)
   bridge.openNativeOfflineShift.mockResolvedValue({
     ...offline,
@@ -170,6 +196,7 @@ describe('Native secure access', () => {
     expect(bridge.signInNative).toHaveBeenCalledWith()
     expect(bridge.enrollNativeCounter).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Enroll this counter' })).toBeDisabled()
+    await waitFor(() => expect(screen.getByLabelText('Counter name')).toBeEnabled())
     fireEvent.change(screen.getByLabelText('Counter name'), {
       target: { value: ' Front counter ' },
     })
@@ -213,6 +240,7 @@ describe('Native secure access', () => {
     bridge.enrollNativeCounter.mockRejectedValueOnce(new Error('native_enrollment_uncertain'))
     render(<App />)
     await screen.findByLabelText('Counter name')
+    await waitFor(() => expect(screen.getByLabelText('Counter name')).toBeEnabled())
     fireEvent.change(screen.getByLabelText('Counter name'), { target: { value: 'Front counter' } })
     fireEvent.click(screen.getByRole('button', { name: 'Saved receipts' }))
     fireEvent.click(screen.getByRole('button', { name: 'This device' }))
@@ -253,6 +281,9 @@ describe('Native sign-out completion', () => {
     await screen.findByText('Signed out on this device. Connect to finish server sign-out.')
     expect(screen.getByRole('button', { name: 'Sign in securely' })).toBeDisabled()
     expect(bridge.signOutNative).toHaveBeenCalledTimes(1)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Finish sign-out' })).toBeEnabled()
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Finish sign-out' }))
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Sign in securely' })).toBeEnabled()
@@ -284,6 +315,7 @@ describe('Native access operation lifetime', () => {
     )
     render(<App />)
     await screen.findByLabelText('Counter name')
+    await waitFor(() => expect(screen.getByLabelText('Counter name')).toBeEnabled())
     fireEvent.change(screen.getByLabelText('Counter name'), { target: { value: 'Front counter' } })
     fireEvent.click(screen.getByRole('button', { name: 'Enroll this counter' }))
     fireEvent.click(screen.getByRole('button', { name: 'Saved receipts' }))
@@ -322,7 +354,7 @@ describe('Native offline preparation', () => {
     })
     render(<App />)
     await screen.findByText(/Saved offline permission has expired/)
-    expect(screen.getByText('101–200')).toBeTruthy()
+    expect(screen.getAllByText('101–200').length).toBeGreaterThan(0)
     expect(
       screen.queryByRole('button', {
         name: /Prepare this counter|Retry saved|Lock offline|Unlock with/,
@@ -359,7 +391,7 @@ describe('Native offline preparation', () => {
     fireEvent.click(prepare)
     await screen.findByText('Offline preparation saved')
     expect(bridge.prepareNativeOffline).toHaveBeenCalledWith()
-    expect(screen.getByText('101–200')).toBeTruthy()
+    expect(screen.getAllByText('101–200').length).toBeGreaterThan(0)
     expect(screen.getByText('New sales paused')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /payment|sale/i })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Lock offline access' }))
@@ -458,7 +490,7 @@ describe('Native offline preparation', () => {
     bridge.readOfflineState.mockRejectedValueOnce(new Error('unexpected sensitive text'))
     fireEvent.click(screen.getByRole('button', { name: 'Check offline status' }))
     await screen.findByText('Last checked setup — check again')
-    expect(screen.getByText('101–200')).toBeTruthy()
+    expect(screen.getAllByText('101–200').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Lock offline access' })).toBeDisabled()
     expect(screen.queryByText(/unexpected sensitive text/)).toBeNull()
   })
@@ -472,9 +504,185 @@ describe('Native offline preparation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enroll this counter' }))
     const prepare = await screen.findByRole('button', { name: 'Prepare this counter' })
     bridge.prepareNativeOffline.mockRejectedValueOnce({ code: 'native_pin_cancelled' })
+    await waitFor(() => expect(prepare).toBeEnabled())
     fireEvent.click(prepare)
     await screen.findByText(/Android PIN dialog cancelled/)
     expect(screen.queryByRole('alert')).toBeNull()
     expect(bridge.prepareNativeOffline).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('Native historical reconciliation', () => {
+  it('shows finished allocation as retained records without a support alarm or prepare button', async () => {
+    bridge.readAccessState.mockResolvedValue(enrolled)
+    bridge.readOfflineState.mockResolvedValue({
+      ...offlinePrepared,
+      status: 'blocked',
+      stage: 'recover',
+      noticeCode: 'offline_allocation_finished',
+    })
+    render(<App />)
+    await screen.findByText(/This invoice allocation is finished/)
+    expect(screen.queryByText(/This app cannot repair/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Prepare this counter' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Finish offline allocation' })).toBeNull()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Upload saved records' })).toBeEnabled()
+    )
+  })
+  it('retains uncertain upload message through local readback and retries only by explicit click', async () => {
+    bridge.reconcileNativeOffline.mockRejectedValueOnce({ code: 'offline_upload_uncertain' })
+    render(<App />)
+    const upload = await screen.findByRole('button', { name: 'Upload saved records' })
+    await waitFor(() => expect(upload).toBeEnabled())
+    fireEvent.click(upload)
+    await screen.findByText(/Receipt upload was not confirmed/)
+    await waitFor(() => expect(upload).toBeEnabled())
+    expect(screen.getByText(/Receipt upload was not confirmed/)).toBeTruthy()
+    expect(bridge.reconcileNativeOffline).toHaveBeenCalledTimes(1)
+    expect(bridge.finishNativeOfflineAuthority).not.toHaveBeenCalled()
+    expect(bridge.readDeviceSnapshot.mock.calls.length).toBeGreaterThan(1)
+    fireEvent.click(upload)
+    await waitFor(() => expect(upload).toBeEnabled())
+    expect(bridge.reconcileNativeOffline).toHaveBeenCalledTimes(2)
+    expect(screen.queryByText(/Receipt upload was not confirmed/)).toBeNull()
+  })
+  it('keeps PIN cancellation quiet and requires fresh finish consent without automatic retry', async () => {
+    bridge.readAccessState.mockResolvedValue(enrolled)
+    bridge.readOfflineState.mockResolvedValue(offlinePrepared)
+    bridge.finishNativeOfflineAuthority.mockRejectedValueOnce({ code: 'native_pin_cancelled' })
+    render(<App />)
+    const finish = await screen.findByRole('button', { name: 'Finish offline allocation' })
+    await waitFor(() => expect(screen.getByRole('checkbox')).toBeEnabled())
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(finish)
+    await screen.findByText(/Android PIN dialog cancelled. No new finish request/)
+    await waitFor(() => expect(screen.getByRole('checkbox')).toBeEnabled())
+    expect(screen.getByRole('checkbox')).not.toBeChecked()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(bridge.finishNativeOfflineAuthority).toHaveBeenCalledTimes(1)
+    expect(bridge.reconcileNativeOffline).not.toHaveBeenCalled()
+  })
+
+  it('uploads historical records while signed out without PIN, sign-in or new sealing', async () => {
+    render(<App />)
+    const upload = await screen.findByRole('button', { name: 'Upload saved records' })
+    await waitFor(() => expect(upload).toBeEnabled())
+    expect(bridge.reconcileNativeOffline).not.toHaveBeenCalled()
+    fireEvent.click(upload)
+    await waitFor(() => expect(bridge.reconcileNativeOffline).toHaveBeenCalledExactlyOnceWith())
+    await waitFor(() => expect(upload).toBeEnabled())
+    expect(bridge.signInNative).not.toHaveBeenCalled()
+    expect(bridge.unlockNativeOffline).not.toHaveBeenCalled()
+    expect(bridge.finishNativeOfflineAuthority).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Finish offline allocation' })).toBeNull()
+  })
+  it('requires consent tied to the exact actor and current invoice allocation', async () => {
+    bridge.readAccessState.mockResolvedValue(enrolled)
+    bridge.readOfflineState.mockResolvedValue(offlinePrepared)
+    render(<App />)
+    const finish = await screen.findByRole('button', { name: 'Finish offline allocation' })
+    await waitFor(() => expect(screen.getByRole('checkbox')).toBeEnabled())
+    expect(finish).toBeDisabled()
+    fireEvent.click(screen.getByRole('checkbox'))
+    expect(finish).toBeEnabled()
+    bridge.readOfflineState.mockResolvedValue({
+      ...offlinePrepared,
+      authority: {
+        ...offlinePrepared.authority,
+        id: '10000000-0000-4000-8000-000000000009',
+        firstInvoice: 201,
+        lastInvoice: 300,
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Check offline status' }))
+    await screen.findAllByText('201–300')
+    expect(screen.getByRole('checkbox')).not.toBeChecked()
+    expect(screen.getByRole('button', { name: 'Finish offline allocation' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: 'Finish offline allocation' }))
+    await waitFor(() =>
+      expect(bridge.finishNativeOfflineAuthority).toHaveBeenCalledExactlyOnceWith(
+        '10000000-0000-4000-8000-000000000009'
+      )
+    )
+    expect(bridge.unlockNativeOffline).not.toHaveBeenCalled()
+  })
+  it('allows explicit finish for an expired current allocation and never calls shift close', async () => {
+    bridge.readAccessState.mockResolvedValue(enrolled)
+    bridge.readOfflineState.mockResolvedValue({
+      ...offlinePrepared,
+      status: 'blocked',
+      stage: 'recover',
+      noticeCode: 'offline_permission_expired',
+    })
+    render(<App />)
+    const finish = await screen.findByRole('button', { name: 'Finish offline allocation' })
+    await waitFor(() => expect(screen.getByRole('checkbox')).toBeEnabled())
+    expect(screen.getByText(/does not close the cash shift/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(finish)
+    await waitFor(() =>
+      expect(bridge.finishNativeOfflineAuthority).toHaveBeenCalledExactlyOnceWith(
+        offlinePrepared.authority.id
+      )
+    )
+    expect(bridge.openNativeOfflineShift).not.toHaveBeenCalled()
+    expect(bridge.prepareNativeOffline).not.toHaveBeenCalled()
+  })
+  it('retains counts on failed status read and blocks writes until explicit recovery', async () => {
+    render(<App />)
+    const upload = await screen.findByRole('button', { name: 'Upload saved records' })
+    await waitFor(() => expect(upload).toBeEnabled())
+    bridge.readNativeReconciliation.mockRejectedValueOnce(new Error('private detail'))
+    fireEvent.click(screen.getByRole('button', { name: 'Check saved-record status' }))
+    await screen.findByText(/Last checked counts are shown/)
+    expect(upload).toBeDisabled()
+    expect(screen.queryByText(/private detail/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Check saved-record status' }))
+    await waitFor(() => expect(upload).toBeEnabled())
+  })
+  it('never loops checks if both offline and reconciliation reads fail', async () => {
+    bridge.readOfflineState.mockRejectedValue(new Error('native_storage_unavailable'))
+    bridge.readNativeReconciliation.mockRejectedValue(new Error('native_storage_unavailable'))
+    render(<App />)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Sign in securely' })).toBeEnabled()
+    )
+    expect(bridge.readOfflineState).toHaveBeenCalledTimes(1)
+    expect(bridge.readNativeReconciliation).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Upload saved records' })).toBeDisabled()
+  })
+  it('blocks actions on an unknown notice and keeps the native code out of the UI', async () => {
+    bridge.readNativeReconciliation.mockResolvedValue({
+      ...reconciliation,
+      status: 'attention',
+      noticeCode: 'unexpected_internal',
+    })
+    render(<App />)
+    await screen.findByText(/Reconciliation could not be confirmed/)
+    expect(screen.getByRole('button', { name: 'Upload saved records' })).toBeDisabled()
+    expect(screen.queryByText(/unexpected_internal/)).toBeNull()
+  })
+  it('does not overlap upload with access, PIN or another upload across navigation', async () => {
+    bridge.readAccessState.mockResolvedValue(enrolled)
+    bridge.readOfflineState.mockResolvedValue(offlinePrepared)
+    let finish!: (value: unknown) => void
+    bridge.reconcileNativeOffline.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve
+      })
+    )
+    render(<App />)
+    const upload = await screen.findByRole('button', { name: 'Upload saved records' })
+    await waitFor(() => expect(upload).toBeEnabled())
+    fireEvent.click(upload)
+    expect(screen.getByRole('button', { name: 'Sign out of this app' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Lock offline access' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Saved receipts' }))
+    fireEvent.click(screen.getByRole('button', { name: 'This device' }))
+    fireEvent.click(upload)
+    expect(bridge.reconcileNativeOffline).toHaveBeenCalledTimes(1)
+    await act(async () => finish(reconciliation))
   })
 })

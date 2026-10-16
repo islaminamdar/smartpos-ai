@@ -15,9 +15,17 @@ function newAuthorityEnabled() {
   requirePilot(true)
   if (process.env.POS_OFFLINE_ISSUANCE_ENABLED !== 'true') throw new PosServerError('offline_issuance_not_enabled', 503)
 }
+/** Only the exact SQL017 pre-insert rejection can authorize refreshing an enrollment proof. */
+export class OfflineEnrollmentProofExpired extends PosServerError {
+  constructor(readonly requestId: string, readonly requestSha256: string) { super('offline_enrollment_proof_expired', 409) }
+}
 async function rpc(name: string, args: Record<string, unknown>): Promise<unknown> {
   const { data, error } = await posClient(undefined, true).rpc(name, args)
   if (error) {
+    if (name === 'pos_offline_enroll' && error.code === 'P0001' && error.message === 'POS_OFFLINE_PROOF_EXPIRED') {
+      const request = enrollmentRequestSchema.parse(args.p_request)
+      throw new OfflineEnrollmentProofExpired(request.requestId, await sha256Hex(canonicalBytes(request)))
+    }
     const match = /\bPOS_OFFLINE_[A-Z_]+\b/.exec(error.message)?.[0] ??
       ['POS_ACCESS_DENIED', 'POS_IDEMPOTENCY_CONFLICT', 'POS_DEVICE_INVALID', 'POS_SHIFT_INVALID', 'POS_PROFILE_REQUIRED', 'POS_NUMBER_RANGE_EXHAUSTED']
         .find(code => error.message.includes(code))

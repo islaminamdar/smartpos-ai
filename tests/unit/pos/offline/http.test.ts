@@ -2,11 +2,12 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 const m=vi.hoisted(()=>({enroll:vi.fn(),reserve:vi.fn(),importReceipt:vi.fn(),seal:vi.fn(),limit:vi.fn()}))
-vi.mock('@/lib/pos/offline/server',()=>({enrollOfflineDevice:m.enroll,reserveOfflineAuthority:m.reserve,importOfflineReceipt:m.importReceipt,sealOfflineAuthority:m.seal,limitOfflineRecovery:m.limit}))
+vi.mock('@/lib/pos/offline/server',async original=>({...await original<typeof import('@/lib/pos/offline/server')>(),enrollOfflineDevice:m.enroll,reserveOfflineAuthority:m.reserve,importOfflineReceipt:m.importReceipt,sealOfflineAuthority:m.seal,limitOfflineRecovery:m.limit}))
 import { POST as enroll } from '@/app/api/pos/offline/enroll/route'
 import { POST as reserve } from '@/app/api/pos/offline/authority/route'
 import { POST as upload } from '@/app/api/pos/offline/import/route'
 import { POST as seal } from '@/app/api/pos/offline/seal/route'
+import { OfflineEnrollmentProofExpired } from '@/lib/pos/offline/server'
 import { PosServerError } from '@/lib/pos/server/client'
 const origin='https://pos.internext.info'
 const request=(path:string,body:string,headers:Record<string,string>={})=>new Request(origin+'/api/pos/offline/'+path,{method:'POST',body,headers:{'Content-Type':'application/json',...headers}})
@@ -46,4 +47,15 @@ it('distinguishes malformed JSON/schema and never exposes internal errors',async
   m.seal.mockRejectedValue(new Error('private signing material must not leak'))
   const response=await seal(request('seal','{}'));expect(response.status).toBe(503)
   expect(await response.text()).not.toContain('private signing material')
+})
+
+it('only enrollment returns the exact request-bound definitive proof-expired shape',async()=>{
+  const requestId='00000000-0000-4000-8000-000000000001',requestSha256='a'.repeat(64)
+  m.enroll.mockRejectedValue(new OfflineEnrollmentProofExpired(requestId,requestSha256))
+  const r=await enroll(request('enroll','{}',{Origin:origin}));expect(r.status).toBe(409);expect(r.headers.get('cache-control')).toBe('private, no-store')
+  expect(await r.json()).toEqual({status:'not_enrolled',code:'offline_enrollment_proof_expired',requestId,requestSha256})
+  m.enroll.mockRejectedValue(new PosServerError('pos_offline_proof_expired',409))
+  expect(await (await enroll(request('enroll','{}',{Origin:origin}))).json()).toEqual({status:'unavailable',code:'pos_offline_proof_expired'})
+  m.enroll.mockRejectedValue(new Error('POS_OFFLINE_PROOF_EXPIRED private detail'))
+  expect((await enroll(request('enroll','{}',{Origin:origin}))).status).toBe(503)
 })

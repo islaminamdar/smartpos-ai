@@ -613,3 +613,38 @@ footer {
   margin-top: 16px;
   margin-left: 0;
 }
+
+.reconciliation-panel {
+  border-top: 1px solid #dce3ec;
+  margin-top: 28px;
+  padding-top: 24px;
+}
+.reconciliation-panel p {
+  overflow-wrap: anywhere;
+}
+.reconciliation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+.reconciliation-panel button {
+  white-space: normal;
+  max-width: 100%;
+}
+.finish-allocation {
+  border-left: 3px solid #ad6b00;
+  padding-left: 16px;
+  margin-top: 28px;
+}
+.finish-allocation h4 {
+  margin-top: 0;
+}
+@media (max-width: 600px) {
+  .reconciliation-actions {
+    flex-direction: column;
+  }
+  .reconciliation-panel button {
+    width: 100%;
+  }
+}

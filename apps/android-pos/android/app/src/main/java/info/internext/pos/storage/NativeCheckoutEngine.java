@@ -70,13 +70,19 @@ public final class NativeCheckoutEngine {
     /** freshServerMs must originate from a fresh authenticated native HTTPS exchange, never JS
      * wall time or an old authority timestamp. Exact installation retries never reset the anchor. */
     void installVerifiedBundle(String snapshotEnvelope, String authorityEnvelope, long freshServerMs) throws Exception {
-        installBundle(snapshotEnvelope,authorityEnvelope,freshServerMs,null);
+        installBundle(snapshotEnvelope,authorityEnvelope,freshServerMs,null,false);
     }
     public void installVerifiedBundle(String snapshotEnvelope, String authorityEnvelope, long freshServerMs, OfflineClock.Reading referenceReading) throws Exception {
         if(referenceReading==null)throw invalid("handoff_clock_changed");
-        installBundle(snapshotEnvelope,authorityEnvelope,freshServerMs,referenceReading);
+        installBundle(snapshotEnvelope,authorityEnvelope,freshServerMs,referenceReading,false);
     }
-    private void installBundle(String snapshotEnvelope, String authorityEnvelope, long freshServerMs, OfflineClock.Reading referenceReading) throws Exception {
+    /** Retain a never-installed expired allocation and atomically seal it. This cannot enable
+     * issuance, replace an installed bundle, reset its clock, or recycle its reserved numbers. */
+    public void retainExpiredUnusedBundle(String snapshotEnvelope,String authorityEnvelope,long freshServerMs,OfflineClock.Reading referenceReading)throws Exception{
+        if(referenceReading==null)throw invalid("handoff_clock_changed");
+        installBundle(snapshotEnvelope,authorityEnvelope,freshServerMs,referenceReading,true);
+    }
+    private void installBundle(String snapshotEnvelope, String authorityEnvelope, long freshServerMs, OfflineClock.Reading referenceReading,boolean retainExpired) throws Exception {
         OfflineBundle bundle = OfflineBundle.verify(snapshotEnvelope, authorityEnvelope, serverKeys, binding);
         if (!bundle.deviceKeySha256.equals(SignedProtocol.fingerprint(deviceKey))) throw invalid("device_key_mismatch");
         synchronized (journal) {
@@ -107,9 +113,12 @@ public final class NativeCheckoutEngine {
                     if(!reading.bootId.equals(referenceReading.bootId)||delay<0||delay>30000||reading.wallTimeMs<referenceReading.wallTimeMs)throw invalid("handoff_clock_changed");
                     anchoredServerMs=Math.addExact(freshServerMs,delay);
                 }
-                OfflineClock.Tick tick = OfflineClock.advance(OfflineClock.anchor(anchoredServerMs, reading), reading, bundle.notBeforeMs, bundle.expiresAtMs);
+                OfflineClock.State anchor=OfflineClock.anchor(anchoredServerMs, reading);
+                if(retainExpired&&anchoredServerMs<bundle.expiresAtMs)throw invalid("authority_not_expired");
+                OfflineClock.State savedClock=retainExpired?anchor:OfflineClock.advance(anchor, reading, bundle.notBeforeMs, bundle.expiresAtMs).nextState;
                 ContentValues row = new ContentValues(); row.put("id", bundle.authorityId); row.put("snapshot_envelope", snapshotEnvelope); row.put("authority_envelope", authorityEnvelope); db.insertOrThrow("offline_bundles", null, row);
-                row = new ContentValues(); row.put("authority_id", bundle.authorityId); row.put("next_number", bundle.firstInvoice); row.put("gross_fils", 0); row.put("clock_json", tick.nextState.toJson()); db.insertOrThrow("offline_authority_state", null, row);
+                row = new ContentValues(); row.put("authority_id", bundle.authorityId); row.put("next_number", bundle.firstInvoice); row.put("gross_fils", 0); row.put("clock_json", savedClock.toJson()); db.insertOrThrow("offline_authority_state", null, row);
+                if(retainExpired)sealAuthority(bundle.authorityId);
                 db.setTransactionSuccessful();
             } finally { db.endTransaction(); }
         }
