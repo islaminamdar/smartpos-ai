@@ -1,0 +1,93 @@
+{
+  "list": {
+    "status": "ready",
+    "branchId": "1c159e1b-c71d-44c6-8015-92bc88ac4b7c",
+    "actorRole": "owner",
+    "activeCount": 1,
+    "generatedAt": "2026-10-16T07:23:37.99+04:00",
+    "activeCounts": {
+      "ready": 0,
+      "queued": 1,
+      "preparing": 0
+    },
+    "activeTickets": [
+      {
+        "lines": [
+          {
+            "name": "Test item",
+            "unit": "piece",
+            "productId": "e782ad0a-cfea-4634-989a-030eb6a9b030",
+            "lineNumber": 1,
+            "quantityMilli": 1000
+          }
+        ],
+        "status": "queued",
+        "orderId": "fea403b0-424b-47e0-bbc5-0cf7b7bcd93e",
+        "branchId": "1c159e1b-c71d-44c6-8015-92bc88ac4b7c",
+        "issuedAt": "2026-10-16T07:23:37.984+04:00",
+        "revision": 1,
+        "invoiceId": "9173e283-89cb-40fb-9558-824769c9f33e",
+        "updatedAt": "2026-10-16T07:23:37.984+04:00",
+        "refundedAt": null,
+        "serviceType": "takeaway",
+        "invoiceNumber": "TEST-INV-0000000002"
+      }
+    ],
+    "organizationId": "9666e60f-2976-45f0-8ad6-bcf05b1a1c59",
+    "terminalTickets": [],
+    "activeNextCursor": null,
+    "terminalTruncated": false
+  },
+  "updated": {
+    "status": "updated",
+    "ticket": {
+      "lines": [
+        {
+          "name": "Test item",
+          "unit": "piece",
+          "productId": "e782ad0a-cfea-4634-989a-030eb6a9b030",
+          "lineNumber": 1,
+          "quantityMilli": 1000
+        }
+      ],
+      "status": "preparing",
+      "orderId": "fea403b0-424b-47e0-bbc5-0cf7b7bcd93e",
+      "branchId": "1c159e1b-c71d-44c6-8015-92bc88ac4b7c",
+      "issuedAt": "2026-10-16T07:23:37.984+04:00",
+      "revision": 2,
+      "invoiceId": "9173e283-89cb-40fb-9558-824769c9f33e",
+      "updatedAt": "2026-10-16T07:23:37.995+04:00",
+      "refundedAt": null,
+      "serviceType": "takeaway",
+      "invoiceNumber": "TEST-INV-0000000002"
+    },
+    "replayed": false,
+    "requestId": "973f2619-dbfb-4e7f-9eb5-9204bcec2e4a"
+  },
+  "cancelled": {
+    "status": "cancelled",
+    "replayed": false,
+    "requestId": "005ccffd-00c1-496e-a21c-e9e279690d1c"
+  },
+  "refunded": {
+    "lines": [
+      {
+        "name": "Test item",
+        "unit": "piece",
+        "productId": "e782ad0a-cfea-4634-989a-030eb6a9b030",
+        "lineNumber": 1,
+        "quantityMilli": 1000
+      }
+    ],
+    "status": "cancelled",
+    "orderId": "fea403b0-424b-47e0-bbc5-0cf7b7bcd93e",
+    "branchId": "1c159e1b-c71d-44c6-8015-92bc88ac4b7c",
+    "issuedAt": "2026-10-16T07:23:37.984+04:00",
+    "revision": 9,
+    "invoiceId": "9173e283-89cb-40fb-9558-824769c9f33e",
+    "updatedAt": "2026-10-16T07:23:38.017+04:00",
+    "refundedAt": "2026-10-16T07:23:38.017+04:00",
+    "serviceType": "takeaway",
+    "invoiceNumber": "TEST-INV-0000000002"
+  }
+}

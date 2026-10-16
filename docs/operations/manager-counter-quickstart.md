@@ -18,6 +18,16 @@ For the online pilot at [pos.internext.info/counter](https://pos.internext.info/
 5. Select **Save sale** and wait for confirmation. If confirmation is interrupted, use the saved-request recovery controls. Do not create another bill for the same payment until its status is resolved.
 6. Open the confirmed receipt under **Receipts** and choose **Print / save PDF**. Check the actual paper output; a browser print dialog does not confirm delivery to a physical printer.
 
+## Use the kitchen board
+
+On the kitchen browser, sign in with branch staff access and register that device. An open cash shift is not required to use **Kitchen**. New confirmed paid sales appear automatically; old invoices are not resent to the kitchen. Check the invoice reference, order type, items and quantities, then use **Start preparing**, **Mark ready**, and **Mark served**. Confirm served only after handing over the order.
+
+The board refreshes every 10 seconds while visible. If a refresh fails, the previous tickets remain visible with a warning and stage changes pause. All active tickets are counted regardless of age; use the page controls for a large queue. The recent history shows up to 50 served or cancelled tickets.
+
+Managers can correct one stage backwards with a reason. A full refund automatically marks its ticket cancelled, even after serving; check with the counter if preparation or handover already happened. Kitchen controls do not issue refunds or send physical printer instructions.
+
+If a change has no confirmation, keep browser data and use the saved-change controls. Retry sends the same request. **Check or cancel saved change** retrieves the original result or permanently cancels the unsaved change; it does not cancel the order. Resolve saved kitchen work before signing out, changing your password or registering a replacement counter. Shared tables, unpaid orders, courses and station routing remain in development.
+
 ## Update the menu
 
 In **Menu**, a manager can add an item or edit its price, unit and availability. Enter a reason and wait for the saved confirmation. For weight sales, enter the full kilogram price. Keep an item unavailable until its price is approved. Cashiers must refresh an older basket when its menu details change; issued bills retain their original details.

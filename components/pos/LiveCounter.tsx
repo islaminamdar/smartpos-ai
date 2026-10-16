@@ -27,6 +27,8 @@ import OfferPicker from './offers/OfferPicker'
 import StaffManager from './staff/StaffManager'
 import AccountSettings from './staff/AccountSettings'
 import PendingAccessRecovery from './staff/PendingAccessRecovery'
+import KitchenBoard, { KitchenPendingRecovery } from './kitchen/KitchenBoard'
+import { readPendingKitchenRequests, kitchenJournalEvent } from '@/lib/pos/kitchen-journal'
 import type { OfferSelection, EligibleOfferQuote } from '@/lib/pos/server/offers'
 import { invoiceMatchesSale } from '@/lib/pos/server/sale-ack'
 
@@ -42,6 +44,7 @@ type View =
   | 'reports'
   | 'staff'
   | 'account'
+  | 'kitchen'
 class ApiError extends Error {
   constructor(
     public status: number,
@@ -107,6 +110,10 @@ export default function LiveCounter() {
   const [notice, setNotice] = useState('')
   const [online, setOnline] = useState(true)
   const [pending, setPending] = useState<PendingOnlineRequest | null>(null)
+  const [kitchenPending, setKitchenPending] = useState(false)
+  const [kitchenJournalReady, setKitchenJournalReady] = useState(false)
+  const currentActor = useRef<string | undefined>(undefined)
+  currentActor.current = boot?.userId
   const [branchId, setBranchId] = useState('')
   const [view, setView] = useState<View>('sell')
   const [search, setSearch] = useState('')
@@ -194,6 +201,52 @@ export default function LiveCounter() {
     !pending &&
     branch?.profile
   )
+
+  const checkKitchenPending = useCallback(async (actorId: string) => {
+    const requests = await readPendingKitchenRequests(actorId)
+    if (currentActor.current === actorId) {
+      setKitchenPending(requests.length > 0)
+      setKitchenJournalReady(true)
+    }
+    return requests
+  }, [])
+  useEffect(() => {
+    if (!boot?.userId) {
+      setKitchenJournalReady(false)
+      return
+    }
+    const actorId = boot.userId
+    let alive = true
+    const check = () => {
+      void readPendingKitchenRequests(actorId)
+        .then((requests) => {
+          if (!alive) return
+          setKitchenPending(requests.length > 0)
+          setKitchenJournalReady(true)
+        })
+        .catch(() => {
+          if (!alive) return
+          setKitchenJournalReady(false)
+        })
+    }
+    check()
+    window.addEventListener(kitchenJournalEvent, check)
+    window.addEventListener('focus', check)
+    let channel: BroadcastChannel | null = null
+    try {
+      if (typeof BroadcastChannel !== 'undefined')
+        channel = new BroadcastChannel(kitchenJournalEvent)
+    } catch {
+      /* Focus and same-tab events still reconcile persistent work. */
+    }
+    if (channel) channel.onmessage = check
+    return () => {
+      alive = false
+      window.removeEventListener(kitchenJournalEvent, check)
+      window.removeEventListener('focus', check)
+      channel?.close()
+    }
+  }, [boot?.userId])
 
   const refresh = useCallback(async () => {
     const next = liveBootstrapSchema.parse(await api('/api/pos/bootstrap'))
@@ -582,6 +635,7 @@ export default function LiveCounter() {
           <h1>Counter setup</h1>
           <p role="alert">{error || 'The account service is not ready yet.'}</p>
           <PendingAccessRecovery />
+          <KitchenPendingRecovery disabled={busy || !online} />
           <button
             onClick={() =>
               void run(async () => {
@@ -609,11 +663,13 @@ export default function LiveCounter() {
           </span>
         </div>
         <button
-          disabled={busy || !!pending}
+          disabled={busy || !!pending || kitchenPending || !kitchenJournalReady}
           onClick={() =>
             void run(async () => {
               if (await readPendingRequest(boot.userId))
                 throw new Error('Recover the pending request before signing out.')
+              if ((await checkKitchenPending(boot.userId)).length)
+                throw new Error('Resolve the saved kitchen change before signing out.')
               await api('/api/pos/session', 'DELETE')
               setBoot(null)
               setDocuments([])
@@ -673,6 +729,29 @@ export default function LiveCounter() {
             </details>
           </section>
         )}
+        {!kitchenJournalReady && (
+          <p className="lc-warning">
+            Saved kitchen work could not yet be checked. Account changes and counter registration
+            are paused; keep this browser’s data.
+          </p>
+        )}
+        {kitchenPending && view !== 'kitchen' && boot.device && (
+          <section className="lc-warning" aria-label="Saved kitchen change">
+            <p>A kitchen change needs confirmation before signing out or changing your password.</p>
+            <button onClick={() => setView('kitchen')}>Check saved kitchen work</button>
+          </section>
+        )}
+        {(kitchenPending || !boot.device) && (
+          <KitchenPendingRecovery
+            key={boot.userId}
+            actorId={boot.userId}
+            excludeBranchId={view === 'kitchen' && boot.device ? branchId : undefined}
+            disabled={busy || !online}
+            onPendingChange={() => {
+              void checkKitchenPending(boot.userId).catch(() => setKitchenJournalReady(false))
+            }}
+          />
+        )}
       </div>
       {!boot.device ? (
         <main className="lc-enrol lc-noprint">
@@ -683,6 +762,10 @@ export default function LiveCounter() {
               event.preventDefault()
               const data = new FormData(event.currentTarget)
               void run(async () => {
+                if ((await checkKitchenPending(boot.userId)).length)
+                  throw new Error(
+                    'Resolve the saved kitchen change before registering a replacement counter.'
+                  )
                 await api('/api/pos/devices', 'POST', {
                   branchId,
                   name: String(data.get('deviceName')).trim(),
@@ -711,7 +794,10 @@ export default function LiveCounter() {
                 placeholder="For example, Front counter"
               />
             </label>
-            <button className="lc-primary" disabled={busy || !branchId || !!pending}>
+            <button
+              className="lc-primary"
+              disabled={busy || !branchId || !!pending || kitchenPending || !kitchenJournalReady}
+            >
               Register this counter
             </button>
           </form>
@@ -722,6 +808,7 @@ export default function LiveCounter() {
             {(
               [
                 'sell',
+                'kitchen',
                 'receipts',
                 'shift',
                 ...(manager ? ['menu', 'offers', 'reports', 'staff'] : []),
@@ -737,6 +824,7 @@ export default function LiveCounter() {
                 {
                   {
                     sell: 'Sell',
+                    kitchen: 'Kitchen',
                     receipts: 'Receipts',
                     shift: 'Shift',
                     branch: 'Branch',
@@ -752,6 +840,18 @@ export default function LiveCounter() {
             <span>{boot.device.name}</span>
           </nav>
           <main className="lc-main">
+            {view === 'kitchen' && branch && (
+              <KitchenBoard
+                actorId={boot.userId}
+                branchId={branchId}
+                branchName={branch.name}
+                deviceId={boot.device.id}
+                disabled={busy || !!pending || !online}
+                onPendingChange={() => {
+                  void checkKitchenPending(boot.userId).catch(() => setKitchenJournalReady(false))
+                }}
+              />
+            )}
             {view === 'staff' && manager && (
               <StaffManager
                 key={`${boot.userId}:${branchId}`}
@@ -765,7 +865,11 @@ export default function LiveCounter() {
               />
             )}
             {view === 'account' && (
-              <AccountSettings disabled={busy || !!pending || !online || !!shift} />
+              <AccountSettings
+                disabled={
+                  busy || !!pending || !online || !!shift || kitchenPending || !kitchenJournalReady
+                }
+              />
             )}
             {view === 'reports' && manager && branch && (
               <BranchReports
@@ -1358,14 +1462,16 @@ export default function LiveCounter() {
                 </p>
                 <h2>Subscription</h2>
                 <p>
-                  AED 100 per branch per month. Collection is manual; this screen is not proof of
-                  payment.
+                  New plans are US$100 per branch per month. Existing manual arrangements remain
+                  unchanged until separately agreed. This screen is not proof of payment.
                 </p>
+                <Link href="/billing">View subscription setup</Link>
                 <h2>Current live pilot</h2>
                 <p>
                   Online sales, recorded cash/card payments, weighted items, invoice reprints, shift
-                  closing, offers and full refunds. Shared tables, kitchen dispatch, partial refunds
-                  and offline live sales are still being prepared.
+                  closing, offers, full refunds and shared preparation tracking for paid orders.
+                  Shared tables, unpaid kitchen orders, partial refunds and offline live sales are
+                  still being prepared.
                 </p>
                 <Link href="/pos">Open separate training workspace</Link>
               </section>

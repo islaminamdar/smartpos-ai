@@ -26,6 +26,8 @@ export function publicReleaseAccess(
       '/api/pos/session': ['GET', 'POST', 'DELETE'],
       '/api/pos/catalogue': ['GET', 'POST'],
       '/api/pos/offers': ['GET', 'POST'],
+      '/api/pos/kitchen': ['GET', 'POST'],
+      '/api/pos/kitchen/recovery': ['POST'],
       '/api/pos/staff': ['GET', 'POST'],
       '/api/pos/staff/invitations': ['POST'],
       '/api/pos/staff/recovery': ['POST'],

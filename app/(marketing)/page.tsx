@@ -69,10 +69,11 @@ const availability = [
     ready: true,
   },
   {
-    title: 'Held tickets & kitchen workflow',
-    detail: 'Explore these workflows with sample transactions in the separate training workspace.',
-    status: 'Training only',
-    ready: false,
+    title: 'Shared kitchen preparation',
+    detail:
+      'Track confirmed paid orders from queued to served across branch devices. Open tabs and tables are still in development.',
+    status: 'Online pilot',
+    ready: true,
   },
   {
     title: 'Offline APK & subscriptions',

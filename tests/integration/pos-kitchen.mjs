@@ -1,0 +1,195 @@
+// Isolated embedded PostgreSQL fixture; never connects to an existing database.
+import { readFile, writeFile } from 'node:fs/promises'
+import { pathToFileURL } from 'node:url'
+import assert from 'node:assert/strict'
+const { PGlite } = await import(pathToFileURL(process.argv[2]).href)
+const db = new PGlite()
+process.on('uncaughtException',error=>{console.error(error.message,error.where??'');process.exit(1)})
+await db.exec(`create role anon;create role authenticated;create role service_role;create schema auth;
+ create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz);
+ create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('app.user_id',true),'')::uuid$$;
+ grant usage on schema auth to authenticated;grant execute on function auth.uid() to authenticated;`)
+for(const number of ['001','002','003','004','005','006','008','010','011','012','013']){
+ const files={ '001':'platform','002':'operations','003':'live_documents','004':'online_access','005':'request_recovery','006':'cash_out_balance','008':'catalogue_management','010':'sale_lock_order','011':'branch_reports','012':'offers','013':'staff_access' }
+ await db.exec(await readFile(new URL(`../../supabase/migrations/202610160${number}00_pos_${files[number]}.sql`,import.meta.url),'utf8'))
+}
+const ids=Object.fromEntries(['owner','manager','cashier','otherCashier','newUser','unverified','foreignOwner','scopedOwner','org','branch','branch2','foreignOrg','foreignBranch','profile','product'].map(k=>[k,crypto.randomUUID()]))
+const {owner,manager,cashier,otherCashier,newUser,unverified,foreignOwner,scopedOwner,org,branch,branch2,foreignOrg,foreignBranch,profile,product}=ids
+await db.query(`insert into auth.users(id,email,email_confirmed_at) select v::uuid,k||'@example.test',case when k='unverified' then null else now() end from jsonb_each_text($1) as x(k,v) where k=any($2::text[])`,[JSON.stringify(ids),['owner','manager','cashier','otherCashier','newUser','unverified','foreignOwner','scopedOwner']])
+await db.exec(`insert into public.pos_organizations(id,legal_name) values('${org}','Synthetic access'),('${foreignOrg}','Other synthetic');
+ insert into public.pos_branches(id,organization_id,name) values('${branch}','${org}','First'),('${branch2}','${org}','Second'),('${foreignBranch}','${foreignOrg}','Other');
+ insert into public.pos_staff(organization_id,user_id,branch_id,role) values
+ ('${org}','${owner}',null,'owner'),('${org}','${manager}','${branch}','manager'),('${org}','${cashier}','${branch}','cashier'),
+ ('${org}','${otherCashier}','${branch2}','cashier'),('${org}','${scopedOwner}','${branch}','owner'),('${foreignOrg}','${foreignOwner}',null,'owner');
+ insert into public.pos_merchant_profiles(id,organization_id,branch_id,legal_name,branch_name,address,phone,trn,tax_registered,tax_inclusive,confirmed_by)
+ values('${profile}','${org}','${branch}','Synthetic','First','Test address','Test contact','100000000000001',true,true,'${owner}');
+ insert into public.pos_branch_receipt_config values('${branch}','${org}','${profile}','TEST',true);
+ insert into public.pos_products(id,organization_id,branch_id,name,category,unit_price_fils,tax_rate_bps) values('${product}','${org}','${branch}','Test item','Test',1000,500);`)
+const scalar=async(sql,params=[])=>Object.values((await db.query(sql,params)).rows[0])[0]
+const user=async(id)=>db.exec(`set role authenticated;set app.user_id='${id}'`)
+const admin=async(fn)=>{await db.exec('reset role');try{return await fn()}finally{await user(owner)}}
+const binding='a'.repeat(64),managerBinding='b'.repeat(64),cashierBinding='c'.repeat(64)
+await user(owner)
+const device=await scalar('select public.pos_enroll_device($1,$2,$3)',[branch,'Owner',binding])
+await user(manager)
+const managerDevice=await scalar('select public.pos_enroll_device($1,$2,$3)',[branch,'Manager',managerBinding])
+await user(cashier)
+const cashierDevice=await scalar('select public.pos_enroll_device($1,$2,$3)',[branch,'Cashier',cashierBinding])
+await user(owner)
+const rpc=(name,cmd,key=binding)=>scalar(`select public.${name}($1::jsonb,$2)`,[JSON.stringify(cmd),key])
+const base=(extra={})=>({id:crypto.randomUUID(),branchId:branch,deviceId:device.id,reason:'Synthetic test',...extra})
+let checks=0
+const check=(actual,expected,message)=>{assert.deepEqual(actual,expected,message);checks++}
+const rejects=async(p,pattern)=>{await assert.rejects(p,pattern);checks++}
+const shift=crypto.randomUUID()
+await rpc('pos_execute_live_command',{id:crypto.randomUUID(),branchId:branch,deviceId:device.id,type:'shift.open',shiftId:shift,openingCashFils:100000})
+const sale=(extra={})=>({id:crypto.randomUUID(),branchId:branch,deviceId:device.id,shiftId:shift,createdAt:new Date().toISOString(),serviceType:'takeaway',lines:[{productId:product,quantityMilli:1000,expectedUnitPriceFils:1000,expectedTaxRateBps:500,expectedRevision:1}],payments:[{method:'cash',amountFils:1000}],expectedTotalFils:1000,profileId:profile,customer:null,cashTenderedFils:1000,...extra})
+const oldSale=sale(),oldPaid=await rpc('pos_record_live_order',oldSale)
+await db.exec('reset role')
+await db.exec(await readFile(new URL('../../supabase/migrations/20261016001400_pos_kitchen.sql',import.meta.url),'utf8'))
+check(await scalar('select count(*)::integer from public.pos_kitchen_tickets'),0,'no historical backfill')
+await user(owner)
+const list=(cursor=null,branchId=branch,key=binding)=>scalar('select public.pos_list_kitchen($1,$2,$3::jsonb)',[branchId,key,JSON.stringify(cursor)])
+// SQL null is the first page; JSON null is invalid explicit cursor.
+const first=()=>scalar('select public.pos_list_kitchen($1,$2)',[branch,binding])
+check((await first()).activeCount,0)
+const order=sale({customer:{name:'Private Buyer',address:'Hidden Address',trn:'100000000000002'}}),paid=await rpc('pos_record_live_order',order)
+check((await first()).activeCount,1)
+check((await first()).activeCounts,{queued:1,preparing:0,ready:0})
+const initialList=await first()
+let ticket=initialList.activeTickets[0]
+check(ticket.lines,[{lineNumber:1,productId:product,name:'Test item',unit:'piece',quantityMilli:1000}])
+check(Object.keys(ticket).sort(),['orderId','branchId','invoiceId','invoiceNumber','issuedAt','serviceType','lines','status','revision','updatedAt','refundedAt'].sort())
+check(ticket.invoiceId,paid.receipt.id)
+check(JSON.stringify(initialList).includes('Private Buyer'),false)
+check(JSON.stringify(initialList).includes('Hidden Address'),false)
+await rpc('pos_record_live_order',order)
+check((await first()).activeCount,1,'sale replay does not duplicate ticket')
+const command=(extra={})=>({id:crypto.randomUUID(),branchId:branch,deviceId:device.id,orderId:order.id,expectedRevision:1,status:'preparing',reason:null,...extra})
+const transition=(cmd,key=binding)=>rpc('pos_transition_kitchen',cmd,key)
+const resolve=(cmd,key=binding)=>rpc('pos_resolve_kitchen_request',cmd,key)
+const request=command(),ack=await transition(request)
+check(ack.ticket.status,'preparing');check(ack.ticket.revision,2)
+check(await transition(request),{...ack,replayed:true})
+check(await resolve(request),{...ack,replayed:true})
+await rejects(transition({...request,reason:'Changed'}),/POS_IDEMPOTENCY_CONFLICT/)
+await rejects(transition(command()),/POS_KITCHEN_CHANGED/)
+await rejects(transition(command({expectedRevision:2,status:'served'})),/POS_KITCHEN_TRANSITION_INVALID/)
+await rejects(transition(command({expectedRevision:2,status:'preparing'})),/POS_KITCHEN_TRANSITION_INVALID/)
+await rejects(transition(command({expectedRevision:2,status:'queued'})),/POS_KITCHEN_REASON_REQUIRED/)
+await user(cashier)
+await rejects(transition(command({deviceId:cashierDevice.id,expectedRevision:2,status:'queued',reason:'Correction'}),cashierBinding),/POS_MANAGER_REQUIRED/)
+const cashierRequest=command({deviceId:cashierDevice.id,expectedRevision:2,status:'ready'}),cashierAck=await transition(cashierRequest,cashierBinding)
+check(cashierAck.ticket.revision,3,'cashier can progress without open cash shift')
+await user(manager)
+const correction=await transition(command({deviceId:managerDevice.id,expectedRevision:3,status:'preparing',reason:'More preparation needed'}),managerBinding)
+check(correction.ticket.revision,4)
+await user(owner)
+await transition(command({expectedRevision:4,status:'ready'}))
+const servedRequest=command({expectedRevision:5,status:'served'}),servedAck=await transition(servedRequest)
+check((await first()).activeCount,0)
+check((await first()).terminalTickets[0].status,'served')
+await transition(command({expectedRevision:6,status:'ready',reason:'Customer asked for recheck'}))
+await transition(command({expectedRevision:7,status:'served'}))
+const refund={id:crypto.randomUUID(),type:'refund.full',branchId:branch,deviceId:device.id,shiftId:shift,orderId:order.id,reason:'Customer cancelled'}
+await rpc('pos_execute_live_command',refund)
+const cancelledTicket=(await first()).terminalTickets[0]
+check(cancelledTicket.status,'cancelled');check(cancelledTicket.revision,9);check(!!cancelledTicket.refundedAt,true)
+check(await resolve(servedRequest),{...servedAck,replayed:true},'recovery returns original ACK, not refund state')
+check(await transition(servedRequest),{...servedAck,replayed:true},'exact replay remains original ACK')
+await rejects(transition(command({expectedRevision:9,status:'ready',reason:'No resurrection'})),/POS_KITCHEN_REFUNDED/)
+await rpc('pos_execute_live_command',refund)
+check((await first()).terminalTickets[0].revision,9,'refund replay does not reapply projection')
+const audit=await scalar("select details from public.pos_audit_events where event_type='kitchen.refunded' and entity_id=$1",[order.id])
+check(audit.previousStatus,'served');check(audit.previousRevision,8)
+// Legacy credit notes remain valid without inventing a kitchen ticket.
+await rpc('pos_execute_live_command',{...refund,id:crypto.randomUUID(),orderId:oldSale.id})
+check((await first()).terminalTickets.length,1)
+const unsaved=command(),cancelled=await resolve(unsaved)
+check(cancelled.status,'cancelled');check(await resolve(unsaved),{...cancelled,replayed:true})
+await rejects(transition(unsaved),/POS_REQUEST_CANCELLED/)
+await rejects(resolve({...unsaved,reason:'Changed'}),/POS_IDEMPOTENCY_CONFLICT/)
+await rejects(transition({...unsaved,reason:'Changed'}),/POS_IDEMPOTENCY_CONFLICT/)
+for(const patch of [{reason:''},{reason:' padded '},{reason:4},{status:'cancelled'},{expectedRevision:0},{expectedRevision:1.5},{expectedRevision:2147483647},{orderId:null},{id:5},{extra:true}])await rejects(transition(command(patch)),/POS_INVALID_KITCHEN_COMMAND/)
+for(const cursor of [{},{issuedAt:'infinity',orderId:order.id},{issuedAt:'bad',orderId:order.id},{issuedAt:new Date().toISOString(),orderId:'bad'},{issuedAt:new Date().toISOString(),orderId:order.id,extra:true},null])await rejects(list(cursor),/POS_INVALID_KITCHEN_CURSOR/)
+await rejects(list(undefined,foreignBranch),/POS_ACCESS_DENIED/)
+await rejects(list(undefined,branch2),/POS_DEVICE_INVALID/)
+await rejects(list(undefined,branch,cashierBinding),/POS_DEVICE_INVALID/)
+await rejects(transition(command({deviceId:cashierDevice.id})),/POS_DEVICE_INVALID/)
+await rejects(transition(command({orderId:oldSale.id})),/POS_KITCHEN_NOT_FOUND/)
+await rejects(transition(command({orderId:crypto.randomUUID()})),/POS_KITCHEN_NOT_FOUND/)
+// All storage and helper functions remain inaccessible to authenticated direct callers.
+for(const table of ['pos_kitchen_tickets','pos_kitchen_commands','pos_kitchen_request_cancellations'])await rejects(db.query(`select * from public.${table}`),/permission denied/)
+await rejects(db.query('select public.pos_validate_kitchen_command($1::jsonb)',[JSON.stringify(command())]),/permission denied/)
+await user(foreignOwner)
+await rejects(first(),/POS_ACCESS_DENIED/)
+await rejects(resolve(request),/POS_DEVICE_INVALID/)
+await user(owner)
+// Original cashier can recover only its own ACK after access revocation; no new/cancel write.
+await rpc('pos_manage_staff',{...base(),targetUserId:cashier,expectedRevision:1,active:false,role:'cashier',assignedBranchId:branch,displayName:null})
+await user(cashier)
+check(await resolve(cashierRequest,cashierBinding),{...cashierAck,replayed:true})
+await rejects(resolve(command({deviceId:cashierDevice.id}),cashierBinding),/POS_ACCESS_DENIED/)
+await rejects(transition(cashierRequest,cashierBinding),/POS_ACCESS_DENIED/)
+await rejects(scalar('select public.pos_list_kitchen($1,$2)',[branch,cashierBinding]),/POS_ACCESS_DENIED/)
+await user(owner)
+await rpc('pos_manage_staff',{...base(),targetUserId:cashier,expectedRevision:2,active:true,role:'cashier',assignedBranchId:branch,displayName:null})
+await user(cashier)
+const replacementBinding='ef'.repeat(32)
+await scalar('select public.pos_enroll_device($1,$2,$3)',[branch,'Replacement',replacementBinding])
+check(await resolve(cashierRequest,replacementBinding),{...cashierAck,replayed:true})
+const lost=command({deviceId:cashierDevice.id})
+check((await resolve(lost,replacementBinding)).status,'cancelled')
+await user(owner)
+// Offered v2 invoices use the same minimal, immutable preparation projection.
+const offer={id:crypto.randomUUID(),name:'Kitchen discount',active:true,benefit:{kind:'percentage',basisPoints:1000,maximumDiscountFils:null,eligibility:{scope:'all'}},schedule:{timezone:'Asia/Dubai',startsAt:null,endsAt:null,windows:[]},minimumSpendFils:0,serviceTypes:['dine_in','takeaway','delivery'],managerOnly:false,coupon:'HIDDEN10',totalRedemptionsLimit:null,perCustomerLimit:null}
+await rpc('pos_manage_offer',base({offer,expectedRevision:0}))
+const offerOrder=sale({payments:[{method:'cash',amountFils:900}],expectedTotalFils:900,offerSelection:{offerId:offer.id,expectedRevision:1,couponCode:'HIDDEN10',expectedDiscountFils:100}})
+await rpc('pos_record_live_order',offerOrder)
+check((await first()).activeTickets[0].lines,ticket.lines)
+check(JSON.stringify(await first()).includes('HIDDEN10'),false)
+// Quantity/name/unit stay snapshot-owned after catalogue edits.
+await admin(()=>db.query('update public.pos_products set name=$1,unit=$2 where id=$3',['Changed product','kg',product]))
+check((await first()).activeTickets[0].lines,ticket.lines)
+// Rollback after the refund projection restores the active ticket and financial ledger.
+await db.exec('begin')
+await rpc('pos_execute_live_command',{...refund,id:crypto.randomUUID(),orderId:offerOrder.id})
+check((await first()).activeCount,0)
+await db.exec('rollback')
+check((await first()).activeCount,1)
+check(await scalar("select count(*)::integer from public.pos_documents where order_id=$1 and kind='tax_credit_note'",[offerOrder.id]),0)
+// Rollback financial write rolls back its projection too.
+await db.exec('begin')
+const rolled=sale()
+await rpc('pos_record_live_order',rolled)
+await db.exec('rollback')
+check((await first()).activeCount,1)
+// More than100 active tickets, no age cutoff, explicit cursor and terminal truncation.
+for(let i=0;i<102;i++)await rpc('pos_record_live_order',sale())
+const page=await first()
+check(page.activeCount,103);check(page.activeTickets.length,100);check(!!page.activeNextCursor,true)
+const page2=await list(page.activeNextCursor)
+check(page2.activeCount,103);check(page2.activeTickets.length,3);check(page2.activeNextCursor,null)
+check(new Set([...page.activeTickets,...page2.activeTickets].map(t=>t.orderId)).size,103)
+await admin(()=>db.query("update public.pos_kitchen_tickets set issued_at=now()-interval '30 days' where order_id=$1",[offerOrder.id]))
+check((await first()).activeTickets[0].orderId,offerOrder.id,'old outstanding ticket remains visible')
+for(const t of page.activeTickets.slice(0,51)){
+ for(const [expectedRevision,status] of [[1,'preparing'],[2,'ready'],[3,'served']])await transition(command({orderId:t.orderId,expectedRevision,status}))
+}
+const finalList=await first()
+check(finalList.terminalTickets.length,50);check(finalList.terminalTruncated,true);check(finalList.activeCount,52)
+const weightedProduct=crypto.randomUUID()
+await admin(()=>db.query("insert into public.pos_products(id,organization_id,branch_id,name,category,unit,unit_price_fils,tax_rate_bps) values($1,$2,$3,'Synthetic sweets','Test','kg',4000,500)",[weightedProduct,org,branch]))
+const weighted=sale({lines:[{productId:weightedProduct,quantityMilli:250,expectedUnitPriceFils:4000,expectedTaxRateBps:500,expectedRevision:1}]})
+await rpc('pos_record_live_order',weighted)
+check((await first()).activeTickets.find(t=>t.orderId===weighted.id).lines,[{lineNumber:1,productId:weightedProduct,name:'Synthetic sweets',unit:'kg',quantityMilli:250}])
+await db.exec('set role anon;set app.user_id=\'\'')
+await rejects(first(),/permission denied/)
+await rejects(transition(request),/permission denied/)
+await rejects(resolve(request),/permission denied/)
+await db.exec('reset role')
+await rejects(db.query('delete from public.pos_kitchen_commands'),/POS_IMMUTABLE_DOCUMENT/)
+await rejects(db.query('delete from public.pos_kitchen_request_cancellations'),/POS_IMMUTABLE_DOCUMENT/)
+if(process.argv[3])await writeFile(process.argv[3],JSON.stringify({list:initialList,updated:ack,cancelled,refunded:cancelledTicket},null,2)+'\n')
+console.log(JSON.stringify({checksPassed:checks,scope:'Disposable PostgreSQL kitchen lifecycle, scope, privacy, recovery, pagination and immutability'}))
+await db.close()
