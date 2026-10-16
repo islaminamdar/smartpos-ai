@@ -1,0 +1,57 @@
+plugins { id 'com.android.application' }
+
+// Release credentials are supplied from a private file outside this repository.
+def signingFile = System.getenv('INTERNEXT_COUNTER_SIGNING_FILE')
+def signingValues = new Properties()
+if (signingFile) { file(signingFile).withInputStream { signingValues.load(it) } }
+
+android {
+    namespace 'info.internext.pos.counter'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'info.internext.pos.counter'
+        minSdk 26
+        targetSdk 36
+        versionCode 1
+        versionName '1.0.0'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+    signingConfigs {
+        if (signingFile) {
+            customer {
+                storeFile file(signingValues.getProperty('storeFile'))
+                storePassword signingValues.getProperty('storePassword')
+                keyAlias signingValues.getProperty('keyAlias')
+                keyPassword signingValues.getProperty('keyPassword')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            debuggable false
+            minifyEnabled false
+            if (signingFile) { signingConfig signingConfigs.customer }
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    lint { abortOnError true }
+    testBuildType 'release'
+}
+
+tasks.configureEach {
+    if (name == 'assembleRelease' || name == 'bundleRelease') {
+        doFirst {
+            if (!signingFile) throw new GradleException('Customer release requires INTERNEXT_COUNTER_SIGNING_FILE')
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.activity:activity:1.11.0'
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.3.0'
+    androidTestImplementation 'androidx.test:runner:1.7.0'
+}

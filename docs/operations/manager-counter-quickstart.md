@@ -2,6 +2,8 @@
 
 For the online pilot at [pos.internext.info/counter](https://pos.internext.info/counter).
 
+The [Android installation and start page](https://pos.internext.info/downloads/) provides the signed **Internext Counter** online app. Both the website and this app require internet for customer sales. Android 8.0 or newer is required. This is separate from the offline Android candidate, which remains unreleased.
+
 ## First use on the restaurant device
 
 1. Open the staff counter link and sign in using the manager account provided separately. Keep the password private.
@@ -17,6 +19,8 @@ For the online pilot at [pos.internext.info/counter](https://pos.internext.info/
 4. Enter the cash received and/or the card amount. Recording a card payment here does not charge the customer's card; confirm payment separately on the card terminal.
 5. Select **Save sale** and wait for confirmation. If confirmation is interrupted, use the saved-request recovery controls. Do not create another bill for the same payment until its status is resolved.
 6. Open the confirmed receipt under **Receipts** and choose **Print / save PDF**. Check the actual paper output; a browser print dialog does not confirm delivery to a physical printer.
+
+In the Android app, use **Print receipt** in the native top bar after selecting the receipt. Android's installed print service or Save as PDF handles the output; the website's print button is for browsers. Direct thermal-printer adapters are not included in this release.
 
 ## Use the kitchen board
 
@@ -79,7 +83,7 @@ Review the shift totals, count the actual cash in the drawer, then use **Close s
 - Real sales require an internet connection. The separate `/pos` workspace is training only and must not be used to issue customer bills.
 - Do not clear browser storage while a request is waiting for confirmation.
 - Issued bills preserve their original details. A refund creates a credit note; it does not erase the original invoice. Managers can return selected items or weights, or all remaining items, with a reason and confirmation.
-- Android APK installation, offline live selling, automatic card charging, physical printer integration and the broader planned restaurant features are still under development.
+- The online Android counter is distributed separately through the installation page. Offline live selling, automatic card charging, direct physical-printer adapters and the broader planned restaurant features remain under development.
 - Subscription payments are handled separately from customer counter payments. Visiting the billing screen does not change the existing manually collected pilot arrangement.
 
 Practice only in the training workspace or an explicitly designated test branch. Do not enter fabricated sales into the restaurant's live ledger.
