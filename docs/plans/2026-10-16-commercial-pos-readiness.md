@@ -6,15 +6,17 @@ The online web release `2de794a` is deployed with SQL001–030. Operations, menu
 
 The native clock-recovery server support and SQL028 are deployed, while the customer Android APK remains unreleased. Offline issuance and PayPal remain disabled; the existing AED100 manual pilot is unchanged. The separate [pre-enrollment clock bootstrap](../contracts/20261016-native-clock-bootstrap.md) is now implemented as an unreleased candidate with signed time, intact-store admission and native confirmation. Its commissioning, staff/device loss, full two-device acceptance and APK signing/printing remain pending.
 
+Joined [Android/server commissioning](../operations/native-network-commissioning.md) now verifies actual native HTTPS, storage, PIN/checkout, signing and PostgreSQL across two independent issuer namespaces on one emulator. Both baseline and revoked-access/changed-price scenarios passed six bills, duplicate recovery, next allocation and balanced closing. This strengthens the offline candidate evidence; it does not establish physical-device, real authentication-provider, printer or customer APK acceptance.
+
 ## Partial returns released
 
 The [partial return contract](../contracts/20261016-partial-returns.md) provides manager-selected item/weight quantities, original discount/VAT/tender allocation, immutable v3 credit notes, stale-preview protection and exact request recovery. Kitchen notices identify affected quantities and require staff review before continuing preparation stages. Original invoices and historical full-return acknowledgements remain unchanged. Staff return cash once and arrange card refunds separately on the terminal; stock is not automatically restored. Customer-account payments remain pending.
 
-## Stock baseline candidate
+## Stock baseline released
 
-SQL027 adds a manager stock catalogue, explicit opening count, receiving, waste, reasoned adjustments, low-stock visibility and immutable history. Durable browser requests, exact revision checks and historical lookup/cancellation cover interrupted and competing writes. See the [inventory contract](../contracts/20261016-inventory.md) and [manager guide](../operations/manager-stock-guide.md). This supersedes the matrix's earlier entirely planned inventory status for this bounded baseline only. Recipes, automatic ingredient deductions, purchase orders, supplier accounts, costing, expiry batches and transfers are still pending. SQL017–027 remain unapplied live, and this work does not alter the pilot's price or activate PayPal.
+SQL027 adds a manager stock catalogue, explicit opening count, receiving, waste, reasoned adjustments, low-stock visibility and immutable history. Durable browser requests, exact revision checks and historical lookup/cancellation cover interrupted and competing writes. See the [inventory contract](../contracts/20261016-inventory.md) and [manager guide](../operations/manager-stock-guide.md). This supersedes the matrix's earlier entirely planned inventory status for this bounded baseline only. Recipes, automatic ingredient deductions, purchase orders, supplier accounts, costing, expiry batches and transfers are still pending. SQL027 is deployed within the current SQL001–030 release; the pilot's price and disabled PayPal state are unchanged.
 
-Updated 2026-10-16. See the [checkpoint launch readiness audit](2026-10-16-launch-readiness.md) for live `5573dcc` versus candidate `0a78059` and the full remaining scope. This document distinguishes the live online pilot from the expanded commercial product. A reachable website, a successful build, or a passing unit test is not evidence that every planned feature is delivered.
+Updated 2026-10-16. See the [checkpoint launch readiness audit](2026-10-16-launch-readiness.md) for the latest release, historical checkpoints and the full remaining scope. This document distinguishes the live online pilot from the expanded commercial product. A reachable website, a successful build, or a passing unit test is not evidence that every planned feature is delivered.
 
 ## Commercial decisions
 

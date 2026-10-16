@@ -31,6 +31,8 @@ Scope Gradle to `:app`: the generated unused Cordova library's own test APK has 
 
 ## Verification
 
+The opt-in [joined server commissioning guide](../../docs/operations/native-network-commissioning.md) covers real native HTTPS into production route handlers backed by isolated PostgreSQL. Two scenarios passed offline issuance, lost-acknowledgement replay, next allocation and drawer close; one also changed prices and revoked current access before historical upload. This uses two isolated storage/key namespaces on one emulator and simulated authentication-provider transport. It does not replace full physical-device, deployed-authentication, printer or release acceptance.
+
 Shared TypeScript/UI tests run from the repository root. Native instrumentation includes `NativeJournalAuditTest` (each test uses and deletes a separate synthetic database). `NativeRestartTest` has explicitly ordered phases: `seed`, `verify` after force-stop, `verify` after reboot, optional `verify` after an in-place APK update, then `cleanup`. Do not run all phases using unordered test discovery or repeat `seed` over an existing fixture.
 
 Observed on an isolated Android 15/API35 emulator on 2026-10-16: nine journal tests passed; a signed synthetic receipt and its pending record survived a force-stop and full emulator reboot with Wi-Fi/mobile data disabled. The actual bundled app opened offline and read its separate empty native journal. Responsive UI fixtures were reviewed at 1280,375,320px; synthetic fixtures are not bundled.
