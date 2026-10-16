@@ -3,6 +3,18 @@ import { NextRequest } from 'next/server'
 import { publicReleaseAccess } from '@/lib/pos/public-release'
 import { middleware } from '@/middleware'
 
+it('keeps signed historical offline recovery reachable when new selling is paused', () => {
+  for (const enabled of [false, true]) {
+    for (const suffix of ['import', 'seal']) {
+      const path = '/api/pos/offline/' + suffix
+      expect(publicReleaseAccess(path, 'POST', enabled)).toBe('allow')
+      for (const method of ['GET', 'PUT', 'DELETE', 'OPTIONS']) expect(publicReleaseAccess(path, method, enabled)).not.toBe('allow')
+      expect(publicReleaseAccess(path + '/extra', 'POST', enabled)).not.toBe('allow')
+    }
+    for (const suffix of ['enroll', 'authority']) expect(publicReleaseAccess('/api/pos/offline/' + suffix, 'POST', enabled) === 'allow').toBe(enabled)
+  }
+})
+
 describe('training-only hosted release', () => {
   it('allows only required public pages and assets', () => {
     for (const path of [

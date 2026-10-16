@@ -38,11 +38,13 @@ The existing pilot keeps its approved AED100 monthly manual subscription. New co
 
 ## Authentication and device authority
 
-Login requires an active POS membership and an atomic database-backed limit before password authentication. Tokens use HttpOnly, SameSite Strict cookies with Secure enabled in production. Verification and refresh occur on the server; logout revokes the refresh session. The service-role key is used for login throttling and session revocation, not for bypassing financial transaction authorization.
+Login requires an active POS membership and an atomic database-backed limit before password authentication. Tokens use HttpOnly, SameSite Strict cookies with Secure enabled in production. Verification and refresh occur on the server; logout revokes the refresh session. Online financial commands retain actor-scoped authorization. The service-role key also supports login throttling, session revocation and the separately gated offline custody service described below.
 
 Device cookies contain random opaque tokens and are scoped by authenticated actor. The database stores only their hashes. Switching accounts cannot overwrite the original actor's device credential. Enrollment creates a distinct device; an existing actor binding cannot silently change device or branch. The financial RPCs enforce user, membership, active device and binding themselves, in addition to HTTP checks. Each cashier owns an independent shift, with one open shift per device.
 
-All browser mutations require a same-origin `Origin` header. Responses containing account or financial data are private/no-store. Missing setup returns503, unauthenticated access401 and invalid authority403; database diagnostics are not exposed.
+All browser mutations require a same-origin `Origin` header. Native signed historical import and seal routes use device signatures and reserved authority instead of current browser sessions. Responses containing account or financial data are private/no-store. Missing setup returns503, unauthenticated access401 and invalid authority403; database diagnostics are not exposed.
+
+The SQL017 offline custody candidate is not deployed or enabled. Its service-only RPCs require application signature verification and independently enforce scope, immutable snapshots, calculations, sequence chains and budgets in SQL. New authority requires current staff access, explicit server and branch enablement, and a configured signing key. Historical import and sealing remain available after access revocation or new-sale disablement so issued receipts can be reconciled. See the [offline issuance contract](../../../docs/contracts/20261016-offline-issuance-contract.md) for exact boundaries and remaining Android acceptance requirements.
 
 ## Current HTTP contracts
 

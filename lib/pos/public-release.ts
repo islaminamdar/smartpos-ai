@@ -6,6 +6,9 @@ export function publicReleaseAccess(
 ): 'allow' | 'not_found' | 'unavailable' {
   const read = method === 'GET' || method === 'HEAD'
   if (path === '/api/pos/health') return read ? 'allow' : 'not_found'
+  // Previously issued device evidence must remain recoverable when new selling is paused.
+  if (path === '/api/pos/offline/import' || path === '/api/pos/offline/seal')
+    return method === 'POST' ? 'allow' : 'not_found'
   if (onlinePilot) {
     if (
       (path === '/counter' ||
@@ -18,6 +21,8 @@ export function publicReleaseAccess(
     )
       return 'allow'
     const apiMethods: Record<string, string[]> = {
+      '/api/pos/offline/enroll': ['POST'],
+      '/api/pos/offline/authority': ['POST'],
       '/api/billing/paypal/status': ['GET'],
       '/api/billing/paypal/checkout': ['POST'],
       '/api/billing/paypal/reconcile': ['POST'],

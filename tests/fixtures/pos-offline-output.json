@@ -1,0 +1,419 @@
+{
+  "enrollment": {
+    "deviceId": "c438c7a4-3879-4bfb-81dd-914117fa1438",
+    "keyEpoch": "50c6bff6-7d9f-4e1b-9449-d62e4fce2dd9",
+    "publicKeySpki": "c3ludGhldGljLXB1YmxpYy1rZXktMQ",
+    "deviceKeySha256": "285762a3babb08c425401ccd575d4f62a1e394e8c56aa2ac30382018b3d17d27"
+  },
+  "reservation": {
+    "snapshot": {
+      "id": "ab6b547f-29b8-44f5-927e-faba2735135b",
+      "kind": "offline-snapshot",
+      "offers": [],
+      "profile": {
+        "id": "05546aa1-bed3-4166-b374-38f330bd7c05",
+        "trn": "100000000000001",
+        "phone": "Synthetic phone",
+        "address": "Synthetic address",
+        "branchId": "9b31880c-be5b-4034-a0b6-ad892f5aa831",
+        "currency": "AED",
+        "timezone": "Asia/Dubai",
+        "legalName": "Synthetic legal",
+        "branchName": "First",
+        "confirmedAt": "2026-10-16T09:59:59.581+04:00",
+        "confirmedBy": "8d545efa-c1cd-451d-a9b9-0131a787495b",
+        "taxInclusive": true,
+        "taxRegistered": true,
+        "organizationId": "d5109630-318c-4f3a-8646-88182521a065",
+        "calculationVersion": "line-v2"
+      },
+      "branchId": "9b31880c-be5b-4034-a0b6-ad892f5aa831",
+      "products": [
+        {
+          "id": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+          "name": "Synthetic product",
+          "unit": "piece",
+          "category": "Test",
+          "revision": 1,
+          "taxRateBps": 500,
+          "unitPriceFils": 1000
+        },
+        {
+          "id": "97f0b5b8-6ad9-4580-b91b-ae074afd3251",
+          "name": "Synthetic weighted",
+          "unit": "kg",
+          "category": "Test",
+          "revision": 1,
+          "taxRateBps": 500,
+          "unitPriceFils": 1001
+        }
+      ],
+      "createdAt": "2026-10-16T05:59:59.612Z",
+      "schemaVersion": 1,
+      "organizationId": "d5109630-318c-4f3a-8646-88182521a065",
+      "calculationVersion": "offline-line-v1"
+    },
+    "authority": {
+      "id": "8c93ddf2-e50f-4745-a162-5ab6e8f9a59c",
+      "kind": "offline-authority",
+      "policy": {
+        "offers": "online-only",
+        "refunds": "online-only",
+        "sharedTabs": "online-only"
+      },
+      "actorId": "8d545efa-c1cd-451d-a9b9-0131a787495b",
+      "shiftId": "28782c5d-76e7-4bc0-8fba-8a143846a699",
+      "branchId": "9b31880c-be5b-4034-a0b6-ad892f5aa831",
+      "deviceId": "c438c7a4-3879-4bfb-81dd-914117fa1438",
+      "issuedAt": "2026-10-16T05:59:59.612Z",
+      "keyEpoch": "50c6bff6-7d9f-4e1b-9449-d62e4fce2dd9",
+      "expiresAt": "2026-10-16T06:59:59.612Z",
+      "notBefore": "2026-10-16T05:59:59.612Z",
+      "snapshotId": "ab6b547f-29b8-44f5-927e-faba2735135b",
+      "permissions": {
+        "cash": true,
+        "mixedTender": true,
+        "recordedCard": true
+      },
+      "invoiceRange": {
+        "last": 3,
+        "first": 1,
+        "prefix": "TEST"
+      },
+      "maxGrossFils": 300000,
+      "schemaVersion": 1,
+      "organizationId": "d5109630-318c-4f3a-8646-88182521a065",
+      "snapshotSha256": null,
+      "deviceKeySha256": "285762a3babb08c425401ccd575d4f62a1e394e8c56aa2ac30382018b3d17d27",
+      "maxInvoiceTotalFils": 100000
+    }
+  },
+  "bundle": {
+    "deviceId": "c438c7a4-3879-4bfb-81dd-914117fa1438",
+    "keyEpoch": "50c6bff6-7d9f-4e1b-9449-d62e4fce2dd9",
+    "snapshot": {
+      "id": "ab6b547f-29b8-44f5-927e-faba2735135b",
+      "kind": "offline-snapshot",
+      "offers": [],
+      "profile": {
+        "id": "05546aa1-bed3-4166-b374-38f330bd7c05",
+        "trn": "100000000000001",
+        "phone": "Synthetic phone",
+        "address": "Synthetic address",
+        "branchId": "9b31880c-be5b-4034-a0b6-ad892f5aa831",
+        "currency": "AED",
+        "timezone": "Asia/Dubai",
+        "legalName": "Synthetic legal",
+        "branchName": "First",
+        "confirmedAt": "2026-10-16T09:59:59.581+04:00",
+        "confirmedBy": "8d545efa-c1cd-451d-a9b9-0131a787495b",
+        "taxInclusive": true,
+        "taxRegistered": true,
+        "organizationId": "d5109630-318c-4f3a-8646-88182521a065",
+        "calculationVersion": "line-v2"
+      },
+      "branchId": "9b31880c-be5b-4034-a0b6-ad892f5aa831",
+      "products": [
+        {
+          "id": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+          "name": "Synthetic product",
+          "unit": "piece",
+          "category": "Test",
+          "revision": 1,
+          "taxRateBps": 500,
+          "unitPriceFils": 1000
+        },
+        {
+          "id": "97f0b5b8-6ad9-4580-b91b-ae074afd3251",
+          "name": "Synthetic weighted",
+          "unit": "kg",
+          "category": "Test",
+          "revision": 1,
+          "taxRateBps": 500,
+          "unitPriceFils": 1001
+        }
+      ],
+      "createdAt": "2026-10-16T05:59:59.612Z",
+      "schemaVersion": 1,
+      "organizationId": "d5109630-318c-4f3a-8646-88182521a065",
+      "calculationVersion": "offline-line-v1"
+    },
+    "authority": {
+      "id": "8c93ddf2-e50f-4745-a162-5ab6e8f9a59c",
+      "kind": "offline-authority",
+      "policy": {
+        "offers": "online-only",
+        "refunds": "online-only",
+        "sharedTabs": "online-only"
+      },
+      "actorId": "8d545efa-c1cd-451d-a9b9-0131a787495b",
+      "shiftId": "28782c5d-76e7-4bc0-8fba-8a143846a699",
+      "branchId": "9b31880c-be5b-4034-a0b6-ad892f5aa831",
+      "deviceId": "c438c7a4-3879-4bfb-81dd-914117fa1438",
+      "issuedAt": "2026-10-16T05:59:59.612Z",
+      "keyEpoch": "50c6bff6-7d9f-4e1b-9449-d62e4fce2dd9",
+      "expiresAt": "2026-10-16T06:59:59.612Z",
+      "notBefore": "2026-10-16T05:59:59.612Z",
+      "snapshotId": "ab6b547f-29b8-44f5-927e-faba2735135b",
+      "permissions": {
+        "cash": true,
+        "mixedTender": true,
+        "recordedCard": true
+      },
+      "invoiceRange": {
+        "last": 3,
+        "first": 1,
+        "prefix": "TEST"
+      },
+      "maxGrossFils": 300000,
+      "schemaVersion": 1,
+      "organizationId": "d5109630-318c-4f3a-8646-88182521a065",
+      "snapshotSha256": "66678c8d55e4a4686799769d3bbf710e303fcbb0e4a96da96236e70cf40ad318",
+      "deviceKeySha256": "285762a3babb08c425401ccd575d4f62a1e394e8c56aa2ac30382018b3d17d27",
+      "maxInvoiceTotalFils": 100000
+    },
+    "publicKeySpki": "c3ludGhldGljLXB1YmxpYy1rZXktMQ",
+    "snapshotSha256": "66678c8d55e4a4686799769d3bbf710e303fcbb0e4a96da96236e70cf40ad318",
+    "authoritySha256": "01f839b48173f52ee04411377e327e35e4058326d3b3a8730d771710294ea6d8",
+    "snapshotEnvelope": {
+      "alg": "ECDSA-P256-SHA256-DER",
+      "keyId": "synthetic-server-key",
+      "format": "pos-signed-v1",
+      "payloadBase64Url": "eyJicmFuY2hJZCI6IjliMzE4ODBjLWJlNWItNDAzNC1hMGI2LWFkODkyZjVhYTgzMSIsImNhbGN1bGF0aW9uVmVyc2lvbiI6Im9mZmxpbmUtbGluZS12MSIsImNyZWF0ZWRBdCI6IjIwMjYtMTAtMTZUMDU6NTk6NTkuNjEyWiIsImlkIjoiYWI2YjU0N2YtMjliOC00NGY1LTkyN2UtZmFiYTI3MzUxMzViIiwia2luZCI6Im9mZmxpbmUtc25hcHNob3QiLCJvZmZlcnMiOltdLCJvcmdhbml6YXRpb25JZCI6ImQ1MTA5NjMwLTMxOGMtNGYzYS04NjQ2LTg4MTgyNTIxYTA2NSIsInByb2R1Y3RzIjpbeyJjYXRlZ29yeSI6IlRlc3QiLCJpZCI6IjRhMjJjMDE0LTYxM2QtNGIxMS05OTgzLWFiNmMzYWY2ZGYxZCIsIm5hbWUiOiJTeW50aGV0aWMgcHJvZHVjdCIsInJldmlzaW9uIjoxLCJ0YXhSYXRlQnBzIjo1MDAsInVuaXQiOiJwaWVjZSIsInVuaXRQcmljZUZpbHMiOjEwMDB9LHsiY2F0ZWdvcnkiOiJUZXN0IiwiaWQiOiI5N2YwYjViOC02YWQ5LTQ1ODAtYjkxYi1hZTA3NGFmZDMyNTEiLCJuYW1lIjoiU3ludGhldGljIHdlaWdodGVkIiwicmV2aXNpb24iOjEsInRheFJhdGVCcHMiOjUwMCwidW5pdCI6ImtnIiwidW5pdFByaWNlRmlscyI6MTAwMX1dLCJwcm9maWxlIjp7ImFkZHJlc3MiOiJTeW50aGV0aWMgYWRkcmVzcyIsImJyYW5jaElkIjoiOWIzMTg4MGMtYmU1Yi00MDM0LWEwYjYtYWQ4OTJmNWFhODMxIiwiYnJhbmNoTmFtZSI6IkZpcnN0IiwiY2FsY3VsYXRpb25WZXJzaW9uIjoibGluZS12MiIsImNvbmZpcm1lZEF0IjoiMjAyNi0xMC0xNlQwOTo1OTo1OS41ODErMDQ6MDAiLCJjb25maXJtZWRCeSI6IjhkNTQ1ZWZhLWMxY2QtNDUxZC1hOWI5LTAxMzFhNzg3NDk1YiIsImN1cnJlbmN5IjoiQUVEIiwiaWQiOiIwNTU0NmFhMS1iZWQzLTQxNjYtYjM3NC0zOGYzMzBiZDdjMDUiLCJsZWdhbE5hbWUiOiJTeW50aGV0aWMgbGVnYWwiLCJvcmdhbml6YXRpb25JZCI6ImQ1MTA5NjMwLTMxOGMtNGYzYS04NjQ2LTg4MTgyNTIxYTA2NSIsInBob25lIjoiU3ludGhldGljIHBob25lIiwidGF4SW5jbHVzaXZlIjp0cnVlLCJ0YXhSZWdpc3RlcmVkIjp0cnVlLCJ0aW1lem9uZSI6IkFzaWEvRHViYWkiLCJ0cm4iOiIxMDAwMDAwMDAwMDAwMDEifSwic2NoZW1hVmVyc2lvbiI6MX0",
+      "signatureBase64Url": "AQ"
+    },
+    "authorityEnvelope": {
+      "alg": "ECDSA-P256-SHA256-DER",
+      "keyId": "synthetic-server-key",
+      "format": "pos-signed-v1",
+      "payloadBase64Url": "eyJhY3RvcklkIjoiOGQ1NDVlZmEtYzFjZC00NTFkLWE5YjktMDEzMWE3ODc0OTViIiwiYnJhbmNoSWQiOiI5YjMxODgwYy1iZTViLTQwMzQtYTBiNi1hZDg5MmY1YWE4MzEiLCJkZXZpY2VJZCI6ImM0MzhjN2E0LTM4NzktNGJmYi04MWRkLTkxNDExN2ZhMTQzOCIsImRldmljZUtleVNoYTI1NiI6IjI4NTc2MmEzYmFiYjA4YzQyNTQwMWNjZDU3NWQ0ZjYyYTFlMzk0ZThjNTZhYTJhYzMwMzgyMDE4YjNkMTdkMjciLCJleHBpcmVzQXQiOiIyMDI2LTEwLTE2VDA2OjU5OjU5LjYxMloiLCJpZCI6IjhjOTNkZGYyLWU1MGYtNDc0NS1hMTYyLTVhYjZlOGY5YTU5YyIsImludm9pY2VSYW5nZSI6eyJmaXJzdCI6MSwibGFzdCI6MywicHJlZml4IjoiVEVTVCJ9LCJpc3N1ZWRBdCI6IjIwMjYtMTAtMTZUMDU6NTk6NTkuNjEyWiIsImtleUVwb2NoIjoiNTBjNmJmZjYtN2Q5Zi00ZTFiLTk0NDktZDYyZTRmY2UyZGQ5Iiwia2luZCI6Im9mZmxpbmUtYXV0aG9yaXR5IiwibWF4R3Jvc3NGaWxzIjozMDAwMDAsIm1heEludm9pY2VUb3RhbEZpbHMiOjEwMDAwMCwibm90QmVmb3JlIjoiMjAyNi0xMC0xNlQwNTo1OTo1OS42MTJaIiwib3JnYW5pemF0aW9uSWQiOiJkNTEwOTYzMC0zMThjLTRmM2EtODY0Ni04ODE4MjUyMWEwNjUiLCJwZXJtaXNzaW9ucyI6eyJjYXNoIjp0cnVlLCJtaXhlZFRlbmRlciI6dHJ1ZSwicmVjb3JkZWRDYXJkIjp0cnVlfSwicG9saWN5Ijp7Im9mZmVycyI6Im9ubGluZS1vbmx5IiwicmVmdW5kcyI6Im9ubGluZS1vbmx5Iiwic2hhcmVkVGFicyI6Im9ubGluZS1vbmx5In0sInNjaGVtYVZlcnNpb24iOjEsInNoaWZ0SWQiOiIyODc4MmM1ZC03NmU3LTRiYzAtOGZiYS04YTE0Mzg0NmE2OTkiLCJzbmFwc2hvdElkIjoiYWI2YjU0N2YtMjliOC00NGY1LTkyN2UtZmFiYTI3MzUxMzViIiwic25hcHNob3RTaGEyNTYiOiI2NjY3OGM4ZDU1ZTRhNDY4Njc5OTc2OWQzYmJmNzEwZTMwM2ZjYmIwZTRhOTZkYTk2MjM2ZTcwY2Y0MGFkMzE4In0",
+      "signatureBase64Url": "AQ"
+    }
+  },
+  "issuance": {
+    "kind": "offline-sale",
+    "schemaVersion": 1,
+    "id": "2922204f-06c1-4d16-96e1-f4b138bcc072",
+    "authorityId": "8c93ddf2-e50f-4745-a162-5ab6e8f9a59c",
+    "authoritySha256": "01f839b48173f52ee04411377e327e35e4058326d3b3a8730d771710294ea6d8",
+    "snapshotSha256": "66678c8d55e4a4686799769d3bbf710e303fcbb0e4a96da96236e70cf40ad318",
+    "deviceSequence": 1,
+    "previousEventSha256": null,
+    "document": {
+      "schemaVersion": 1,
+      "id": "8753ab8c-9a49-4605-a2df-c3a01aeb33be",
+      "kind": "tax_invoice",
+      "documentNumber": "TEST-INV-0000000001",
+      "issuedAt": "2026-10-16T05:59:59.612Z",
+      "merchant": {
+        "id": "05546aa1-bed3-4166-b374-38f330bd7c05",
+        "trn": "100000000000001",
+        "phone": "Synthetic phone",
+        "address": "Synthetic address",
+        "branchId": "9b31880c-be5b-4034-a0b6-ad892f5aa831",
+        "currency": "AED",
+        "timezone": "Asia/Dubai",
+        "legalName": "Synthetic legal",
+        "branchName": "First",
+        "confirmedAt": "2026-10-16T09:59:59.581+04:00",
+        "confirmedBy": "8d545efa-c1cd-451d-a9b9-0131a787495b",
+        "taxInclusive": true,
+        "taxRegistered": true,
+        "organizationId": "d5109630-318c-4f3a-8646-88182521a065",
+        "calculationVersion": "line-v2"
+      },
+      "orderId": "2922204f-06c1-4d16-96e1-f4b138bcc072",
+      "branchId": "9b31880c-be5b-4034-a0b6-ad892f5aa831",
+      "deviceId": "c438c7a4-3879-4bfb-81dd-914117fa1438",
+      "shiftId": "28782c5d-76e7-4bc0-8fba-8a143846a699",
+      "actorId": "8d545efa-c1cd-451d-a9b9-0131a787495b",
+      "serviceType": "takeaway",
+      "customer": null,
+      "lines": [
+        {
+          "lineNumber": 1,
+          "productId": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+          "name": "Synthetic product",
+          "unit": "piece",
+          "quantityMilli": 1000,
+          "unitPriceFils": 1000,
+          "taxRateBps": 500,
+          "grossFils": 1000,
+          "netFils": 952,
+          "taxFils": 48
+        }
+      ],
+      "totals": {
+        "grossFils": 1000,
+        "netFils": 952,
+        "taxFils": 48
+      },
+      "payments": [
+        {
+          "method": "cash",
+          "amountFils": 1000
+        }
+      ],
+      "paymentSettlement": "recorded",
+      "cashTenderedFils": 1500,
+      "changeFils": 500
+    },
+    "clock": {
+      "estimatedServerAt": "2026-10-16T05:59:59.612Z",
+      "bootId": "570a0559-cf4b-462f-8257-8ee25f5407d8",
+      "elapsedRealtimeMs": 1234
+    },
+    "paymentIntentId": "1f6f441e-fb5a-4e8b-89aa-f839de77cf4a"
+  },
+  "imported": {
+    "status": "accepted",
+    "receipt": {
+      "id": "8753ab8c-9a49-4605-a2df-c3a01aeb33be",
+      "kind": "tax_invoice",
+      "lines": [
+        {
+          "name": "Synthetic product",
+          "unit": "piece",
+          "netFils": 952,
+          "taxFils": 48,
+          "grossFils": 1000,
+          "productId": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+          "lineNumber": 1,
+          "taxRateBps": 500,
+          "quantityMilli": 1000,
+          "unitPriceFils": 1000
+        }
+      ],
+      "totals": {
+        "netFils": 952,
+        "taxFils": 48,
+        "grossFils": 1000
+      },
+      "actorId": "8d545efa-c1cd-451d-a9b9-0131a787495b",
+      "orderId": "2922204f-06c1-4d16-96e1-f4b138bcc072",
+      "shiftId": "28782c5d-76e7-4bc0-8fba-8a143846a699",
+      "branchId": "9b31880c-be5b-4034-a0b6-ad892f5aa831",
+      "customer": null,
+      "deviceId": "c438c7a4-3879-4bfb-81dd-914117fa1438",
+      "issuedAt": "2026-10-16T05:59:59.612Z",
+      "merchant": {
+        "id": "05546aa1-bed3-4166-b374-38f330bd7c05",
+        "trn": "100000000000001",
+        "phone": "Synthetic phone",
+        "address": "Synthetic address",
+        "branchId": "9b31880c-be5b-4034-a0b6-ad892f5aa831",
+        "currency": "AED",
+        "timezone": "Asia/Dubai",
+        "legalName": "Synthetic legal",
+        "branchName": "First",
+        "confirmedAt": "2026-10-16T09:59:59.581+04:00",
+        "confirmedBy": "8d545efa-c1cd-451d-a9b9-0131a787495b",
+        "taxInclusive": true,
+        "taxRegistered": true,
+        "organizationId": "d5109630-318c-4f3a-8646-88182521a065",
+        "calculationVersion": "line-v2"
+      },
+      "payments": [
+        {
+          "method": "cash",
+          "amountFils": 1000
+        }
+      ],
+      "changeFils": 500,
+      "serviceType": "takeaway",
+      "schemaVersion": 1,
+      "documentNumber": "TEST-INV-0000000001",
+      "cashTenderedFils": 1500,
+      "paymentSettlement": "recorded"
+    },
+    "replayed": false,
+    "acknowledgement": {
+      "alg": "ECDSA-P256-SHA256-DER",
+      "keyId": "synthetic-server-key",
+      "format": "pos-signed-v1",
+      "payloadBase64Url": "eyJhdXRob3JpdHlJZCI6IjhjOTNkZGYyLWU1MGYtNDc0NS1hMTYyLTVhYjZlOGY5YTU5YyIsImRldmljZVNlcXVlbmNlIjoxLCJpZCI6IjU2NTUyZmFjLWI2MDAtNDA1OC1iM2Q3LWFkYzEwOTI5ZWUwYyIsImlzc3VhbmNlSWQiOiIyOTIyMjA0Zi0wNmMxLTRkMTYtOTZlMS1mNGIxMzhiY2MwNzIiLCJrZXlFcG9jaCI6IjUwYzZiZmY2LTdkOWYtNGUxYi05NDQ5LWQ2MmU0ZmNlMmRkOSIsImtpbmQiOiJvZmZsaW5lLWFjayIsInBheWxvYWRTaGEyNTYiOiIzYWNhYzNjODZjMWY2ZWM4N2E2MDY0MTA2YmE3MmIzOWE2MTAxNDIzNDhlZjk0YzI0YTcxODg5YmRlN2RmODQ4IiwicmVjZWl2ZWRBdCI6IjIwMjYtMTAtMTZUMDU6NTk6NTkuNjM5WiIsInNjaGVtYVZlcnNpb24iOjF9",
+      "signatureBase64Url": "AQ"
+    }
+  },
+  "replayed": {
+    "status": "accepted",
+    "receipt": {
+      "id": "8753ab8c-9a49-4605-a2df-c3a01aeb33be",
+      "kind": "tax_invoice",
+      "lines": [
+        {
+          "name": "Synthetic product",
+          "unit": "piece",
+          "netFils": 952,
+          "taxFils": 48,
+          "grossFils": 1000,
+          "productId": "4a22c014-613d-4b11-9983-ab6c3af6df1d",
+          "lineNumber": 1,
+          "taxRateBps": 500,
+          "quantityMilli": 1000,
+          "unitPriceFils": 1000
+        }
+      ],
+      "totals": {
+        "netFils": 952,
+        "taxFils": 48,
+        "grossFils": 1000
+      },
+      "actorId": "8d545efa-c1cd-451d-a9b9-0131a787495b",
+      "orderId": "2922204f-06c1-4d16-96e1-f4b138bcc072",
+      "shiftId": "28782c5d-76e7-4bc0-8fba-8a143846a699",
+      "branchId": "9b31880c-be5b-4034-a0b6-ad892f5aa831",
+      "customer": null,
+      "deviceId": "c438c7a4-3879-4bfb-81dd-914117fa1438",
+      "issuedAt": "2026-10-16T05:59:59.612Z",
+      "merchant": {
+        "id": "05546aa1-bed3-4166-b374-38f330bd7c05",
+        "trn": "100000000000001",
+        "phone": "Synthetic phone",
+        "address": "Synthetic address",
+        "branchId": "9b31880c-be5b-4034-a0b6-ad892f5aa831",
+        "currency": "AED",
+        "timezone": "Asia/Dubai",
+        "legalName": "Synthetic legal",
+        "branchName": "First",
+        "confirmedAt": "2026-10-16T09:59:59.581+04:00",
+        "confirmedBy": "8d545efa-c1cd-451d-a9b9-0131a787495b",
+        "taxInclusive": true,
+        "taxRegistered": true,
+        "organizationId": "d5109630-318c-4f3a-8646-88182521a065",
+        "calculationVersion": "line-v2"
+      },
+      "payments": [
+        {
+          "method": "cash",
+          "amountFils": 1000
+        }
+      ],
+      "changeFils": 500,
+      "serviceType": "takeaway",
+      "schemaVersion": 1,
+      "documentNumber": "TEST-INV-0000000001",
+      "cashTenderedFils": 1500,
+      "paymentSettlement": "recorded"
+    },
+    "replayed": true,
+    "acknowledgement": {
+      "alg": "ECDSA-P256-SHA256-DER",
+      "keyId": "synthetic-server-key",
+      "format": "pos-signed-v1",
+      "payloadBase64Url": "eyJhdXRob3JpdHlJZCI6IjhjOTNkZGYyLWU1MGYtNDc0NS1hMTYyLTVhYjZlOGY5YTU5YyIsImRldmljZVNlcXVlbmNlIjoxLCJpZCI6IjU2NTUyZmFjLWI2MDAtNDA1OC1iM2Q3LWFkYzEwOTI5ZWUwYyIsImlzc3VhbmNlSWQiOiIyOTIyMjA0Zi0wNmMxLTRkMTYtOTZlMS1mNGIxMzhiY2MwNzIiLCJrZXlFcG9jaCI6IjUwYzZiZmY2LTdkOWYtNGUxYi05NDQ5LWQ2MmU0ZmNlMmRkOSIsImtpbmQiOiJvZmZsaW5lLWFjayIsInBheWxvYWRTaGEyNTYiOiIzYWNhYzNjODZjMWY2ZWM4N2E2MDY0MTA2YmE3MmIzOWE2MTAxNDIzNDhlZjk0YzI0YTcxODg5YmRlN2RmODQ4IiwicmVjZWl2ZWRBdCI6IjIwMjYtMTAtMTZUMDU6NTk6NTkuNjM5WiIsInNjaGVtYVZlcnNpb24iOjF9",
+      "signatureBase64Url": "AQ"
+    }
+  },
+  "reconciliation": {
+    "code": "calculation",
+    "status": "reconciliation_required",
+    "exceptionId": "4b2e38c0-0ce5-4547-8314-205b73034d6b"
+  },
+  "seal": {
+    "status": "sealed",
+    "authorityId": "c14ea6b4-1207-4e59-b4fa-603ba6ea6191",
+    "finalSequence": 2,
+    "finalEventSha256": "3c713b988e229d96b32cac7b12fe579a49e81d7cb676dc891131eb0c8816924e"
+  }
+}
