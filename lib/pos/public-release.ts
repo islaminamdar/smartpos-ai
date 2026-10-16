@@ -28,6 +28,8 @@ export function publicReleaseAccess(
       '/api/pos/offers': ['GET', 'POST'],
       '/api/pos/kitchen': ['GET', 'POST'],
       '/api/pos/kitchen/recovery': ['POST'],
+      '/api/pos/tab-kitchen': ['GET', 'POST'],
+      '/api/pos/tab-kitchen/recovery': ['POST'],
       '/api/pos/open-orders': ['GET', 'POST'],
       '/api/pos/open-orders/recovery': ['POST'],
       '/api/pos/staff': ['GET', 'POST'],

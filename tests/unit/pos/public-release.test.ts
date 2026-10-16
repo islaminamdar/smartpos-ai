@@ -108,6 +108,8 @@ it('limits new manager and recurring billing surfaces to exact methods', () => {
     '/api/pos/offers': ['GET', 'POST'],
     '/api/pos/offers/quote': ['POST'],
     '/api/pos/reports': ['GET'],
+    '/api/pos/tab-kitchen': ['GET', 'POST'],
+    '/api/pos/tab-kitchen/recovery': ['POST'],
     '/api/pos/staff': ['GET', 'POST'],
     '/api/pos/staff/invitations': ['POST'],
     '/api/pos/staff/recovery': ['POST'],
@@ -130,4 +132,22 @@ it('limits new manager and recurring billing surfaces to exact methods', () => {
   expect(publicReleaseAccess('/staff/accept', 'GET', true)).toBe('allow')
   expect(publicReleaseAccess('/staff/accept', 'POST', true)).toBe('not_found')
   expect(publicReleaseAccess('/staff/accept', 'GET', false)).toBe('not_found')
+})
+
+it('passes kitchen dispatch through middleware only in the online pilot', () => {
+  try {
+    for (const enabled of [false, true]) {
+      vi.stubEnv('POS_ONLINE_PILOT', String(enabled))
+      for (const [path, method] of [
+        ['/api/pos/tab-kitchen', 'GET'],
+        ['/api/pos/tab-kitchen', 'POST'],
+        ['/api/pos/tab-kitchen/recovery', 'POST'],
+      ]) {
+        const response = middleware(new NextRequest('https://pos.internext.info' + path, { method }))
+        expect(response.status).toBe(enabled ? 200 : 503)
+      }
+    }
+  } finally {
+    vi.unstubAllEnvs()
+  }
 })
