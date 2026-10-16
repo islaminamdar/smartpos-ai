@@ -8,6 +8,7 @@ import info.internext.pos.offline.OfflineBundle;
 import info.internext.pos.offline.OfflineCalculator;
 import info.internext.pos.offline.OfflineClock;
 import info.internext.pos.offline.SignedProtocol;
+import info.internext.pos.offline.PaymentResolution;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.nio.charset.StandardCharsets;
@@ -26,7 +27,7 @@ import java.util.UUID;
 public final class NativeCheckoutEngine {
     interface UnlockGuard { void requireUnlocked(OfflineBundle.Binding binding) throws Exception; }
     interface ClockSource { OfflineClock.Reading read() throws Exception; }
-    interface Signer { byte[] sign(byte[] canonicalPayload) throws Exception; }
+    public interface Signer { byte[] sign(byte[] canonicalPayload) throws Exception; }
     private final NativeJournal journal;
     private final Map<String, PublicKey> serverKeys;
     private final OfflineBundle.Binding binding;
@@ -68,7 +69,7 @@ public final class NativeCheckoutEngine {
     }
 
     /** Version 4 is additive. A freeze can only be followed by a separately verified
-     * manager result in a future migration; it cannot be erased or called never-collected. */
+     * manager attestation; it cannot be erased or called never-collected. */
     static void createFreezeTables(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE offline_intent_freezes (intent_id TEXT PRIMARY KEY NOT NULL REFERENCES offline_intent_context(intent_id), freeze_id TEXT UNIQUE NOT NULL CHECK(length(freeze_id)=36), proof_payload_sha256 TEXT NOT NULL CHECK(length(proof_payload_sha256)=64), proof_envelope TEXT NOT NULL, envelope_sha256 TEXT NOT NULL CHECK(length(envelope_sha256)=64), frozen_observation_json TEXT NOT NULL)");
         db.execSQL("CREATE TRIGGER offline_freeze_immutable_update BEFORE UPDATE ON offline_intent_freezes BEGIN SELECT RAISE(ABORT,'immutable_freeze'); END");
@@ -77,6 +78,131 @@ public final class NativeCheckoutEngine {
         db.execSQL("CREATE TRIGGER offline_frozen_receipt_guard BEFORE INSERT ON receipts WHEN EXISTS(SELECT 1 FROM offline_intent_freezes WHERE intent_id=NEW.intent_id) BEGIN SELECT RAISE(ABORT,'payment_frozen'); END");
         db.execSQL("CREATE TRIGGER offline_frozen_intent_guard BEFORE UPDATE OF receipt_id ON intents WHEN NEW.receipt_id IS NOT NULL AND EXISTS(SELECT 1 FROM offline_intent_freezes WHERE intent_id=NEW.id) BEGIN SELECT RAISE(ABORT,'payment_frozen'); END");
         db.execSQL("CREATE TRIGGER offline_frozen_cancel_guard BEFORE INSERT ON offline_intent_cancellations WHEN EXISTS(SELECT 1 FROM offline_intent_freezes WHERE intent_id=NEW.intent_id) BEGIN SELECT RAISE(ABORT,'payment_frozen'); END");
+    }
+
+    /** Version 5 adds attestation custody only; original freeze and all fiscal guards remain. */
+    static void createResolutionTables(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE offline_payment_results (intent_id TEXT PRIMARY KEY NOT NULL REFERENCES offline_intent_freezes(intent_id), resolution_id TEXT UNIQUE NOT NULL CHECK(length(resolution_id)=36), payload_sha256 TEXT NOT NULL CHECK(length(payload_sha256)=64), response_json TEXT NOT NULL, response_sha256 TEXT NOT NULL CHECK(length(response_sha256)=64), challenge TEXT NOT NULL CHECK(length(challenge)=64))");
+        for(String table:new String[]{"offline_payment_statuses","offline_payment_conflicts"})
+            db.execSQL("CREATE TABLE "+table+" (intent_id TEXT PRIMARY KEY NOT NULL REFERENCES offline_intent_freezes(intent_id), response_json TEXT NOT NULL, response_sha256 TEXT NOT NULL CHECK(length(response_sha256)=64), challenge TEXT NOT NULL CHECK(length(challenge)=64))");
+        for(String table:new String[]{"offline_payment_results","offline_payment_statuses","offline_payment_conflicts"}){
+            db.execSQL("CREATE TRIGGER "+table+"_immutable_update BEFORE UPDATE ON "+table+" BEGIN SELECT RAISE(ABORT,'immutable_resolution'); END");
+            db.execSQL("CREATE TRIGGER "+table+"_immutable_delete BEFORE DELETE ON "+table+" BEGIN SELECT RAISE(ABORT,'immutable_resolution'); END");
+            db.execSQL("CREATE TRIGGER "+table+"_insert_guard BEFORE INSERT ON "+table+" WHEN EXISTS(SELECT 1 FROM "+table+" WHERE intent_id=NEW.intent_id) OR EXISTS(SELECT 1 FROM intents WHERE id=NEW.intent_id AND receipt_id IS NOT NULL) OR EXISTS(SELECT 1 FROM receipts WHERE intent_id=NEW.intent_id) OR EXISTS(SELECT 1 FROM offline_intent_cancellations WHERE intent_id=NEW.intent_id) BEGIN SELECT RAISE(ABORT,'resolution_conflict'); END");
+        }
+        db.execSQL("CREATE TRIGGER offline_resolution_identity_guard BEFORE INSERT ON offline_payment_results WHEN EXISTS(SELECT 1 FROM offline_payment_results WHERE resolution_id=NEW.resolution_id) BEGIN SELECT RAISE(ABORT,'resolution_conflict'); END");
+    }
+
+    /** Reconstruct original signed scope for custody after logout/revocation/expiry. Never grants unlock. */
+    public static NativeCheckoutEngine forHistorical(NativeJournal journal,Map<String,PublicKey> keys,
+                                                      PublicKey deviceKey,Signer signer,String intentId)throws Exception {
+        uuid(intentId);
+        synchronized(journal){
+            try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT b.authority_envelope,b.snapshot_envelope,b.id FROM offline_intent_context x JOIN offline_bundles b ON b.id=x.authority_id WHERE x.intent_id=?",new String[]{intentId})){
+                if(!c.moveToFirst())throw invalid("intent_missing");
+                JSONObject a=object(SignedProtocol.verify(c.getString(0),keys).payload());
+                OfflineBundle.Binding original=new OfflineBundle.Binding(a.getString("organizationId"),a.getString("branchId"),a.getString("deviceId"),a.getString("actorId"),a.getString("shiftId"),a.getString("keyEpoch"),SignedProtocol.fingerprint(deviceKey));
+                OfflineBundle b=OfflineBundle.verify(c.getString(1),c.getString(0),keys,original);
+                if(!b.authorityId.equals(c.getString(2)))throw invalid("intent_integrity_failed");
+                return new NativeCheckoutEngine(journal,keys,original,deviceKey,ignored->{throw invalid("pin_unlock_required");},()->{throw invalid("historical_clock_unavailable");},signer);
+            }
+        }
+    }
+
+    /** Original proof plus a device-signed fresh challenge. Neither requires an active sales grant. */
+    public JSONObject paymentResolutionRequest(String intentId,String challenge)throws Exception {
+        uuid(intentId);if(challenge==null||!challenge.matches("[a-f0-9]{64}"))throw invalid("payment_resolution_invalid");
+        synchronized(journal){
+            SQLiteDatabase db=journal.getReadableDatabase();JSONObject saved=verifiedFreeze(db,intentId,freezeBase(db,intentId));
+            JSONObject review=saved.getJSONObject("managerReview");JSONObject proof=object(SignedProtocol.verify(saved.getString("envelope"),Collections.singletonMap(SignedProtocol.fingerprint(deviceKey),deviceKey)).payload());
+            JSONObject query=new JSONObject().put("kind","offline-payment-resolution-query").put("schemaVersion",1)
+                .put("authorityId",proof.getString("authorityId")).put("keyEpoch",proof.getString("keyEpoch")).put("deviceId",proof.getString("deviceId"))
+                .put("freezeId",review.getString("freezeId")).put("freezeSha256",review.getString("proofSha256")).put("challenge",challenge);
+            return new JSONObject().put("freezeEnvelope",new JSONObject(saved.getString("envelope"))).put("queryEnvelope",new JSONObject(sign(query)));
+        }
+    }
+
+    /** Atomic acceptance of a server attestation. Invalid network data never changes local custody. */
+    public JSONObject acceptPaymentResolution(String intentId,JSONObject response,String expectedChallenge)throws Exception {
+        uuid(intentId);
+        // Freeze the caller's mutable object once. Transport may contain envelopes larger than a payload.
+        String exact=response.toString();JSONObject copy=object(CanonicalJson.transport(exact,2_000_000));
+        synchronized(journal){
+            SQLiteDatabase db=journal.getWritableDatabase();db.beginTransaction();
+            try{
+                JSONObject saved=verifiedFreeze(db,intentId,freezeBase(db,intentId));
+                JSONObject proof=object(SignedProtocol.verify(saved.getString("envelope"),Collections.singletonMap(SignedProtocol.fingerprint(deviceKey),deviceKey)).payload());
+                String freezeHash=saved.getJSONObject("managerReview").getString("proofSha256");
+                PaymentResolution.Verified incoming=PaymentResolution.verify(copy,expectedChallenge,proof,freezeHash,serverKeys);
+                PaymentResolution.Verified original=storedResolution(db,"offline_payment_results",intentId,proof,freezeHash);
+                if("resolved".equals(incoming.state)){
+                    if(original==null){
+                        ContentValues row=responseRow(intentId,exact,expectedChallenge);row.put("resolution_id",incoming.resolution().getString("resolutionId"));row.put("payload_sha256",incoming.resolutionSha256);
+                        db.insertOrThrow("offline_payment_results",null,row);
+                    }else if(!original.resolutionSha256.equals(incoming.resolutionSha256)){
+                        saveFirstResponse(db,"offline_payment_conflicts",intentId,exact,expectedChallenge);
+                    }
+                }else if("conflict".equals(incoming.state)||"already_issued".equals(incoming.state)){
+                    saveFirstResponse(db,"offline_payment_conflicts",intentId,exact,expectedChallenge);
+                }else saveFirstResponse(db,"offline_payment_statuses",intentId,exact,expectedChallenge);
+                JSONObject review=resolutionReview(db,intentId,saved,proof);
+                boolean resolved="accepted_on_device".equals(review.getString("status"));
+                String status=resolved?"resolved_"+review.getString("decision"):"conflict".equals(review.getString("status"))?"resolution_conflict":"pending";
+                JSONObject result=new JSONObject().put("intentId",intentId).put("status",status).put("resolutionId",resolved?review.getString("resolutionId"):JSONObject.NULL);
+                db.setTransactionSuccessful();return result;
+            }finally{db.endTransaction();}
+        }
+    }
+    private static ContentValues responseRow(String id,String exact,String challenge){
+        ContentValues row=new ContentValues();row.put("intent_id",id);row.put("response_json",exact);row.put("response_sha256",NativeJournal.hash(exact));row.put("challenge",challenge);return row;
+    }
+    private static void saveFirstResponse(SQLiteDatabase db,String table,String id,String exact,String challenge){
+        try(Cursor c=db.rawQuery("SELECT 1 FROM "+table+" WHERE intent_id=?",new String[]{id})){if(c.moveToFirst())return;}
+        db.insertOrThrow(table,null,responseRow(id,exact,challenge));
+    }
+    private PaymentResolution.Verified storedResolution(SQLiteDatabase db,String table,String id,JSONObject proof,String hash)throws Exception {
+        try(Cursor c=db.rawQuery("SELECT response_json,response_sha256,challenge"+("offline_payment_results".equals(table)?",resolution_id,payload_sha256":"")+" FROM "+table+" WHERE intent_id=?",new String[]{id})){
+            if(!c.moveToFirst())return null;String exact=c.getString(0);
+            if(!NativeJournal.hash(exact).equals(c.getString(1)))throw invalid("payment_resolution_integrity_failed");
+            PaymentResolution.Verified value=PaymentResolution.verify(object(CanonicalJson.transport(exact,2_000_000)),c.getString(2),proof,hash,serverKeys);
+            if("offline_payment_results".equals(table)&&(!"resolved".equals(value.state)||!value.resolutionSha256.equals(c.getString(4))||!value.resolution().getString("resolutionId").equals(c.getString(3))))throw invalid("payment_resolution_integrity_failed");
+            if("offline_payment_statuses".equals(table)&&!"pending".equals(value.state))throw invalid("payment_resolution_integrity_failed");
+            return value;
+        }
+    }
+    private JSONObject resolutionReview(SQLiteDatabase db,String id,JSONObject saved,JSONObject proof)throws Exception {
+        JSONObject review=saved.getJSONObject("managerReview");String hash=review.getString("proofSha256");
+        PaymentResolution.Verified result=storedResolution(db,"offline_payment_results",id,proof,hash);
+        PaymentResolution.Verified conflict=storedResolution(db,"offline_payment_conflicts",id,proof,hash);
+        PaymentResolution.Verified pending=storedResolution(db,"offline_payment_statuses",id,proof,hash);
+        if(conflict!=null){
+            boolean contradictory="conflict".equals(conflict.state)||"already_issued".equals(conflict.state)||("resolved".equals(conflict.state)&&result!=null&&!result.resolutionSha256.equals(conflict.resolutionSha256));
+            if(!contradictory)throw invalid("payment_resolution_integrity_failed");
+            return review.put("status","conflict");
+        }
+        if(result!=null){JSONObject r=result.resolution();return review.put("status","accepted_on_device").put("resolutionId",r.getString("resolutionId")).put("decision",r.getString("decision")).put("resolvedAt",r.getString("resolvedAt"));}
+        return review.put("status",pending==null?"saved_locally":"pending");
+    }
+
+    boolean isPaymentResolved(String intentId)throws Exception {
+        return "manager_resolved".equals(forHistorical(journal,serverKeys,deviceKey,bytes->{throw invalid("historical_signing_unavailable");},intentId).getIntent(intentId).getString("state"));
+    }
+
+    /** Every unresolved candidate is verified, including historical scopes, before it can be excluded. */
+    public static boolean hasUncertainPayments(NativeJournal journal,Map<String,PublicKey> keys,PublicKey deviceKey)throws Exception {
+        return hasUncertainPayments(journal,keys,deviceKey,null);
+    }
+    private static boolean hasUncertainPayments(NativeJournal journal,Map<String,PublicKey> keys,PublicKey deviceKey,String excluding)throws Exception {
+        synchronized(journal){
+            try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT i.id FROM intents i LEFT JOIN offline_intent_cancellations c ON c.intent_id=i.id WHERE i.receipt_id IS NULL AND c.intent_id IS NULL ORDER BY i.rowid",null)){
+                while(c.moveToNext()){
+                    if(c.getString(0).equals(excluding))continue;
+                    NativeCheckoutEngine historical=forHistorical(journal,keys,deviceKey,bytes->{throw invalid("historical_signing_unavailable");},c.getString(0));
+                    if(!"manager_resolved".equals(historical.getIntent(c.getString(0)).getString("state")))return true;
+                }
+                return false;
+            }
+        }
     }
 
     /** freshServerMs must originate from a fresh authenticated native HTTPS exchange, never JS
@@ -181,7 +307,8 @@ public final class NativeCheckoutEngine {
                     String original = receiptEnvelope(db, intent.getString("orderId")); db.setTransactionSuccessful(); return original;
                 }
                 if ("cancelled".equals(intent.getString("state"))) throw invalid("intent_cancelled");
-                if ("frozen_for_manager".equals(intent.getString("state"))) throw invalid("payment_frozen");
+                if ("frozen_for_manager".equals(intent.getString("state")) || "manager_resolved".equals(intent.getString("state"))) throw invalid("payment_frozen");
+                if(hasUncertainPayments(journal,serverKeys,deviceKey,intentId))throw invalid("payment_reconciliation_required");
                 JSONObject request = intent.getJSONObject("request"); OfflineBundle bundle = bundle(db, request.getString("authorityId"));
                 unlock.requireUnlocked(binding); requireStorableCustomer(request);
                 OfflineCalculator.Calculation calculation = calculate(bundle, request);
@@ -219,7 +346,7 @@ public final class NativeCheckoutEngine {
                 JSONObject intent = intentState(db, intentId);
                 unlock.requireUnlocked(binding);
                 if ("committed".equals(intent.getString("state"))) throw invalid("already_issued");
-                if ("frozen_for_manager".equals(intent.getString("state"))) throw invalid("payment_frozen");
+                if ("frozen_for_manager".equals(intent.getString("state")) || "manager_resolved".equals(intent.getString("state"))) throw invalid("payment_frozen");
                 if ("cancelled".equals(intent.getString("state"))) {
                     try (Cursor c = db.rawQuery("SELECT reason FROM offline_intent_cancellations WHERE intent_id=?", new String[]{intentId})) {
                         if (!c.moveToFirst() || !reason.equals(c.getString(0))) throw invalid("cancellation_conflict");
@@ -244,7 +371,7 @@ public final class NativeCheckoutEngine {
                 JSONObject saved=intentState(db,intentId);
                 if("committed".equals(saved.getString("state")))throw invalid("already_issued");
                 if("cancelled".equals(saved.getString("state")))throw invalid("intent_cancelled");
-                if("frozen_for_manager".equals(saved.getString("state"))){String original=verifiedFreeze(db,intentId,base).getString("envelope");db.setTransactionSuccessful();return original;}
+                if("frozen_for_manager".equals(saved.getString("state"))||"manager_resolved".equals(saved.getString("state"))){String original=verifiedFreeze(db,intentId,base).getString("envelope");db.setTransactionSuccessful();return original;}
                 JSONObject head;
                 try(Cursor c=db.rawQuery("SELECT key_epoch,sequence,event_hash FROM offline_chain WHERE slot=1",null)){
                     if(!c.moveToFirst()||!binding.keyEpoch.equals(c.getString(0)))throw invalid("chain_missing");
@@ -456,7 +583,7 @@ public final class NativeCheckoutEngine {
     private static void saveClock(SQLiteDatabase db,String id,OfflineClock.Tick tick) throws Exception {
         ContentValues row=new ContentValues(); row.put("clock_json",tick.nextState.toJson()); db.update("offline_authority_state",row,"authority_id=?",new String[]{id});
     }
-    private static boolean hasUncertain(SQLiteDatabase db) { return exists(db,"SELECT 1 FROM intents i LEFT JOIN offline_intent_cancellations c ON c.intent_id=i.id WHERE i.receipt_id IS NULL AND c.intent_id IS NULL LIMIT 1"); }
+    private boolean hasUncertain(SQLiteDatabase db)throws Exception { return hasUncertainPayments(journal,serverKeys,deviceKey); }
     private static boolean exists(SQLiteDatabase db,String sql) { try(Cursor c=db.rawQuery(sql,null)){return c.moveToFirst();} }
     private JSONObject intentState(SQLiteDatabase db,String id) throws Exception {
         try(Cursor c=db.rawQuery("SELECT i.request_json,i.receipt_id,x.order_id,x.document_id,c.intent_id,f.intent_id FROM intents i JOIN offline_intent_context x ON x.intent_id=i.id LEFT JOIN offline_intent_cancellations c ON c.intent_id=i.id LEFT JOIN offline_intent_freezes f ON f.intent_id=i.id WHERE i.id=?",new String[]{id})) {
@@ -464,7 +591,12 @@ public final class NativeCheckoutEngine {
             if(!c.isNull(5)&&(!c.isNull(1)||!c.isNull(4)))throw invalid("freeze_integrity_failed");
             JSONObject result=new JSONObject().put("intentId",id).put("state",!c.isNull(1)?"committed":!c.isNull(4)?"cancelled":!c.isNull(5)?"frozen_for_manager":"payment_confirmation_required")
                 .put("orderId",c.getString(2)).put("documentId",c.getString(3)).put("request",CanonicalJson.parse(c.getString(0).getBytes(StandardCharsets.UTF_8)));
-            if(!c.isNull(5))result.put("managerReview",verifiedFreeze(db,id,freezeBase(db,id)).getJSONObject("managerReview"));
+            if(!c.isNull(5)){
+                JSONObject saved=verifiedFreeze(db,id,freezeBase(db,id));
+                JSONObject proof=object(SignedProtocol.verify(saved.getString("envelope"),Collections.singletonMap(SignedProtocol.fingerprint(deviceKey),deviceKey)).payload());
+                JSONObject review=resolutionReview(db,id,saved,proof);result.put("managerReview",review);
+                if("accepted_on_device".equals(review.getString("status")))result.put("state","manager_resolved");
+            }
             return result;
         }
     }

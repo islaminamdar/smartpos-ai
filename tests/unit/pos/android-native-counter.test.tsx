@@ -10,6 +10,7 @@ const bridge = vi.hoisted(() => ({
   confirmNativePaymentIntent: vi.fn(),
   cancelNativeUncollectedIntent: vi.fn(),
   freezeNativePaymentForManager: vi.fn(),
+  syncNativeFrozenPayment: vi.fn(),
   unlockNativeOffline: vi.fn(),
 }))
 vi.mock('../../../apps/android-pos/src/native', async () => ({
@@ -610,4 +611,206 @@ it('keeps unsupported historical buyer payment in custody with readable manager-
   fireEvent.click(screen.getByRole('checkbox', { name: /I confirm permanently freezing/ }))
   expect(screen.getByRole('button', { name: 'Permanently freeze payment' })).toBeEnabled()
   expect(bridge.beginNativePaymentIntent).not.toHaveBeenCalled()
+})
+
+const frozenReview = () => ({
+  ...intent,
+  state: 'frozen_for_manager' as const,
+  canConfirm: false,
+  canCancel: false,
+  reasonCode: 'payment_frozen',
+  managerReview: {
+    freezeId: id(12),
+    proofSha256: 'a'.repeat(64),
+    status: 'saved_locally' as const,
+  },
+})
+const acceptedReview = (decision: 'funds_returned' | 'payment_voided' = 'funds_returned') => {
+  const request =
+    decision === 'payment_voided'
+      ? { ...intent.request, cashTenderedFils: 0, recordedCardFils: intent.quote.totals.grossFils }
+      : intent.request
+  return {
+    ...intent,
+    request,
+    quote:
+      decision === 'payment_voided'
+        ? {
+            ...intent.quote,
+            request,
+            cashTenderedFils: 0,
+            payments: [{ method: 'card' as const, amountFils: intent.quote.totals.grossFils }],
+          }
+        : intent.quote,
+    state: 'manager_resolved' as const,
+    canConfirm: false,
+    canCancel: false,
+    reasonCode: null,
+    managerReview: {
+      freezeId: id(12),
+      proofSha256: 'a'.repeat(64),
+      status: 'accepted_on_device' as const,
+      resolutionId: id(13),
+      decision,
+      resolvedAt: '2026-10-16T07:00:00.000Z',
+    },
+  }
+}
+const frozenState = () => ({
+  ...state,
+  canIssue: false,
+  reasonCode: 'payment_frozen',
+  pendingIntentId: intent.intentId,
+  unresolvedIntent: frozenReview(),
+})
+const resolvedState = () => ({
+  ...state,
+  canIssue: false,
+  reasonCode: 'native_checkout_not_enabled',
+  pendingIntentId: null,
+  unresolvedIntent: null,
+  lastResolvedIntentId: intent.intentId,
+  lastResolvedIntent: acceptedReview(),
+})
+it('sends only the original frozen intent and keeps pending manager review on hold', async () => {
+  bridge.readNativeCheckout.mockResolvedValue(frozenState())
+  bridge.syncNativeFrozenPayment.mockResolvedValue({
+    ...frozenReview(),
+    managerReview: { ...frozenReview().managerReview, status: 'pending' },
+  })
+  const p = props()
+  render(<NativeCounter {...p} />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Send for manager review' }))
+  await screen.findByText('Sent · completed result pending')
+  expect(bridge.syncNativeFrozenPayment).toHaveBeenCalledExactlyOnceWith(intent.intentId)
+  expect(screen.queryByText(/signature pending/i)).toBeNull()
+  expect(
+    screen.queryByRole('button', { name: 'Confirm received payment & save receipt' })
+  ).toBeNull()
+  expect(p.onHoldChange).toHaveBeenLastCalledWith(true)
+})
+it('shows durable accepted full-return result without issuing an invoice or enabling sales from acceptance', async () => {
+  bridge.readNativeCheckout.mockResolvedValue(frozenState())
+  bridge.syncNativeFrozenPayment.mockResolvedValue(acceptedReview())
+  const p = props()
+  render(<NativeCounter {...p} />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Send for manager review' }))
+  await screen.findByRole('heading', { name: 'Manager decision saved on this device' })
+  expect(screen.getByText('Manager’s full-return decision saved on this device.')).toBeVisible()
+  expect(screen.getByText(/The app did not return money or void a card transaction/)).toBeVisible()
+  expect(screen.queryByRole('heading', { name: 'Choose items' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Permanently freeze payment' })).toBeNull()
+  expect(bridge.confirmNativePaymentIntent).not.toHaveBeenCalled()
+  expect(bridge.cancelNativeUncollectedIntent).not.toHaveBeenCalled()
+  expect(p.onHoldChange).toHaveBeenLastCalledWith(false)
+  bridge.readNativeCheckout.mockResolvedValue(resolvedState())
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Check counter status for a different order' })
+  )
+  await screen.findByRole('heading', { name: 'Choose items' })
+  expect(screen.getByText(/New sales paused/)).toBeVisible()
+  expect(bridge.beginNativePaymentIntent).not.toHaveBeenCalled()
+})
+it('restores the accepted card-authorization-void result after restart with its original basket', async () => {
+  bridge.readNativeCheckout.mockResolvedValue({
+    ...resolvedState(),
+    lastResolvedIntent: acceptedReview('payment_voided'),
+  })
+  render(<NativeCounter {...props()} />)
+  await screen.findByText('Manager’s card-authorization-void decision saved on this device.')
+  expect(screen.getByText('QA Milk cake')).toBeVisible()
+  expect(screen.getByText('16 Oct 2026, 11:00 Dubai time')).toBeVisible()
+  expect(bridge.syncNativeFrozenPayment).not.toHaveBeenCalled()
+  expect(bridge.confirmNativePaymentIntent).not.toHaveBeenCalled()
+})
+it('lost manager sync reads the same original intent before any retry and accepts its durable result', async () => {
+  bridge.readNativeCheckout.mockResolvedValue(frozenState())
+  bridge.syncNativeFrozenPayment.mockRejectedValue(new Error('offline_payment_recovery_uncertain'))
+  render(<NativeCounter {...props()} />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Send for manager review' }))
+  await screen.findByRole('alert')
+  expect(screen.queryByRole('button', { name: 'Send for manager review' })).toBeNull()
+  bridge.readNativePaymentIntent.mockResolvedValue(acceptedReview())
+  fireEvent.click(screen.getByRole('button', { name: 'Check saved payment' }))
+  await screen.findByRole('heading', { name: 'Manager decision saved on this device' })
+  expect(bridge.readNativePaymentIntent).toHaveBeenCalledExactlyOnceWith(intent.intentId)
+  expect(bridge.syncNativeFrozenPayment).toHaveBeenCalledTimes(1)
+})
+it('conflicting or unsupported review remains held with no terminal outcome claim', async () => {
+  bridge.readNativeCheckout.mockResolvedValue({
+    ...frozenState(),
+    unresolvedIntent: {
+      ...frozenReview(),
+      managerReview: { ...frozenReview().managerReview, status: 'conflict' },
+    },
+  })
+  const p = props()
+  render(<NativeCounter {...p} />)
+  await screen.findByText('On hold · support review needed')
+  expect(screen.getByText(/conflicting records or needs support review/)).toBeVisible()
+  expect(
+    screen.queryByRole('heading', { name: 'Manager decision saved on this device' })
+  ).toBeNull()
+  expect(p.onHoldChange).toHaveBeenLastCalledWith(true)
+})
+it('locked accepted metadata never exposes basket, proof or result and offers native unlock', async () => {
+  bridge.readNativeCheckout.mockResolvedValue({
+    ...resolvedState(),
+    context: null,
+    lastResolvedIntent: null,
+    reasonCode: 'pin_unlock_required',
+  })
+  render(<NativeCounter {...props()} />)
+  await screen.findByRole('heading', { name: 'A manager result is saved on this device' })
+  expect(screen.queryByText('QA Milk cake')).toBeNull()
+  expect(screen.queryByText(id(13))).toBeNull()
+  expect(screen.queryByRole('heading', { name: 'Choose items' })).toBeNull()
+  bridge.readNativeCheckout.mockResolvedValue(resolvedState())
+  fireEvent.click(screen.getByRole('button', { name: 'Unlock saved manager result' }))
+  await screen.findByRole('heading', { name: 'Manager decision saved on this device' })
+  expect(bridge.unlockNativeOffline).toHaveBeenCalledTimes(1)
+})
+it('native lock wipes an accepted result immediately, including collapsed support references', async () => {
+  bridge.readNativeCheckout.mockResolvedValue(resolvedState())
+  render(<NativeCounter {...props()} />)
+  await screen.findByRole('heading', { name: 'Manager decision saved on this device' })
+  act(() => bridge.subscribeNativeCheckoutLock.mock.calls[0][0]())
+  expect(screen.queryByText('QA Milk cake')).toBeNull()
+  expect(screen.queryByText(id(13))).toBeNull()
+  expect(screen.queryByText('Manager’s full-return decision saved on this device.')).toBeNull()
+})
+it('a delayed sync result after lock cannot expose private details or release the hold', async () => {
+  let resolve!: (value: unknown) => void
+  bridge.readNativeCheckout.mockResolvedValue(frozenState())
+  bridge.syncNativeFrozenPayment.mockReturnValue(
+    new Promise((r) => {
+      resolve = r
+    })
+  )
+  const p = props()
+  render(<NativeCounter {...p} />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Send for manager review' }))
+  await waitFor(() => expect(resolve).toBeTypeOf('function'))
+  act(() => bridge.subscribeNativeCheckoutLock.mock.calls[0][0]())
+  await act(async () => resolve(acceptedReview()))
+  expect(screen.queryByText('QA Milk cake')).toBeNull()
+  expect(
+    screen.queryByRole('heading', { name: 'Manager decision saved on this device' })
+  ).toBeNull()
+  expect(p.onHoldChange).toHaveBeenLastCalledWith(true)
+})
+it('a result for another freeze never clears the original frozen payment', async () => {
+  bridge.readNativeCheckout.mockResolvedValue(frozenState())
+  bridge.syncNativeFrozenPayment.mockResolvedValue({
+    ...acceptedReview(),
+    managerReview: { ...acceptedReview().managerReview, freezeId: id(99) },
+  })
+  const p = props()
+  render(<NativeCounter {...p} />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Send for manager review' }))
+  await screen.findByRole('alert')
+  expect(
+    screen.queryByRole('heading', { name: 'Manager decision saved on this device' })
+  ).toBeNull()
+  expect(p.onHoldChange).toHaveBeenLastCalledWith(true)
 })

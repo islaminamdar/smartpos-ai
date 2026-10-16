@@ -18,7 +18,7 @@ A list refresh invalidates the open detail until reread. Failed detail reads ret
 
 - **Decision saved · signature pending:** manager attestation accepted; do not perform the external return/void again.
 - **Signed result ready:** server result available; not a processor confirmation or device acknowledgement.
-- **Original Android device confirmation: not implemented:** payment hold remains. No UI path claims that funds were returned by this application or that the device was cleared.
+- **Device acceptance is not reported on this screen:** check the original Android device. Candidate native acceptance is now implemented separately; the server has no device acknowledgement. A signed server result alone cannot establish whether the device hold remains or has resolved. No UI path claims that funds were returned by this application.
 
 ## Automated evidence
 

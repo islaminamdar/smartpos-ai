@@ -1,3 +1,4 @@
+import { FrozenPaymentReview, AcceptedPaymentReview } from './NativeManagerReview'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   type NativeCheckoutState,
@@ -13,6 +14,7 @@ import {
   confirmNativePaymentIntent,
   cancelNativeUncollectedIntent,
   freezeNativePaymentForManager,
+  syncNativeFrozenPayment,
   unlockNativeOffline,
   checkoutRequestKey,
   quoteInputKey,
@@ -180,6 +182,7 @@ export default function NativeCounter({
   const [cancelReason, setCancelReason] = useState('')
   const [search, setSearch] = useState('')
   const [showLast, setShowLast] = useState(true)
+  const [showResolved, setShowResolved] = useState(true)
   const mounted = useRef(false)
   const generation = useRef(0)
   const active = useRef(false)
@@ -244,6 +247,7 @@ export default function NativeCounter({
         : null
       if (appliedScope.current !== scope) {
         clearDraft()
+        setShowResolved(true)
         appliedScope.current = scope
         const p = next.context?.permissions
         setTender(p?.cash ? 'cash' : p?.recordedCard ? 'card' : 'mixed')
@@ -255,7 +259,7 @@ export default function NativeCounter({
       setState(next)
       setFresh(true)
       setCheckedRevision(version)
-      setIntent(next.unresolvedIntent)
+      setIntent(next.unresolvedIntent ?? next.lastResolvedIntent)
     },
     [clearDraft]
   )
@@ -309,6 +313,7 @@ export default function NativeCounter({
               context: null,
               unresolvedIntent: null,
               lastReceipt: null,
+              lastResolvedIntent: null,
             }
           : null
       )
@@ -351,7 +356,23 @@ export default function NativeCounter({
   // Scope changes invalidate old details immediately, before any delayed native read resolves.
   const visibleIntent =
     !uncertain && listening && ready && fresh && checkedRevision === revision ? pending : null
+  const resolvedIntent =
+    !uncertain &&
+    listening &&
+    ready &&
+    fresh &&
+    checkedRevision === revision &&
+    showResolved &&
+    !pendingId &&
+    !pending
+      ? intent?.state === 'manager_resolved'
+        ? intent
+        : state?.lastResolvedIntent?.state === 'manager_resolved'
+          ? state.lastResolvedIntent
+          : null
+      : null
   const receipt =
+    !resolvedIntent &&
     !pendingId &&
     !pending &&
     !uncertain &&
@@ -489,6 +510,10 @@ export default function NativeCounter({
               : null,
             lastReceiptId: next.receipt?.id ?? previous.lastReceiptId,
             lastReceipt: next.receipt ?? previous.lastReceipt,
+            lastResolvedIntentId:
+              next.state === 'manager_resolved' ? next.intentId : previous.lastResolvedIntentId,
+            lastResolvedIntent:
+              next.state === 'manager_resolved' ? next : previous.lastResolvedIntent,
           }
         : previous
     )
@@ -496,7 +521,20 @@ export default function NativeCounter({
       clearDraft()
       setShowLast(false)
       setNotice(
-        'Payment permanently frozen and saved on this device. Manager review has not been sent. Keep this device’s records.'
+        next.managerReview.status === 'saved_locally'
+          ? 'Payment permanently frozen and saved on this device. Manager review has not been sent. Keep this device’s records.'
+          : next.managerReview.status === 'pending'
+            ? 'Review sent. A completed manager result is still pending; do not repeat any payment action.'
+            : 'The original payment remains on hold. Contact your manager or support.'
+      )
+      onRecordsChanged()
+    }
+    if (next.state === 'manager_resolved') {
+      clearDraft()
+      setShowLast(false)
+      setShowResolved(true)
+      setNotice(
+        'The manager’s signed result is verified and saved on this device. Do not repeat the return or void.'
       )
       onRecordsChanged()
     }
@@ -684,6 +722,51 @@ export default function NativeCounter({
       finish()
     }
   }
+  async function syncManagerReview() {
+    if (
+      !visibleIntent ||
+      visibleIntent.state !== 'frozen_for_manager' ||
+      uncertain ||
+      !knownCheckoutReason(visibleIntent.reasonCode)
+    )
+      return
+    const original = { intentId: visibleIntent.intentId, request: visibleIntent.request }
+    const freeze = visibleIntent.managerReview
+    if (!start('Checking the original manager review…')) return
+    const operationEpoch = epoch.current,
+      operationRevision = revision
+    setUncertain(original)
+    onHoldChange(true)
+    try {
+      const next = await syncNativeFrozenPayment(original.intentId)
+      if (
+        !mounted.current ||
+        operationEpoch !== epoch.current ||
+        operationRevision !== currentRevision.current
+      )
+        return
+      if (
+        (next.state !== 'frozen_for_manager' && next.state !== 'manager_resolved') ||
+        next.managerReview.freezeId !== freeze.freezeId ||
+        next.managerReview.proofSha256 !== freeze.proofSha256
+      )
+        throw new Error('invalid_native_response')
+      acceptIntent(next, original)
+    } catch (failure) {
+      if (
+        mounted.current &&
+        operationEpoch === epoch.current &&
+        operationRevision === currentRevision.current
+      ) {
+        setFresh(false)
+        setError(
+          `${nativeCheckoutError(failure)} Check this same saved payment before retrying the review. Do not collect again or repeat a return or void.`
+        )
+      }
+    } finally {
+      finish()
+    }
+  }
   async function unlock() {
     if (!start('Complete payment review unlock in the Android PIN dialog.')) return
     setFresh(false)
@@ -802,34 +885,11 @@ export default function NativeCounter({
               )}
               <Bill bill={visibleIntent.quote} />
               {visibleIntent.state === 'frozen_for_manager' ? (
-                <>
-                  <p className="access-note">
-                    Saved on this device. Manager review has not been sent, and no manager decision
-                    is recorded. This is not a tax invoice or confirmation of a payment return.
-                  </p>
-                  <p>
-                    Further collection, receipt issuance and no-money cancellation are permanently
-                    blocked for this payment. New sales and setup changes remain on hold. Keep this
-                    app’s data; manager resolution is not available in this version.
-                  </p>
-                  <dl className="record-values">
-                    <div>
-                      <dt>Freeze reference</dt>
-                      <dd>
-                        <span className="reference">{visibleIntent.managerReview.freezeId}</span>
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>Review delivery</dt>
-                      <dd>Saved locally · not sent</dd>
-                    </div>
-                  </dl>
-                  <details className="counter-details">
-                    <summary>Support details</summary>
-                    <p>Saved proof fingerprint</p>
-                    <span className="reference">{visibleIntent.managerReview.proofSha256}</span>
-                  </details>
-                </>
+                <FrozenPaymentReview
+                  intent={visibleIntent}
+                  disabled={!!busy || !ready || !knownCheckoutReason(visibleIntent.reasonCode)}
+                  onCheck={() => void syncManagerReview()}
+                />
               ) : (
                 <>
                   <p className="access-note">
@@ -958,6 +1018,51 @@ export default function NativeCounter({
               )}
             </section>
           )}
+          {resolvedIntent && (
+            <section className="payment-review" aria-labelledby="accepted-payment-heading">
+              <h3 id="accepted-payment-heading">Manager decision saved on this device</h3>
+              <p className="help">
+                Original planned payment · {serviceNames[resolvedIntent.request.serviceType]}
+              </p>
+              <Bill bill={resolvedIntent.quote} />
+              <AcceptedPaymentReview intent={resolvedIntent} />
+              <button
+                className="secondary"
+                disabled={!!busy || hold || !ready}
+                onClick={() => {
+                  setShowResolved(false)
+                  setIntent(null)
+                  clearDraft()
+                  void check()
+                }}
+              >
+                Check counter status for a different order
+              </button>
+            </section>
+          )}
+          {!hold &&
+            !resolvedIntent &&
+            showResolved &&
+            state?.lastResolvedIntentId &&
+            !state.lastResolvedIntent && (
+              <section className="payment-attention">
+                <h3>A manager result is saved on this device</h3>
+                <p>
+                  Sign in with the original staff account and unlock to review it. No payment needs
+                  collecting again.
+                </p>
+                <button
+                  className="secondary"
+                  disabled={!!busy || !ready}
+                  onClick={() => void unlock()}
+                >
+                  Unlock saved manager result
+                </button>
+                <button className="secondary" disabled={!!busy} onClick={onGoToDevice}>
+                  Go to account access
+                </button>
+              </section>
+            )}
           {receipt && (
             <>
               <NativeReceiptView receipt={receipt} />
@@ -975,7 +1080,7 @@ export default function NativeCounter({
               </button>
             </>
           )}
-          {!hold && !visibleIntent && !receipt && context && (
+          {!hold && !visibleIntent && !resolvedIntent && !receipt && context && (
             <>
               {!state?.canIssue && (
                 <p className="access-note">
@@ -1191,27 +1296,30 @@ export default function NativeCounter({
               </div>
             </>
           )}
-          {!hold && !context && !receipt && (
+          {!hold && !context && !resolvedIntent && !receipt && (
             <p className="access-note">
               Sign in and prepare this counter from This device to access the saved menu. Sales may
               still be paused after preparation.
             </p>
           )}
-          {!receipt && state?.lastReceiptId && !state.lastReceipt && (
-            <div>
-              <p className="access-note">
-                A receipt is saved on this device. Sign in with its original staff account and
-                unlock payment review to see the bill details.
-              </p>
-              <button
-                className="secondary"
-                disabled={!!busy || !ready}
-                onClick={() => void unlock()}
-              >
-                Unlock saved receipt
-              </button>
-            </div>
-          )}
+          {!receipt &&
+            !state?.lastResolvedIntentId &&
+            state?.lastReceiptId &&
+            !state.lastReceipt && (
+              <div>
+                <p className="access-note">
+                  A receipt is saved on this device. Sign in with its original staff account and
+                  unlock payment review to see the bill details.
+                </p>
+                <button
+                  className="secondary"
+                  disabled={!!busy || !ready}
+                  onClick={() => void unlock()}
+                >
+                  Unlock saved receipt
+                </button>
+              </div>
+            )}
         </>
       )}
     </section>

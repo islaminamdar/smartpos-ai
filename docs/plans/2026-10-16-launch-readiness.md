@@ -116,3 +116,7 @@ After the checkpoint above, candidate `6096801` added SQL018 freeze registration
 ## Subsequent candidate progress: manager payment review
 
 SQL020 adds authenticated manager/owner case reads and full return/card-void attestations with immutable signed results. The candidate browser review has a private retry journal and fresh same-account password confirmation. See [implemented scope and verification limits](../contracts/20261016-offline-payment-manager-review.md). SQL017–020 remain unapplied; decision POST is excluded from the hosted allowlist. Native result retrieval/acceptance and full operational acceptance remain pending. These checks do not establish an actual payment-provider void, physical cash return or native delivery.
+
+## Subsequent candidate progress: native outcome acceptance
+
+The next candidate adds SQL021 historical device queries, challenge-bound signed outcome delivery and native SQLite v5 immutable acceptance/conflict custody. See [native retrieval scope and limits](../contracts/20261016-native-payment-result-retrieval.md). A resolved payment is displayed separately from a bill and grants no new selling permission. The manager browser reports device delivery as unconfirmed. SQL017–021 remain unapplied, offline selling remains disabled and the hosted manager writer remains excluded. Controlled next allocations/recovery, complete native/server journeys and physical manager/printer acceptance remain release requirements.

@@ -1,6 +1,6 @@
 # Manager review of frozen offline payments
 
-Candidate implementation, 2026-10-16. This adds manager review and records completed full returns or card authorization voids. It does not move funds, call a payment provider, issue a replacement invoice, or clear an Android payment hold. SQL017–020 are not applied live. Native signed-result retrieval and acceptance remain pending. The hosted release allowlist deliberately excludes the decision POST, even when the online pilot is enabled.
+Candidate implementation, 2026-10-16. This adds manager review and records completed full returns or card authorization voids. It does not move funds, call a payment provider, issue a replacement invoice, or directly clear an Android payment hold. SQL017–021 are not applied live. The subsequent [native result candidate](20261016-native-payment-result-retrieval.md) implements separate device retrieval and acceptance; operational release acceptance remains pending. The hosted release allowlist deliberately excludes the decision POST, even when the online pilot is enabled.
 
 ## Authorization and release controls
 
@@ -26,7 +26,7 @@ SQL020 stores private, RLS-protected decisions and first result signatures throu
 
 An accepted result binds the manager, exact original scope, original native request hash, freeze hash and evidence hash. The service signs only the independently verified committed result, then verifies the stored first signature against pinned server keys. A signing interruption returns `delivery_pending`; subsequent authorized detail retrieval may attach the missing signature. Existing decisions remain readable when new decisions are disabled. Signature recovery does not override a late financial conflict or generate another external return.
 
-The public result includes `nativeDelivery: 'not_implemented'`. `recorded` means the signed server outcome exists, not that the device accepted it or that the processor verified a void. Native acceptance must be implemented separately before exposing the manager writer.
+The result includes `nativeDelivery: 'not_confirmed'`. `recorded` means the signed server outcome exists, not that the device accepted it or that the processor verified a void. The candidate has no device-delivery acknowledgement back to this browser screen. Full native/server and operational acceptance still precede exposing the manager writer.
 
 ## Browser behavior
 

@@ -18,6 +18,7 @@ import info.internext.pos.storage.NativeOfflineCoordinator;
 import info.internext.pos.storage.NativeReconciliation;
 import info.internext.pos.storage.NativeCheckoutCoordinator;
 import info.internext.pos.storage.NativeBundleRecovery;
+import info.internext.pos.storage.NativePaymentRecovery;
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -31,6 +32,7 @@ public final class NativeLedgerPlugin extends Plugin {
     private NativeReconciliation reconciliation;
     private NativeCheckoutCoordinator checkout;
     private NativeBundleRecovery bundleRecovery;
+    private NativePaymentRecovery paymentRecovery;
     private volatile boolean foreground=true;
     private final java.util.concurrent.atomic.AtomicLong checkoutEpoch=new java.util.concurrent.atomic.AtomicLong();
     private AlertDialog credentials;
@@ -47,6 +49,7 @@ public final class NativeLedgerPlugin extends Plugin {
     private NativeReconciliation reconciliation()throws Exception{if(reconciliation==null)reconciliation=new NativeReconciliation(getContext(),journal,session());return reconciliation;}
     private NativeCheckoutCoordinator checkout()throws Exception{if(checkout==null)checkout=new NativeCheckoutCoordinator(journal,offline());return checkout;}
     private NativeBundleRecovery bundleRecovery()throws Exception{if(bundleRecovery==null)bundleRecovery=new NativeBundleRecovery(getContext(),journal,session());return bundleRecovery;}
+    private NativePaymentRecovery paymentRecovery()throws Exception{if(paymentRecovery==null)paymentRecovery=new NativePaymentRecovery(getContext(),journal,session());return paymentRecovery;}
     @PluginMethod public void getBundleRecoveryState(PluginCall call){
         if(call.getData().length()!=0){call.reject("Check the saved allocation.","offline_context_changed");return;}
         execute(call,()->bundleRecovery().getState(),true);
@@ -85,6 +88,12 @@ public final class NativeLedgerPlugin extends Plugin {
     @PluginMethod public void confirmPaymentIntent(PluginCall call){checkoutCall(call,()->checkout().confirmPaymentIntent(call.getData().getString("intentId")),"intentId");}
     @PluginMethod public void cancelUncollectedIntent(PluginCall call){checkoutCall(call,()->checkout().cancelUncollectedIntent(call.getData().getString("intentId"),call.getData().getString("reason")),"intentId","reason");}
     @PluginMethod public void freezePaymentIntentForManager(PluginCall call){checkoutCall(call,()->checkout().freezePaymentIntentForManager(call.getData().getString("intentId")),"intentId");}
+    @PluginMethod public void syncFrozenPayment(PluginCall call){checkoutCall(call,()->{
+        String id=call.getData().getString("intentId");
+        // Custody may finish while staff access is unavailable; the final display still
+        // requires the original scope/PIN and foreground lifecycle through checkoutCall.
+        paymentRecovery().recover(id);return checkout().getPaymentIntent(id);
+    },"intentId");}
     @PluginMethod public void getReceipt(PluginCall call){checkoutCall(call,()->checkout().getReceipt(call.getData().getString("id")),"id");}
     @PluginMethod public void getReconciliationState(PluginCall call){execute(call,()->reconciliation().getState(),true);}
     @PluginMethod public void reconcileOffline(PluginCall call){execute(call,()->reconciliation().reconcile(),true);}

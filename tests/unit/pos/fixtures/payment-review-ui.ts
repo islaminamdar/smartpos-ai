@@ -93,7 +93,7 @@ export const reviewDetail: PaymentReviewDetail = {
   resolution: null,
   resolutionEnvelope: null,
   capabilities: { policyEnabled: true, originalShiftOpen: true, canDecide: true, holdCode: null },
-  nativeDelivery: 'not_implemented',
+  nativeDelivery: 'not_confirmed',
 }
 export const reviewRequest: PaymentDecisionRequest = {
   requestId: reviewId(14),

@@ -118,3 +118,43 @@ describe('permanent native payment freeze boundary', () => {
     expect(() => parseNativeIntent(value)).toThrow()
   )
 })
+
+describe('accepted native manager outcome boundary', () => {
+  const accepted = {
+    ...intent, state: 'manager_resolved', canConfirm: false, canCancel: false,
+    reasonCode: null, receipt: null,
+    managerReview: { freezeId: id(12), proofSha256: 'a'.repeat(64),
+      status: 'accepted_on_device', resolutionId: id(13), decision: 'funds_returned',
+      resolvedAt: '2026-10-16T12:00:00.000Z' },
+  }
+  it('retains an accepted outcome separately from an invoice or new permission', () => {
+    expect(parseNativeIntent(accepted)).toEqual(accepted)
+    const result = parseNativeCheckoutState({ ...state, canIssue: false,
+      reasonCode: 'native_checkout_unavailable', lastResolvedIntentId: intent.intentId,
+      lastResolvedIntent: accepted })
+    expect(result.lastReceipt).toBeNull()
+    expect(result.canIssue).toBe(false)
+  })
+  it.each([
+    { ...accepted, receipt }, { ...accepted, canConfirm: true },
+    { ...accepted, canCancel: true }, { ...accepted, reasonCode: 'payment_frozen' },
+    ...['pending', 'saved_locally', 'conflict'].map(status => ({ ...accepted,
+      managerReview: { ...accepted.managerReview, status } })),
+    { ...accepted, managerReview: { ...accepted.managerReview, decision: 'replacement_invoice' } },
+    { ...accepted, managerReview: { ...accepted.managerReview, resolutionId: 'bad' } },
+    { ...accepted, managerReview: { ...accepted.managerReview, resolvedAt: null } },
+  ])('rejects impossible or unknown terminal permission and evidence', value => {
+    expect(() => parseNativeIntent(value)).toThrow()
+  })
+  it('rejects another allocation, conflicting references and unlocked details without a context', () => {
+    const result = { ...state, canIssue: false, reasonCode: 'native_checkout_unavailable',
+      lastResolvedIntentId: intent.intentId, lastResolvedIntent: accepted }
+    for (const value of [
+      { ...result, context: null },
+      { ...result, pendingIntentId: intent.intentId },
+      { ...result, lastResolvedIntentId: id(15) },
+      { ...result, context: { ...state.context!, authorityId: id(16) } },
+      { ...result, lastResolvedIntent: intent },
+    ]) expect(() => parseNativeCheckoutState(value)).toThrow()
+  })
+})

@@ -164,6 +164,40 @@ public class NativePosHttpAndroidTest {
             response=new FakeConnection();errorBody(bad);assertEquals("native_access_unavailable",postError("/api/pos/offline/import",new JSONObject()));
         }
     }
+    @Test public void unsupportedHistoricalTextReachesCustodyOwnerWithoutAdoptingCookies()throws Exception{
+        cookie("pos-access","retained");byte[] before=CanonicalJson.bytes(store.read());
+        JSONObject valid=new JSONObject().put("status","reconciliation_required").put("exceptionId",ACTOR).put("code","unsupported_text");
+        errorBody(valid);response.setCookie("pos-access=untrusted; Secure; HttpOnly; Path=/");
+        assertArrayEquals(CanonicalJson.bytes(valid),CanonicalJson.bytes(post("/api/pos/offline/import",new JSONObject())));
+        assertNull(header("Cookie"));assertArrayEquals(before,CanonicalJson.bytes(store.read()));
+    }
+    @Test public void paymentRecoveryPathsAreExactHistoricalAndBounded()throws Exception{
+        String database="http-payment-recovery-"+UUID.randomUUID()+".db";NativeJournal journal=new NativeJournal(context,database,()->{});
+        try{
+            JSONObject before=store.read();before.put("actorId",JSONObject.NULL).put("logoutPending",true);
+            before.getJSONObject("cookies").put("pos-access","retained");store.write(before);
+            for(String path:new String[]{"/api/pos/offline/payment-freeze","/api/pos/offline/payment-resolution"}){
+                NativePosHttp recoveryHttp=new NativePosHttp(store,url->{opens++;assertEquals("https://pos.internext.info"+path,url.toString());return response;});
+                NativeSession session=new NativeSession(store,recoveryHttp,journal);
+                response=new FakeConnection();response.setCookie("pos-access=unexpected; Domain=evil.invalid; Path=/");
+                assertTrue(session.historicalRequest(path,new JSONObject()).getBoolean("ok"));assertNull(header("Cookie"));
+                assertArrayEquals(CanonicalJson.bytes(before),CanonicalJson.bytes(store.read()));
+                int prior=opens;
+                for(String bad:new String[]{path+"/",path+"?id=1",path+"#x","https://pos.internext.info"+path})
+                    assertThrows(NativeAccessError.class,()->session.historicalRequest(bad,new JSONObject()));
+                for(String method:new String[]{"GET","PUT","DELETE"})assertThrows(NativeAccessError.class,()->http.request(method,path,null));
+                assertEquals(prior,opens);
+                int limit=path.endsWith("payment-freeze")?1_420_000:16384;
+                response=new FakeConnection();JSONObject exact=jsonOfBytes(limit);post(path,exact);
+                assertArrayEquals(exact.toString().getBytes(StandardCharsets.UTF_8),response.output.toByteArray());
+                prior=opens;assertEquals("native_access_unavailable",postError(path,jsonOfBytes(limit+1)));assertEquals(prior,opens);
+                response=new FakeConnection();response.length=1_420_001;assertEquals("native_access_unavailable",postError(path,new JSONObject()));assertEquals(0,response.reads);
+                response=new FakeConnection();response.body=jsonOfBytes(1_420_001).toString().getBytes(StandardCharsets.UTF_8);
+                assertEquals("native_access_unavailable",postError(path,new JSONObject()));
+                assertArrayEquals(CanonicalJson.bytes(before),CanonicalJson.bytes(store.read()));
+            }
+        }finally{journal.close();assertTrue(context.deleteDatabase(database));}
+    }
     @Test public void historicalEnvelopeWrapperMayExceedOneMiBButEndpointLimitsRemainStrict()throws Exception{
         JSONObject large=new JSONObject().put("payloadBase64Url","a".repeat(1_100_000)).put("signatureBase64Url","unchanged");post("/api/pos/offline/import",large);
         JSONObject sent=new JSONObject(response.output.toString("UTF-8"));assertEquals(large.getString("payloadBase64Url"),sent.getString("payloadBase64Url"));assertEquals("unchanged",sent.getString("signatureBase64Url"));

@@ -121,6 +121,8 @@ beforeEach(() => {
     context: null,
     pendingIntentId: null,
     lastReceiptId: null,
+    lastResolvedIntentId: null,
+    lastResolvedIntent: null,
     unresolvedIntent: null,
     lastReceipt: null,
   })
@@ -729,6 +731,8 @@ describe('Native payment custody across app navigation', () => {
       context: null,
       pendingIntentId: '10000000-0000-4000-8000-000000000008',
       lastReceiptId: null,
+    lastResolvedIntentId: null,
+    lastResolvedIntent: null,
       unresolvedIntent: null,
       lastReceipt: null,
     })
@@ -801,6 +805,8 @@ describe('Missing allocation recovery integration', () => {
       context: null,
       pendingIntentId: branchId,
       lastReceiptId: null,
+    lastResolvedIntentId: null,
+    lastResolvedIntent: null,
       unresolvedIntent: null,
       lastReceipt: null,
     })

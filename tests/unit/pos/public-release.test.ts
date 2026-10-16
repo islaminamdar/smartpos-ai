@@ -17,7 +17,7 @@ it('exposes only exact manager review reads and keeps candidate payment decision
 
 it('keeps signed historical offline recovery reachable when new selling is paused', () => {
   for (const enabled of [false, true]) {
-    for (const suffix of ['import', 'seal', 'bundle-recovery']) {
+    for (const suffix of ['import', 'seal', 'bundle-recovery', 'payment-freeze', 'payment-resolution']) {
       const path = '/api/pos/offline/' + suffix
       expect(publicReleaseAccess(path, 'POST', enabled)).toBe('allow')
       for (const method of ['GET', 'PUT', 'DELETE', 'OPTIONS']) expect(publicReleaseAccess(path, method, enabled)).not.toBe('allow')

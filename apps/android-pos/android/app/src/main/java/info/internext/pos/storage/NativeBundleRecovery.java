@@ -69,7 +69,7 @@ public final class NativeBundleRecovery {
                         return display(c.getInt(3)==0?"not_needed":"blocked",authorityId,c.getInt(3)==0?"offline_allocation_active":"offline_context_changed");
                     }
                 }
-                if(exists(db,"SELECT 1 FROM intents i LEFT JOIN offline_intent_cancellations c ON c.intent_id=i.id WHERE i.receipt_id IS NULL AND c.intent_id IS NULL LIMIT 1"))return display("blocked",authorityId,"payment_reconciliation_required");
+                if(NativeCheckoutEngine.hasUncertainPayments(journal,keys,publicKey))return display("blocked",authorityId,"payment_reconciliation_required");
                 if(exists(db,"SELECT 1 FROM offline_authority_state WHERE seal_envelope IS NULL OR blocked=1"))return display("blocked",authorityId,"previous_authority_unresolved");
                 try(Cursor c=db.rawQuery("SELECT key_epoch FROM offline_chain WHERE slot=1",null)){
                     if(c.moveToFirst()){

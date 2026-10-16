@@ -16,6 +16,7 @@ import { offlineAckSchema } from '@/lib/pos/offline/server-contracts'
 import { registerOfflinePaymentFreeze, nativePaymentRegistrationStatusSchema } from '@/lib/pos/offline/payment-registration'
 import { listPaymentReviews, readPaymentReview, decidePaymentReview } from '@/lib/pos/offline/payment-review'
 import { offlinePaymentResolutionSchema, type PaymentDecisionRequest } from '@/lib/pos/offline/payment-review-contracts'
+import { recoverOfflinePaymentResolution, nativePaymentResolutionStatusSchema, registerAndRecoverOfflinePayment } from '@/lib/pos/offline/payment-retrieval'
 import type { OfflineIssuance } from '@/lib/pos/offline/contracts'
 
 interface TestDb { exec(sql:string):Promise<unknown>; query(sql:string,args?:unknown[]):Promise<{rows:Record<string,unknown>[]}>; close():Promise<void> }
@@ -282,6 +283,10 @@ it('registers signed freezes, verifies invoice collisions, and retains unsupport
       const response=await registerOfflinePaymentFreeze(frozen,await query('d'.repeat(64))),s=await readStatus(response)
       expect(s).toMatchObject({state:'already_issued',issuanceSha256:await digest(issuance),freezeSha256})
       expect(response.receipt).toEqual(accepted.receipt);expect(response.acknowledgement).toEqual(accepted.acknowledgement)
+      const repeated=await registerAndRecoverOfflinePayment({freezeEnvelope:frozen,queryEnvelope:await query('6'.repeat(64))})
+      expect(repeated.receipt).toEqual(accepted.receipt)
+      const conflict=await recoverOfflinePaymentResolution({queryEnvelope:await query('7'.repeat(64))})
+      expect((await verifySignedEnvelope(conflict.handoff,nativePaymentResolutionStatusSchema,{'synthetic-freeze-server':server.publicKey})).payload.state).toBe('conflict')
       const retry=await importOfflineReceipt(signedIssuance)
       expect(retry).toMatchObject({status:'accepted',acknowledgement:accepted.acknowledgement})
       expect(await admin(()=>scalar('select count(*)::int from public.pos_documents where id=$1',[documentId]))).toBe(1)
@@ -305,6 +310,8 @@ it('registers signed freezes, verifies invoice collisions, and retains unsupport
         const response=await registerOfflinePaymentFreeze(envelope,await query('e'.repeat(64)))
         expect(await readStatus(response)).toMatchObject({state:'conflict',issuanceSha256:null,resolutionSha256:null})
         expect(response).toMatchObject({receipt:null,acknowledgement:null})
+        const retained=await recoverOfflinePaymentResolution({queryEnvelope:await query('7'.repeat(64))})
+        expect((await verifySignedEnvelope(retained.handoff,nativePaymentResolutionStatusSchema,{'synthetic-freeze-server':server.publicKey})).payload.state).toBe('conflict')
         expect((await readStatus(await registerOfflinePaymentFreeze(await signEnvelope(freeze,f.fingerprint,f.pair.privateKey),await query('f'.repeat(64))))).state).toBe('conflict')
       }else{
         const retained=await importOfflineReceipt(envelope)
@@ -347,9 +354,20 @@ it('registers signed freezes, verifies invoice collisions, and retains unsupport
       const response=await decidePaymentReview(http,actorUser,branch,command,'Synthetic confirmation only')
       spy.mockRestore()
       expect(response.status).toBe(index===4?'delivery_pending':'recorded')
-      expect(response.nativeDelivery).toBe('not_implemented')
+      expect(response.nativeDelivery).toBe('not_confirmed')
       expect(await admin(()=>scalar('select count(*)::int from public.pos_offline_payment_decisions where freeze_id=$1',[freezeId]))).toBe(1)
       expect(await admin(()=>scalar('select public.pos_offline_payment_hold($1)',[a.keyEpoch]))).toBe(index===4)
+      // Original-device possession, not current staff or selling permission, authorizes
+      // retrieval and finishing only the already-committed exact manager signature.
+      await admin(()=>db.query('update public.pos_staff set active=false where user_id=$1',[actor]))
+      vi.stubEnv('POS_OFFLINE_PAYMENT_REVIEW_ENABLED','false');vi.stubEnv('POS_OFFLINE_PAYMENT_RESOLUTION_ENABLED','false')
+      const deviceResult=await recoverOfflinePaymentResolution({queryEnvelope:await query('6'.repeat(64))})
+      expect((await verifySignedEnvelope(deviceResult.handoff,nativePaymentResolutionStatusSchema,{'synthetic-freeze-server':server.publicKey})).payload)
+        .toMatchObject({state:'resolved',challenge:'6'.repeat(64),resolutionSha256:await digest(response.resolution),issuanceSha256:null})
+      expect(deviceResult).toMatchObject({receipt:null,acknowledgement:null})
+      expect((await verifySignedEnvelope(deviceResult.resolutionEnvelope!,offlinePaymentResolutionSchema,{'synthetic-freeze-server':server.publicKey})).payload).toEqual(response.resolution)
+      await admin(()=>db.query('update public.pos_staff set active=true where user_id=$1',[actor]))
+      vi.stubEnv('POS_OFFLINE_PAYMENT_REVIEW_ENABLED','true');vi.stubEnv('POS_OFFLINE_PAYMENT_RESOLUTION_ENABLED','true')
       const recovered=await readPaymentReview(actor,branch,freezeId,'freeze')
       expect(recovered.summary.state).toBe('resolved');expect(recovered.resolution).toEqual(response.resolution)
       if(!recovered.resolutionEnvelope)throw new Error('Missing stored result signature')
@@ -365,6 +383,10 @@ it('registers signed freezes, verifies invoice collisions, and retains unsupport
       expect(contradicted.summary.state).toBe('conflict');expect(contradicted.capabilities.canDecide).toBe(false)
       expect(contradicted.resolutionEnvelope).toEqual(recovered.resolutionEnvelope)
       expect(await admin(()=>scalar('select public.pos_offline_payment_hold($1)',[a.keyEpoch]))).toBe(true)
+      const held=await recoverOfflinePaymentResolution({queryEnvelope:await query('8'.repeat(64))})
+      expect((await verifySignedEnvelope(held.handoff,nativePaymentResolutionStatusSchema,{'synthetic-freeze-server':server.publicKey})).payload)
+        .toMatchObject({state:'conflict',resolutionSha256:null,issuanceSha256:null})
+      expect(held.resolutionEnvelope).toBeNull()
     }
     await expect(admin(()=>db.query("update public.pos_shifts set status='closed',closed_at=now() where id=$1",[f.shift]))).rejects.toThrow()
   }

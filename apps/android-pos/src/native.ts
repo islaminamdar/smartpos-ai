@@ -40,6 +40,7 @@ interface NativeLedgerPlugin {
   beginPaymentIntent(input: { intentId: string; request: NativeCheckoutRequest }): Promise<unknown>
   getPaymentIntent(input: { intentId: string }): Promise<unknown>
   freezePaymentIntentForManager(input: { intentId: string }): Promise<unknown>
+  syncFrozenPayment(input: { intentId: string }): Promise<unknown>
   confirmPaymentIntent(input: { intentId: string }): Promise<unknown>
   cancelUncollectedIntent(input: { intentId: string; reason: string }): Promise<unknown>
   getReconciliationState(): Promise<unknown>
@@ -609,7 +610,12 @@ export type NativeIntent = {
   | { state: 'payment_confirmation_required' | 'committed' | 'cancelled'; managerReview?: never }
   | {
       state: 'frozen_for_manager'
-      managerReview: { freezeId: string; proofSha256: string; status: 'saved_locally' }
+      managerReview: { freezeId: string; proofSha256: string; status: 'saved_locally' | 'pending' | 'conflict' }
+    }
+  | {
+      state: 'manager_resolved'
+      managerReview: { freezeId: string; proofSha256: string; status: 'accepted_on_device';
+        resolutionId: string; decision: 'funds_returned' | 'payment_voided'; resolvedAt: string }
     }
 )
 export type NativeCheckoutContext = {
@@ -640,6 +646,8 @@ export type NativeCheckoutState = {
   lastReceiptId: string | null
   unresolvedIntent: NativeIntent | null
   lastReceipt: NativeReceipt | null
+  lastResolvedIntentId: string | null
+  lastResolvedIntent: NativeIntent | null
 }
 const amountValue = (value: unknown, min = 0, max = 100000000): value is number =>
   Number.isSafeInteger(value) && Number(value) >= min && Number(value) <= max
@@ -874,6 +882,8 @@ export function parseNativeReceipt(value: unknown): NativeReceipt {
   return r as NativeReceipt
 }
 export function parseNativeIntent(value: unknown): NativeIntent {
+  const resolved = !!value && typeof value === 'object' && !Array.isArray(value) &&
+    (value as { state?: unknown }).state === 'manager_resolved'
   const frozen =
     !!value &&
     typeof value === 'object' &&
@@ -890,12 +900,12 @@ export function parseNativeIntent(value: unknown): NativeIntent {
     'canCancel',
     'reasonCode',
     'receipt',
-    ...(frozen ? ['managerReview'] : []),
+    ...(frozen || resolved ? ['managerReview'] : []),
   ])
   if (
     r.schemaVersion !== 1 ||
     !uuid(r.intentId) ||
-    !['payment_confirmation_required', 'committed', 'cancelled', 'frozen_for_manager'].includes(
+    !['payment_confirmation_required', 'committed', 'cancelled', 'frozen_for_manager', 'manager_resolved'].includes(
       String(r.state)
     ) ||
     !timestamp(r.createdAt) ||
@@ -904,14 +914,15 @@ export function parseNativeIntent(value: unknown): NativeIntent {
     !reasonCode(r.reasonCode)
   )
     invalidCheckout()
-  if (frozen) {
-    const review = record(r.managerReview, ['freezeId', 'proofSha256', 'status'])
+  if (frozen || resolved) {
+    const review = record(r.managerReview, ['freezeId', 'proofSha256', 'status', ...(resolved ? ['resolutionId', 'decision', 'resolvedAt'] : [])])
     if (
       !uuid(review.freezeId) ||
       typeof review.proofSha256 !== 'string' ||
       !/^[a-f0-9]{64}$/.test(review.proofSha256) ||
-      review.status !== 'saved_locally' ||
-      r.reasonCode !== 'payment_frozen'
+      (frozen && (!['saved_locally', 'pending', 'conflict'].includes(String(review.status)) || r.reasonCode !== 'payment_frozen')) ||
+      (resolved && (review.status !== 'accepted_on_device' || !uuid(review.resolutionId) ||
+        !['funds_returned', 'payment_voided'].includes(String(review.decision)) || !timestamp(review.resolvedAt) || r.reasonCode !== null))
     )
       invalidCheckout()
   } else if (r.reasonCode === 'payment_frozen') invalidCheckout()
@@ -981,12 +992,15 @@ export function parseNativeCheckoutState(value: unknown): NativeCheckoutState {
     'lastReceiptId',
     'unresolvedIntent',
     'lastReceipt',
+    'lastResolvedIntentId',
+    'lastResolvedIntent',
   ])
   if (r.schemaVersion !== 1 || typeof r.canIssue !== 'boolean' || !reasonCode(r.reasonCode))
     invalidCheckout()
   if (
     (r.pendingIntentId !== null && !uuid(r.pendingIntentId)) ||
-    (r.lastReceiptId !== null && !uuid(r.lastReceiptId))
+    (r.lastReceiptId !== null && !uuid(r.lastReceiptId)) ||
+    (r.lastResolvedIntentId !== null && !uuid(r.lastResolvedIntentId))
   )
     invalidCheckout()
   if (r.context !== null) {
@@ -1046,6 +1060,13 @@ export function parseNativeCheckoutState(value: unknown): NativeCheckoutState {
     invalidCheckout()
   if (r.lastReceipt !== null && parseNativeReceipt(r.lastReceipt).id !== r.lastReceiptId)
     invalidCheckout()
+  if (r.lastResolvedIntent !== null) {
+    const resolved = parseNativeIntent(r.lastResolvedIntent)
+    if (resolved.state !== 'manager_resolved' || resolved.intentId !== r.lastResolvedIntentId ||
+      r.context === null || resolved.request.authorityId !== (r.context as NativeCheckoutContext).authorityId)
+      invalidCheckout()
+  }
+  if (r.pendingIntentId !== null && r.pendingIntentId === r.lastResolvedIntentId) invalidCheckout()
   if (r.canIssue && (r.context === null || r.pendingIntentId !== null || r.reasonCode !== null))
     invalidCheckout()
   return r as NativeCheckoutState
@@ -1061,7 +1082,9 @@ export function nativeCheckoutError(error: unknown): string {
     case 'unsupported_text':
       return 'Buyer details contain an unsupported hidden character. New billing cannot continue. Keep any saved payment for manager review and do not collect again.'
     case 'payment_frozen':
-      return 'This payment is permanently frozen on this device. Manager review has not been sent. Do not collect again, issue a bill or declare it cancelled.'
+      return 'This payment is frozen on this device for manager review. Check its saved review status. Do not collect again, issue a bill or declare it cancelled.'
+    case 'offline_payment_recovery_uncertain':
+      return 'The manager result could not be confirmed. Check this same saved payment before retrying. Do not collect again or repeat a return or card void.'
     case 'native_session_expired':
       return 'Sign in with the original staff account to review this payment. Saved records remain on this device.'
     case 'pin_unlock_required':
@@ -1270,5 +1293,12 @@ export async function freezeNativePaymentForManager(intentId: string): Promise<N
   if (!uuid(intentId)) throw new Error('invalid_native_input')
   const result = parseNativeIntent(await ledger.freezePaymentIntentForManager({ intentId }))
   if (result.intentId !== intentId || result.state !== 'frozen_for_manager') invalidCheckout()
+  return result
+}
+export async function syncNativeFrozenPayment(intentId: string): Promise<NativeIntent> {
+  requireNativeAccess()
+  if (!uuid(intentId)) throw new Error('invalid_native_input')
+  const result = parseNativeIntent(await ledger.syncFrozenPayment({ intentId }))
+  if (result.intentId !== intentId || !['frozen_for_manager', 'manager_resolved'].includes(result.state)) invalidCheckout()
   return result
 }

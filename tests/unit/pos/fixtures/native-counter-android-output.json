@@ -41,7 +41,9 @@
       "pendingIntentId": null,
       "lastReceiptId": null,
       "unresolvedIntent": null,
-      "lastReceipt": null
+      "lastReceipt": null,
+      "lastResolvedIntentId": null,
+      "lastResolvedIntent": null
     },
     "quote": {
       "schemaVersion": 1,
@@ -91,7 +93,7 @@
     },
     "pendingIntent": {
       "schemaVersion": 1,
-      "intentId": "20fcd617-5541-4c80-a2e0-7ff66f9f103a",
+      "intentId": "99d05ecc-def3-4175-9155-c523147770f6",
       "state": "payment_confirmation_required",
       "createdAt": "2026-10-16T06:30:00.000Z",
       "request": {
@@ -195,11 +197,11 @@
           }
         ]
       },
-      "pendingIntentId": "20fcd617-5541-4c80-a2e0-7ff66f9f103a",
+      "pendingIntentId": "99d05ecc-def3-4175-9155-c523147770f6",
       "lastReceiptId": null,
       "unresolvedIntent": {
         "schemaVersion": 1,
-        "intentId": "20fcd617-5541-4c80-a2e0-7ff66f9f103a",
+        "intentId": "99d05ecc-def3-4175-9155-c523147770f6",
         "state": "payment_confirmation_required",
         "createdAt": "2026-10-16T06:30:00.000Z",
         "request": {
@@ -267,11 +269,13 @@
         "reasonCode": null,
         "receipt": null
       },
-      "lastReceipt": null
+      "lastReceipt": null,
+      "lastResolvedIntentId": null,
+      "lastResolvedIntent": null
     },
     "committedIntent": {
       "schemaVersion": 1,
-      "intentId": "20fcd617-5541-4c80-a2e0-7ff66f9f103a",
+      "intentId": "99d05ecc-def3-4175-9155-c523147770f6",
       "state": "committed",
       "createdAt": "2026-10-16T06:30:00.000Z",
       "request": {
@@ -339,7 +343,7 @@
       "reasonCode": null,
       "receipt": {
         "schemaVersion": 1,
-        "id": "6b863f14-0c95-496a-ba46-17365b8d803c",
+        "id": "0603c905-ef9d-4092-af76-a5e385624cf9",
         "merchant": {
           "legalName": "Synthetic legal",
           "branchName": "First",
@@ -383,7 +387,7 @@
     },
     "receipt": {
       "schemaVersion": 1,
-      "id": "6b863f14-0c95-496a-ba46-17365b8d803c",
+      "id": "0603c905-ef9d-4092-af76-a5e385624cf9",
       "merchant": {
         "legalName": "Synthetic legal",
         "branchName": "First",
@@ -461,11 +465,11 @@
         ]
       },
       "pendingIntentId": null,
-      "lastReceiptId": "6b863f14-0c95-496a-ba46-17365b8d803c",
+      "lastReceiptId": "0603c905-ef9d-4092-af76-a5e385624cf9",
       "unresolvedIntent": null,
       "lastReceipt": {
         "schemaVersion": 1,
-        "id": "6b863f14-0c95-496a-ba46-17365b8d803c",
+        "id": "0603c905-ef9d-4092-af76-a5e385624cf9",
         "merchant": {
           "legalName": "Synthetic legal",
           "branchName": "First",
@@ -505,7 +509,9 @@
         ],
         "cashTenderedFils": 1000,
         "changeFils": 0
-      }
+      },
+      "lastResolvedIntentId": null,
+      "lastResolvedIntent": null
     },
     "lockedState": {
       "schemaVersion": 1,
@@ -544,9 +550,11 @@
         ]
       },
       "pendingIntentId": null,
-      "lastReceiptId": "6b863f14-0c95-496a-ba46-17365b8d803c",
+      "lastReceiptId": "0603c905-ef9d-4092-af76-a5e385624cf9",
       "unresolvedIntent": null,
-      "lastReceipt": null
+      "lastReceipt": null,
+      "lastResolvedIntentId": null,
+      "lastResolvedIntent": null
     },
     "signedOutState": {
       "schemaVersion": 1,
@@ -554,9 +562,11 @@
       "reasonCode": "native_session_expired",
       "context": null,
       "pendingIntentId": null,
-      "lastReceiptId": "6b863f14-0c95-496a-ba46-17365b8d803c",
+      "lastReceiptId": "0603c905-ef9d-4092-af76-a5e385624cf9",
       "unresolvedIntent": null,
-      "lastReceipt": null
+      "lastReceipt": null,
+      "lastResolvedIntentId": null,
+      "lastResolvedIntent": null
     }
   }
 }

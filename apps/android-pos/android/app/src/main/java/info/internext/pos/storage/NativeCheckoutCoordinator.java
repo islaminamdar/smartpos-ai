@@ -22,23 +22,49 @@ public final class NativeCheckoutCoordinator {
     NativeCheckoutCoordinator(NativeJournal journal,ContextSource source,boolean releaseEnabled){this.journal=journal;this.source=source;this.releaseEnabled=releaseEnabled;}
 
     public synchronized JSONObject getState()throws Exception{
-            String pending=firstId("SELECT i.id FROM intents i LEFT JOIN offline_intent_cancellations c ON c.intent_id=i.id WHERE i.receipt_id IS NULL AND c.intent_id IS NULL ORDER BY i.rowid LIMIT 1");
-            String last=firstId("SELECT r.id FROM receipts r JOIN offline_intent_context x ON x.intent_id=r.intent_id ORDER BY r.rowid DESC LIMIT 1");
-            JSONObject state=new JSONObject().put("schemaVersion",1).put("canIssue",false).put("reasonCode",JSONObject.NULL)
-                .put("context",JSONObject.NULL).put("pendingIntentId",nullable(pending)).put("lastReceiptId",nullable(last))
-                .put("unresolvedIntent",JSONObject.NULL).put("lastReceipt",JSONObject.NULL);
-            try{
-                CheckoutContext visible=source.load(false);state.put("context",context(visible.bundle));
-                try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT r.id FROM receipts r JOIN offline_intent_context x ON x.intent_id=r.intent_id WHERE x.authority_id=? ORDER BY r.rowid DESC LIMIT 1",new String[]{visible.bundle.authorityId})){
-                    last=c.moveToFirst()?c.getString(0):null;state.put("lastReceiptId",nullable(last));
+        // References alone are conservative custody markers while signed out. A result row
+        // is never sufficient to hide one; signed-result verification happens below.
+        String pending=firstId("SELECT i.id FROM intents i LEFT JOIN offline_intent_cancellations c ON c.intent_id=i.id WHERE i.receipt_id IS NULL AND c.intent_id IS NULL ORDER BY i.rowid LIMIT 1");
+        String last=firstId("SELECT r.id FROM receipts r JOIN offline_intent_context x ON x.intent_id=r.intent_id ORDER BY r.rowid DESC LIMIT 1");
+        JSONObject state=new JSONObject().put("schemaVersion",1).put("canIssue",false).put("reasonCode",JSONObject.NULL)
+            .put("context",JSONObject.NULL).put("pendingIntentId",nullable(pending)).put("lastReceiptId",nullable(last))
+            .put("unresolvedIntent",JSONObject.NULL).put("lastReceipt",JSONObject.NULL)
+            .put("lastResolvedIntentId",JSONObject.NULL).put("lastResolvedIntent",JSONObject.NULL);
+        try{
+            // Never acquire the session source while holding the journal monitor.
+            CheckoutContext visible=source.load(false);state.put("context",context(visible.bundle));
+            synchronized(journal){
+                pending=null;
+                try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT i.id FROM intents i LEFT JOIN offline_intent_cancellations c ON c.intent_id=i.id WHERE i.receipt_id IS NULL AND c.intent_id IS NULL ORDER BY i.rowid",null)){
+                    while(c.moveToNext())if(!visible.engine.isPaymentResolved(c.getString(0))){pending=c.getString(0);break;}
                 }
-                CheckoutContext unlocked=source.load(true);
+                try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT r.id FROM receipts r JOIN offline_intent_context x ON x.intent_id=r.intent_id WHERE x.authority_id=? ORDER BY r.rowid DESC LIMIT 1",new String[]{visible.bundle.authorityId})){
+                    last=c.moveToFirst()?c.getString(0):null;
+                }
+                state.put("pendingIntentId",nullable(pending)).put("lastReceiptId",nullable(last));
+            }
+            CheckoutContext unlocked=source.load(true);state.put("context",context(unlocked.bundle));
+            synchronized(journal){
+                // Re-read after the PIN boundary: a concurrent recovery may have added a conflict.
+                pending=null;last=null;String resolved=null;
+                try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT i.id FROM intents i LEFT JOIN offline_intent_cancellations c ON c.intent_id=i.id WHERE i.receipt_id IS NULL AND c.intent_id IS NULL ORDER BY i.rowid",null)){
+                    while(c.moveToNext())if(!unlocked.engine.isPaymentResolved(c.getString(0))){pending=c.getString(0);break;}
+                }
+                try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT r.id FROM receipts r JOIN offline_intent_context x ON x.intent_id=r.intent_id WHERE x.authority_id=? ORDER BY r.rowid DESC LIMIT 1",new String[]{unlocked.bundle.authorityId})){
+                    if(c.moveToFirst())last=c.getString(0);
+                }
+                try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT r.intent_id FROM offline_payment_results r JOIN offline_intent_context x ON x.intent_id=r.intent_id WHERE x.authority_id=? ORDER BY r.rowid DESC",new String[]{unlocked.bundle.authorityId})){
+                    while(c.moveToNext())if(unlocked.engine.isPaymentResolved(c.getString(0))){resolved=c.getString(0);break;}
+                }
+                state.put("pendingIntentId",nullable(pending)).put("lastReceiptId",nullable(last));
                 if(pending!=null)state.put("unresolvedIntent",intent(unlocked,pending));
                 if(last!=null)state.put("lastReceipt",receipt(unlocked,last));
+                if(resolved!=null)state.put("lastResolvedIntentId",resolved).put("lastResolvedIntent",intent(unlocked,resolved));
                 if(pending!=null)return state.put("reasonCode","frozen_for_manager".equals(state.getJSONObject("unresolvedIntent").getString("state"))?"payment_frozen":"payment_reconciliation_required");
                 requireReleased();unlocked.engine.requireReady(unlocked.bundle.authorityId,null);state.put("canIssue",true);
-            }catch(Exception error){state.put("reasonCode",code(error));}
-            return state;
+            }
+        }catch(Exception error){state.put("reasonCode",code(error));}
+        return state;
     }
     public synchronized JSONObject quoteBasket(JSONObject input)throws Exception{
         CheckoutContext context=source.load(false);requireAuthority(context,input.getString("authorityId"));
@@ -64,7 +90,7 @@ public final class NativeCheckoutCoordinator {
         synchronized(journal){
             requireIntentScope(context,id);
             JSONObject original=context.engine.getIntent(id);
-            if("frozen_for_manager".equals(original.getString("state")))throw fail("payment_frozen");
+            if("frozen_for_manager".equals(original.getString("state"))||"manager_resolved".equals(original.getString("state")))throw fail("payment_frozen");
             if(!"committed".equals(original.getString("state")))requireReleased();
             context.engine.commitPaymentIntent(id);return intent(context,id);
         }
@@ -89,7 +115,7 @@ public final class NativeCheckoutCoordinator {
         JSONObject result=new JSONObject().put("schemaVersion",1).put("intentId",id).put("state",status).put("createdAt",created)
             .put("request",request).put("quote",context.engine.quoteRequest(request)).put("canConfirm",canConfirm).put("canCancel",canCancel)
             .put("reasonCode",nullable(reason)).put("receipt",status.equals("committed")?receipt(context,saved.getString("orderId")):JSONObject.NULL);
-        if(status.equals("frozen_for_manager"))result.put("managerReview",saved.getJSONObject("managerReview"));
+        if(status.equals("frozen_for_manager")||status.equals("manager_resolved"))result.put("managerReview",saved.getJSONObject("managerReview"));
         return result;
     }
     private JSONObject receipt(CheckoutContext context,String id)throws Exception{
@@ -124,7 +150,7 @@ public final class NativeCheckoutCoordinator {
         if(error instanceof NativeAccessError)return ((NativeAccessError)error).code;
         if(error instanceof OfflineClock.ClockException)return ((OfflineClock.ClockException)error).code;
         String message=error.getMessage();
-        return java.util.Arrays.asList("unsupported_text","payment_frozen","freeze_integrity_failed","intent_integrity_failed","pin_unlock_required","authority_missing","authority_closed","authority_exhausted","payment_reconciliation_required","intent_missing","intent_conflict","intent_cancelled","already_issued","cancellation_conflict","buyer_details_required","presented_total_changed","tender_not_authorized","receipt_integrity_failed","invalid_tender").contains(message)?message:"native_checkout_unavailable";
+        return java.util.Arrays.asList("offline_payment_recovery_uncertain","payment_resolution_invalid","payment_resolution_integrity_failed","unsupported_text","payment_frozen","freeze_integrity_failed","intent_integrity_failed","pin_unlock_required","authority_missing","authority_closed","authority_exhausted","payment_reconciliation_required","intent_missing","intent_conflict","intent_cancelled","already_issued","cancellation_conflict","buyer_details_required","presented_total_changed","tender_not_authorized","receipt_integrity_failed","invalid_tender").contains(message)?message:"native_checkout_unavailable";
     }
     private static NativeAccessError fail(String code){return new NativeAccessError(code);}
 }

@@ -479,5 +479,5 @@ it('manager feature gate shows the dedicated review tab without making any decis
   render(<LiveCounter offlinePaymentReviewEnabled />)
   fireEvent.click(await screen.findByRole('button', { name: 'Payment review' }))
   await screen.findByRole('heading', { name: 'Offline payment reviews' })
-  expect(screen.getByText(/Android confirmation is not implemented yet/)).toBeVisible()
+  expect(screen.getByText(/Device confirmation is not available on this screen/)).toBeVisible()
 })

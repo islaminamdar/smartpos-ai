@@ -6,6 +6,7 @@ vi.mock('@/lib/pos/server/client',async original=>({...await original<typeof imp
   authenticatedPosClient:m.auth,posClient:()=>({rpc:m.rpc,auth:{signInWithPassword:m.password,admin:{signOut:m.revoke}}})}))
 import fixture from '../../../fixtures/pos-offline-output.json'
 import { readPaymentReview, decidePaymentReview, listPaymentReviews, paymentReviewActor } from '@/lib/pos/offline/payment-review'
+import { recoverOfflinePaymentResolution, nativePaymentResolutionStatusSchema } from '@/lib/pos/offline/payment-retrieval'
 import { offlinePaymentFreezeSchema } from '@/lib/pos/offline/payment-contracts'
 import { offlinePaymentResolutionSchema, paymentDecisionRequestSchema, type PaymentDecisionRequest, type OfflinePaymentResolution } from '@/lib/pos/offline/payment-review-contracts'
 import { canonicalBytes, canonicalJson, encodeBase64Url, sha256Hex } from '@/lib/pos/offline/canonical'
@@ -55,6 +56,10 @@ beforeEach(async()=>{
   m.auth.mockResolvedValue({user});m.password.mockResolvedValue({data:{user,session:{access_token:'temporary-synthetic-token'}},error:null});m.revoke.mockResolvedValue({error:null})
   onRpc=async(name,args)=>{
     if(name==='pos_offline_authority')return{data:authorityRow,error:null}
+    if(name==='pos_offline_payment_native_read')return{data:{state:detail.summary.state==='conflict'?'conflict':detail.resolutionEnvelope?'resolved':'pending',
+      freezeEnvelope:detail.freezeEnvelope,decisionRequest:detail.summary.state==='conflict'?null:detail.decisionRequest,
+      resolution:detail.summary.state==='conflict'?null:detail.resolution,resolutionEnvelope:detail.summary.state==='conflict'?null:detail.resolutionEnvelope,
+      managerActorId:detail.summary.state==='conflict'?null:detail.resolution?.managerActorId??null},error:null}
     if(name==='pos_offline_payment_detail'){expect(args).toEqual({p_actor:user.id,p_branch:authority.branchId,p_case:freeze.freezeId,p_kind:'freeze'});return{data:structuredClone(detail),error:null}}
     if(name==='pos_login_attempt'||name==='pos_offline_manager_limit')return{data:true,error:null}
     if(name==='pos_offline_payment_list')return{data:{cases:[detail.summary],nextCursor:{recordedAt:detail.summary.recordedAt,caseId:freeze.freezeId,caseKind:'freeze'}},error:null}
@@ -79,7 +84,7 @@ const decide=()=>decidePaymentReview(http(),user,authority.branchId,command,'Syn
 it('reads verified historical evidence and preserves microsecond cursor precision with selling paused',async()=>{
   expect(await paymentReviewActor(http())).toEqual(user)
   const result=await read();expect(result.freeze).toEqual(freeze);expect(result.quote).toEqual(detail.quote);expect(result.capabilities.canDecide).toBe(true)
-  expect(result.nativeDelivery).toBe('not_implemented')
+  expect(result.nativeDelivery).toBe('not_confirmed')
   const list=await listPaymentReviews(user.id,authority.branchId,null)
   await listPaymentReviews(user.id,authority.branchId,list.nextCursor)
   expect(m.rpc.mock.calls.at(-1)?.[1].p_cursor.recordedAt).toBe('2026-10-16T00:00:00.000123Z')
@@ -98,7 +103,7 @@ it('requires current role, exact scope, untouched quote and genuine historical d
   expect(m.password).not.toHaveBeenCalled()
 })
 it('reauthenticates exact current account, revokes only temporary session, commits once and verifies first server signature',async()=>{
-  const result=await decide();expect(result.status).toBe('recorded');expect(result.nativeDelivery).toBe('not_implemented')
+  const result=await decide();expect(result.status).toBe('recorded');expect(result.nativeDelivery).toBe('not_confirmed')
   expect(m.password).toHaveBeenCalledWith({email:user.email,password:'Synthetic password never stored'})
   expect(m.revoke).toHaveBeenCalledWith('temporary-synthetic-token','local')
   expect((await verifySignedEnvelope(result.resolutionEnvelope!,offlinePaymentResolutionSchema,{'synthetic-server':server.publicKey})).payload).toEqual(result.resolution)
@@ -178,4 +183,61 @@ it('does not allow changed request bodies to reuse an accepted decision',async()
 it('rejects replacement invoices and unsupported confirmation fields in manager requests',()=>{
   expect(paymentDecisionRequestSchema.safeParse({...command,decision:'current_time_invoice'}).success).toBe(false)
   expect(paymentDecisionRequestSchema.safeParse({...command,confirmedAt:new Date().toISOString()}).success).toBe(false)
+})
+
+const deviceQuery=async(challenge='b'.repeat(64),overrides:Record<string,unknown>={})=>signEnvelope({
+  kind:'offline-payment-resolution-query',schemaVersion:1,authorityId:authority.id,keyEpoch:authority.keyEpoch,
+  deviceId:authority.deviceId,freezeId:freeze.freezeId,freezeSha256:await digest(freeze),challenge,...overrides,
+},authority.deviceKeySha256,device.privateKey)
+const nativeRead=async(challenge='b'.repeat(64))=>recoverOfflinePaymentResolution({queryEnvelope:await deviceQuery(challenge)})
+const nativeStatus=async(response:Awaited<ReturnType<typeof nativeRead>>)=>(await verifySignedEnvelope(response.handoff,nativePaymentResolutionStatusSchema,{'synthetic-server':server.publicKey})).payload
+it('historical device query is fresh-challenge bound and independent of current account or selling flags',async()=>{
+  vi.stubEnv('POS_OFFLINE_PAYMENT_REVIEW_ENABLED','false');vi.stubEnv('POS_OFFLINE_PAYMENT_RESOLUTION_ENABLED','false')
+  const response=await nativeRead();expect(await nativeStatus(response)).toMatchObject({state:'pending',challenge:'b'.repeat(64),resolutionSha256:null,issuanceSha256:null})
+  expect(response).toMatchObject({resolutionEnvelope:null,receipt:null,acknowledgement:null})
+  expect(m.auth).not.toHaveBeenCalled();expect(m.password).not.toHaveBeenCalled()
+  expect(await nativeStatus(await nativeRead('c'.repeat(64)))).toMatchObject({challenge:'c'.repeat(64)})
+})
+it('invalid device query signature or scope never reaches case retrieval',async()=>{
+  const good=await deviceQuery(),payload=JSON.parse(new TextDecoder().decode(Uint8Array.from(Buffer.from(good.payloadBase64Url,'base64url'))))
+  for(const envelope of [await signEnvelope(payload,authority.deviceKeySha256,server.privateKey),await deviceQuery('b'.repeat(64),{deviceId:id(99)}),await deviceQuery('b'.repeat(64),{keyEpoch:id(99)})]){
+    m.rpc.mockClear();await expect(recoverOfflinePaymentResolution({queryEnvelope:envelope})).rejects.toMatchObject({code:'offline_device_proof_invalid'})
+    expect(m.rpc.mock.calls.some(([name])=>name==='pos_offline_payment_native_read')).toBe(false)
+  }
+  await expect(recoverOfflinePaymentResolution({queryEnvelope:good,actorId:user.id})).rejects.toThrow()
+})
+it('device retrieval recovers only an existing verified decision and preserves its first result envelope',async()=>{
+  await decide();const first=structuredClone(detail.resolutionEnvelope)
+  vi.stubEnv('POS_OFFLINE_PAYMENT_REVIEW_ENABLED','false');vi.stubEnv('POS_OFFLINE_PAYMENT_RESOLUTION_ENABLED','false')
+  m.password.mockClear();m.auth.mockClear();const response=await nativeRead()
+  expect(response.resolutionEnvelope).toEqual(first)
+  expect(await nativeStatus(response)).toMatchObject({state:'resolved',resolutionSha256:await digest(detail.resolution)})
+  expect(m.password).not.toHaveBeenCalled();expect(m.auth).not.toHaveBeenCalled()
+  expect((await nativeRead('a'.repeat(64))).resolutionEnvelope).toEqual(first)
+})
+it('device query finishes interrupted result signing without manager reauthentication and rereads conflicts',async()=>{
+  detail.decisionRequest=command;detail.resolution=await makeResolution(command)
+  detail.summary.state='delivery_pending'
+  const response=await nativeRead();expect((await nativeStatus(response)).state).toBe('resolved')
+  expect(m.password).not.toHaveBeenCalled();expect(m.rpc.mock.calls.filter(([name])=>name==='pos_offline_payment_native_read')).toHaveLength(2)
+  detail.resolutionEnvelope=null;detail.summary.state='delivery_pending';const normal=onRpc
+  onRpc=async(name,args)=>{const value=await normal(name,args);if(name==='pos_offline_payment_attach')detail.summary.state='conflict';return value}
+  const held=await nativeRead();expect((await nativeStatus(held)).state).toBe('conflict');expect(held.resolutionEnvelope).toBeNull()
+})
+it('signing failure retains pending result and never emits a terminal hash or creates a decision',async()=>{
+  detail.decisionRequest=command;detail.resolution=await makeResolution(command);detail.summary.state='delivery_pending'
+  const normal=onRpc;onRpc=async(name,args)=>name==='pos_offline_payment_attach'?{data:null,error:{message:'storage'}}:normal(name,args)
+  const response=await nativeRead();expect(await nativeStatus(response)).toMatchObject({state:'pending',resolutionSha256:null});expect(response.resolutionEnvelope).toBeNull()
+  expect(m.rpc.mock.calls.some(([name])=>name==='pos_offline_payment_decide')).toBe(false)
+})
+it('query retrieval rejects mismatched stored freeze, amount, manager scope and signed terminal payloads',async()=>{
+  await decide();const saved=structuredClone(detail)
+  for(const mutate of [(d:any)=>d.freezeEnvelope=JSON.parse(JSON.stringify(d.freezeEnvelope)).payloadBase64Url,
+    (d:any)=>d.decisionRequest.evidence[0].amountFils=999,(d:any)=>d.resolution.deviceId=id(99),
+    (d:any)=>d.resolution.managerActorId=id(99),(d:any)=>d.resolution.resolvedAt='2020-01-01T00:00:00.000Z']){
+    detail=structuredClone(saved);mutate(detail);await expect(nativeRead()).rejects.toThrow()
+  }
+  detail=structuredClone(saved)
+  detail.resolutionEnvelope=await signEnvelope(detail.resolution,'synthetic-server',device.privateKey)
+  await expect(nativeRead()).rejects.toThrow()
 })

@@ -311,7 +311,7 @@ function ScopedReviews({
         setMessage(
           result.status === 'delivery_pending'
             ? 'Decision saved. Its signature is pending; do not return funds again.'
-            : 'Signed result ready. Confirmation on the original Android device is not implemented yet.'
+            : 'Signed result ready. Check the original Android device to confirm it accepted the decision.'
         )
     } catch (cause) {
       if (mounted.current && token === epoch.current) {
@@ -350,7 +350,7 @@ function ScopedReviews({
         setDismiss(false)
         await scan()
         setMessage(
-          'Only the local retry was dismissed. The accepted decision and Android hold are unchanged.'
+          'Only the local retry was dismissed. The accepted decision and device records are unchanged.'
         )
       }
     } catch {
@@ -390,8 +390,9 @@ function ScopedReviews({
         </p>
       )}
       <p className={styles.notice}>
-        Android confirmation is not implemented yet. A saved or signed manager decision does not
-        clear the original device or prove a provider processed a payment.
+        Device confirmation is not available on this screen. A saved or signed manager decision does
+        not show whether the original Android device has accepted it, or prove a provider processed
+        a payment.
       </p>
       {error && (
         <p role="alert" className={styles.error}>
@@ -524,7 +525,8 @@ function ScopedReviews({
                     Do not perform the external action again.
                   </p>
                   <p className={styles.warning}>
-                    Original Android device confirmation: not implemented. Its payment hold remains.
+                    Check the original Android device for confirmation. This screen cannot tell whether its
+                    payment hold has been resolved.
                   </p>
                 </section>
               )}
@@ -542,7 +544,7 @@ function ScopedReviews({
                       onChange={(e) => setDismiss(e.target.checked)}
                     />
                     <span>
-                      Dismiss only my local retry. Keep the accepted decision and Android hold
+                      Dismiss only my local retry. Keep the accepted decision and device records
                       unchanged.
                     </span>
                   </label>

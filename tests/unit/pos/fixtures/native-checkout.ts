@@ -93,6 +93,8 @@ export const state: NativeCheckoutState = {
   },
   pendingIntentId: null,
   lastReceiptId: null,
+  lastResolvedIntentId: null,
+  lastResolvedIntent: null,
   unresolvedIntent: null,
   lastReceipt: null,
 }

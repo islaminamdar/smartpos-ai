@@ -108,7 +108,7 @@ async function verifyResolutionEnvelope(resolution: OfflinePaymentResolution, en
   return envelope
 }
 /** Only an already committed exact result is signed. A retry cannot perform another return. */
-async function finishSignature(resolution: OfflinePaymentResolution, existing: z.infer<typeof signedEnvelopeSchema> | null) {
+export async function finishPaymentResolutionSignature(resolution: OfflinePaymentResolution, existing: z.infer<typeof signedEnvelopeSchema> | null) {
   if (existing) return verifyResolutionEnvelope(resolution, existing)
   const keys = await offlineServerKeys()
   const envelope = await signEnvelope(resolution, keys.activeId, keys.privateKey)
@@ -149,14 +149,14 @@ export async function readPaymentReview(actorId: string, branchId: string, caseI
   if ((row.resolution !== null) !== (row.decisionRequest !== null) || (row.resolutionEnvelope !== null && row.resolution === null)) return unavailable()
   const result = paymentReviewDetailSchema.parse({ summary: s, freeze, quote, conflicts: row.conflicts,
     conflictsTruncated: row.conflictsTruncated, decisionRequest: row.decisionRequest, resolution: row.resolution,
-    resolutionEnvelope: row.resolutionEnvelope, capabilities: row.capabilities, nativeDelivery: 'not_implemented' })
+    resolutionEnvelope: row.resolutionEnvelope, capabilities: row.capabilities, nativeDelivery: 'not_confirmed' })
   if (result.resolution && result.decisionRequest) {
     await checkResolution(result.resolution, result.decisionRequest, result)
     evidenceMatches(result.decisionRequest, result, Date.parse(result.resolution.resolvedAt))
     if (s.resolutionId !== result.resolution.resolutionId || s.decision !== result.resolution.decision) return unavailable()
     if (result.resolutionEnvelope) await verifyResolutionEnvelope(result.resolution, result.resolutionEnvelope)
     else if (recoverSignature) {
-      try { result.resolutionEnvelope = await finishSignature(result.resolution, null) }
+      try { result.resolutionEnvelope = await finishPaymentResolutionSignature(result.resolution, null) }
       catch { /* The decision is already committed. Keep an explicit delivery-pending result. */ }
     }
     if (result.resolutionEnvelope && result.summary.state === 'delivery_pending') result.summary.state = 'resolved'
@@ -213,7 +213,7 @@ export async function decidePaymentReview(http: Request, user: { id: string; ema
   // A failed signer/attachment must not invite another external return or another decision.
   let envelope = detail.resolutionEnvelope
   if (envelope) await verifyResolutionEnvelope(resolution, envelope)
-  else { try { envelope = await finishSignature(resolution, null) } catch { envelope = null } }
+  else { try { envelope = await finishPaymentResolutionSignature(resolution, null) } catch { envelope = null } }
   return paymentDecisionResponseSchema.parse({ status: envelope ? 'recorded' : 'delivery_pending',
-    decisionRequest: request, resolution, resolutionEnvelope: envelope, nativeDelivery: 'not_implemented' })
+    decisionRequest: request, resolution, resolutionEnvelope: envelope, nativeDelivery: 'not_confirmed' })
 }

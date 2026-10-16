@@ -77,13 +77,13 @@ export const paymentReviewDetailSchema = z.object({
   conflicts: paymentReviewConflictsSchema, conflictsTruncated: z.boolean(),
   decisionRequest: paymentDecisionRequestSchema.nullable(), resolution: offlinePaymentResolutionSchema.nullable(),
   resolutionEnvelope: signedEnvelopeSchema.nullable(), capabilities: paymentReviewCapabilitiesSchema,
-  nativeDelivery: z.literal('not_implemented'),
+  nativeDelivery: z.literal('not_confirmed'),
 }).strict()
 export type PaymentReviewDetail = z.infer<typeof paymentReviewDetailSchema>
 export const paymentDecisionResponseSchema = z.object({
   status: z.enum(['recorded', 'delivery_pending']), decisionRequest: paymentDecisionRequestSchema,
   resolution: offlinePaymentResolutionSchema, resolutionEnvelope: signedEnvelopeSchema.nullable(),
-  nativeDelivery: z.literal('not_implemented'),
+  nativeDelivery: z.literal('not_confirmed'),
 }).strict().superRefine((value, ctx) => {
   if ((value.status === 'recorded') !== (value.resolutionEnvelope !== null))
     ctx.addIssue({ code: 'custom', message: 'Stored signature and delivery state differ.' })

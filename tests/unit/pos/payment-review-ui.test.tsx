@@ -172,7 +172,9 @@ it('restores accepted exact decision after reload without POST and distinguishes
   fireEvent.click(await screen.findByRole('button', { name: 'Check saved decision' }))
   await screen.findByText(/Decision recorded; signature still pending/)
   await waitFor(() => expect(storage.records).toHaveLength(0))
-  expect(screen.getByText(/Original Android device confirmation: not implemented/)).toBeVisible()
+  expect(screen.getByText(/This screen cannot tell whether its payment hold has been resolved/)).toBeVisible()
+  expect(screen.queryByText(/Its payment hold remains/)).toBeNull()
+  expect(screen.queryByText(/Android confirmation is not implemented/)).toBeNull()
   expect(post).not.toHaveBeenCalled()
 })
 it('failed fresh case read retains visible record but removes all decision controls', async () => {

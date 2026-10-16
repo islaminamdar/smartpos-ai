@@ -57,7 +57,7 @@ it('returns bounded authentication and service failures without leaking details 
 })
 it('list and detail use current identity and exact scoped query fields', async () => {
   m.list.mockResolvedValue({ cases: [], nextCursor: null })
-  m.detail.mockResolvedValue({ nativeDelivery: 'not_implemented' })
+  m.detail.mockResolvedValue({ nativeDelivery: 'not_confirmed' })
   const cursor = JSON.stringify({ recordedAt: '2026-10-16T10:00:00.123456Z', caseId: id(3), caseKind: 'freeze' })
   const response = await list(new Request(`${origin}/api/pos/manager/offline-payments?branchId=${id(4)}&cursor=${encodeURIComponent(cursor)}`))
   expect(response.status).toBe(200)
