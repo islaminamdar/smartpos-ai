@@ -1,6 +1,6 @@
 # Permanent payment freeze
 
-Candidate implementation, not a customer release. Offline selling remains disabled. SQL017 is not applied live. Manager submission/decisions, server claims and signed result delivery are pending; the server helper added with this candidate only verifies evidence and performs a historical read.
+Candidate implementation, not a customer release. Offline selling remains disabled. SQL017 and SQL018 are not applied live. Native freeze custody and server registration/identity claims are implemented as candidates. Manager decisions, HTTP/native submission and signed terminal-result delivery remain pending.
 
 ## Why this state exists
 
@@ -28,6 +28,8 @@ A lost result is recovered by reading the same intent. It cannot become a second
 
 `verifyOfflinePaymentFreeze` validates the signed freeze and separate device-signed resolution query against enrolled historical keys, original bundle/scope and exact historical basket arithmetic. Its immutable typed result is reconciliation-only. It does not prove the device physically froze, that money was collected, that IDs are unused, or that a manager approved a decision. Chain-head evidence may be ahead of server custody when earlier receipts are queued.
 
-No HTTP endpoint or SQL018 write accepts these proofs yet. Before submission is enabled, implement shared intent/order claims and import/decision serialization, current manager authorization, reviewed return/void evidence, signing-attachment interruption recovery, and pinned native outcome readback. A separate current-time invoice outcome requires the accounting decisions in `docs/contracts/20261016-offline-payment-resolution.md`. Never treat a local freeze, read-only validator result, or accepted upload as a completed manager resolution.
+Candidate SQL018 adds shared intent/order/document claims, collision guards, immutable freeze/conflict records and operational holds. `registerOfflinePaymentFreeze` verifies both device proofs before registration and signs only a pending, conflict or independently verified already-issued status. It is not exposed by an HTTP route or native transport yet. See [server registration boundaries](../../docs/contracts/20261016-offline-payment-registration.md).
+
+Before submission is enabled, implement current manager authorization, reviewed return/void evidence, serialized manager decisions, signing-attachment interruption recovery and pinned native outcome readback. A separate current-time invoice outcome requires the accounting decisions in `docs/contracts/20261016-offline-payment-resolution.md`. Never treat a local freeze, registration status or accepted upload as a completed manager resolution.
 
 Testing and independent review evidence are retained privately with the candidate commit. Full two-device native/server acceptance, physical printers, manager training and release approval remain separate.

@@ -1,18 +1,16 @@
-# Thermal Printer Setup via PrintNode
+# Legacy PrintNode setup reference — not a verified POS printing path
 
-SmartPOS.ai uses [PrintNode](https://www.printnode.com) to send ESC/POS print jobs to an 80mm thermal receipt printer from the cloud. This guide covers the full setup.
+This guide describes a legacy cloud-print integration in `lib/printing/printnode.ts`, not the released `/counter` or native offline printer workflow. Those legacy routes are outside the POS release allowlist. The online pilot uses browser Print/save PDF; physical receipt/kitchen delivery remains unverified. Native Android printer adapters and a durable print/reprint queue are pending. Do not enable legacy routes or buy hardware on the strength of this guide. See [launch readiness](plans/2026-10-16-launch-readiness.md).
+
+The historical setup steps below require fresh provider/documentation review before reuse; their menu names and platform procedures are not current acceptance evidence.
 
 ---
 
-## Compatible Printers
+## Hardware acceptance required
 
-Any 80mm ESC/POS thermal printer works. Tested models:
+No printer model is certified or recorded as physically tested by this project audit. Previous Epson/Sunmi/Xprinter examples were unverified and have been removed. ESC/POS support alone does not establish Android transport, built-in printer SDK, paper-width, Arabic glyph, cutter or drawer compatibility.
 
-- **Epson TM-T20III** (USB/LAN, widely available)
-- **Sunmi T2** (Android POS with built-in printer — use PrintNode on the host PC if attached externally)
-- **Xprinter XP-58 series** (budget USB option, broadly compatible)
-
-Any printer that speaks the ESC/POS command set over USB or LAN will work.
+Select the actual connection/model and verify receipt layout, paper-out/disconnect, restart, retry/reprint labeling, kitchen additions/withdrawals and actual paper delivery. A provider accepting a job or a browser opening its print dialog is not proof that paper printed.
 
 ---
 
@@ -20,7 +18,7 @@ Any printer that speaks the ESC/POS command set over USB or LAN will work.
 
 1. Go to [printnode.com](https://www.printnode.com) and click **Sign Up**.
 2. Enter your email and a password, then confirm your email.
-3. PrintNode offers a **free trial** (500 prints). After that, plans start at approximately **$5 / month** for unlimited prints on up to 5 printers.
+3. Review current provider pricing and terms before any purchase; no current price or plan is verified here.
 
 ---
 
@@ -41,7 +39,7 @@ The PrintNode Client runs as a background service on the machine connected to th
 
 1. Plug the printer into the machine via **USB** (recommended) or connect it to the same LAN segment and note its IP address.
 2. Turn the printer on.
-3. The PrintNode client detects new printers automatically within ~30 seconds.
+3. Check whether the selected printer is detected; no discovery time or compatibility is guaranteed here.
 
 ---
 
@@ -71,7 +69,7 @@ Add the key to your environment:
 PRINTNODE_API_KEY=<your-api-key>
 ```
 
-For production on Vercel, add it as an **Environment Variable** in the Vercel project settings (Settings → Environment Variables → Add). For local dev, add it to `.env.local`.
+This repository’s current deployment uses direct SSH, not the former Vercel instructions. Any future integration must keep secrets in private server configuration and pass the POS authorization/release review first. Setting a key alone does not enable a supported printing workflow.
 
 ---
 
@@ -86,7 +84,7 @@ For production on Vercel, add it as an **Environment Variable** in the Vercel pr
 
 ## Step 8 — Test Print via API
 
-After an order is created you can trigger a manual test print:
+Historical API example only: `/api/print` is not an enabled live POS route. Do not run this against a restaurant order as an acceptance test:
 
 ```bash
 curl -X POST https://<your-domain>/api/print \
@@ -95,7 +93,7 @@ curl -X POST https://<your-domain>/api/print \
   -d '{"orderId": "<order-uuid>"}'
 ```
 
-A receipt should print within a few seconds. Check the PrintNode dashboard under **Print Jobs** for status and any error messages.
+For a future authorized synthetic integration test, inspect both provider status and the physical paper. Neither timing nor delivery is established by this historical example.
 
 ---
 

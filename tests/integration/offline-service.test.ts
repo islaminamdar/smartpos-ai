@@ -1,5 +1,6 @@
 // Actual disposable PostgreSQL engine + actual P256 signatures + production service functions.
-// Only the external cookie identity and Supabase transport are replaced. No network or live DB.
+// Only cookie identity and Supabase transport are replaced. Embedded DB or explicitly
+// supplied private local Unix-socket PostgreSQL only; never a live merchant database.
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { readFile, readdir } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
@@ -11,6 +12,7 @@ import { encodeBase64Url, decodeBase64Url, parseCanonicalPayload, sha256Hex, can
 import { publicKeyFingerprint, signEnvelope, verifyOfflineBundle, verifySignedEnvelope } from '@/lib/pos/offline/authority'
 import { recoverOfflineBundle, nativeOfflineRecoveredSchema } from '@/lib/pos/offline/bundle-recovery'
 import { offlineAckSchema } from '@/lib/pos/offline/server-contracts'
+import { registerOfflinePaymentFreeze, nativePaymentRegistrationStatusSchema } from '@/lib/pos/offline/payment-registration'
 import type { OfflineIssuance } from '@/lib/pos/offline/contracts'
 
 interface TestDb { exec(sql:string):Promise<unknown>; query(sql:string,args?:unknown[]):Promise<{rows:Record<string,unknown>[]}>; close():Promise<void> }
@@ -19,11 +21,35 @@ const ids=Object.fromEntries(['actor','org','branch','device','device2','shift',
 const scalar=async(sql:string,args:unknown[]=[])=>Object.values((await db.query(sql,args)).rows[0])[0]
 const admin=async(fn:()=>Promise<unknown>)=>{await db.exec('reset role');try{return await fn()}finally{await db.exec('set role service_role')}}
 beforeAll(async()=>{
-  const entry=process.env.OFFLINE_TEST_PGLITE_ENTRY
-  if(!entry)throw new Error('Set OFFLINE_TEST_PGLITE_ENTRY to an installed PGlite entry. This test never connects to production.')
-  const {PGlite}=await import(/* @vite-ignore */pathToFileURL(entry).href)
-  db=new PGlite()
-  await db.exec(`create role anon;create role authenticated;create role service_role;create schema auth;
+  const socket=process.env.OFFLINE_TEST_PG_SOCKET,pgEntry=process.env.OFFLINE_TEST_PG_ENTRY
+  if(socket||pgEntry){
+    if(!socket?.startsWith('/tmp/pos-qa-pg-')||!pgEntry)throw new Error('Only the explicit private QA Unix socket is allowed.')
+    const imported=await import(/* @vite-ignore */pathToFileURL(pgEntry).href),{Client}=imported.default??imported
+    const port=Number(process.env.OFFLINE_TEST_PG_PORT??55432)
+    if(!Number.isInteger(port)||port<1024||port>65535)throw new Error('Invalid private QA PostgreSQL port')
+    const control=new Client({host:socket,port,database:'postgres',user:process.env.USER,connectionTimeoutMillis:5000})
+    await control.connect()
+    const database='pos_freeze_service_'+randomUUID().replaceAll('-','')
+    let client: InstanceType<typeof Client>|undefined
+    try{
+      await control.query(`create database ${database}`)
+      client=new Client({host:socket,port,database,user:process.env.USER,connectionTimeoutMillis:5000})
+      await client.connect()
+      const connected=client
+      db={exec:(sql:string)=>connected.query(sql),query:(sql:string,args?:unknown[])=>connected.query(sql,args),
+        close:async()=>{try{await connected.end()}finally{try{await control.query(`drop database ${database}`)}finally{await control.end()}}}}
+    }catch(error){await client?.end();await control.query(`drop database if exists ${database}`);await control.end();throw error}
+  }else{
+    const entry=process.env.OFFLINE_TEST_PGLITE_ENTRY
+    if(!entry)throw new Error('Set OFFLINE_TEST_PGLITE_ENTRY or explicit private QA PostgreSQL variables; no production access.')
+    const {PGlite}=await import(/* @vite-ignore */pathToFileURL(entry).href)
+    db=new PGlite()
+  }
+  await db.exec(`do $$begin
+    if not exists(select 1 from pg_roles where rolname='anon') then create role anon;end if;
+    if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated;end if;
+    if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role;end if;
+    end $$;create schema auth;
     create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz);
     create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('app.user_id',true),'')::uuid$$;
     grant usage on schema auth to authenticated;grant execute on function auth.uid() to authenticated;`)
@@ -187,4 +213,79 @@ it('enrolls two real device keys, reserves disjoint numbers, recovers out-of-ord
   expect(await importOfflineReceipt(await signEnvelope(forged,firstDevice.fingerprint,firstDevice.pair.privateKey))).toMatchObject({status:'reconciliation_required',code:'invalid_historical_receipt'})
   expect(await admin(()=>scalar('select count(*)::int from public.pos_documents'))).toBe(2)
   expect(parseCanonicalPayload(decodeBase64Url(retry.acknowledgement.payloadBase64Url))).toMatchObject({issuanceId:first.id})
+})
+
+it('registers real signed freezes in SQL018 and verifies both sides of the historical invoice collision', async()=>{
+  const actor=randomUUID(),org=randomUUID(),branch=randomUUID(),profile=randomUUID(),product=randomUUID()
+  await admin(()=>db.exec(`insert into auth.users values('${actor}','synthetic-freeze@example.test',now());
+    insert into public.pos_organizations(id,legal_name) values('${org}','Synthetic freeze service');
+    insert into public.pos_branches(id,organization_id,name) values('${branch}','${org}','Synthetic freeze branch');
+    insert into public.pos_staff(organization_id,user_id,role) values('${org}','${actor}','owner');
+    insert into public.pos_merchant_profiles(id,organization_id,branch_id,legal_name,branch_name,address,phone,trn,tax_registered,tax_inclusive,confirmed_by)
+    values('${profile}','${org}','${branch}','Synthetic freeze merchant','Synthetic branch','Synthetic address','Synthetic phone','100000000000001',true,true,'${actor}');
+    insert into public.pos_branch_receipt_config values('${branch}','${org}','${profile}','FRZ',true);
+    insert into public.pos_products(id,organization_id,branch_id,name,category,unit_price_fils,tax_rate_bps) values('${product}','${org}','${branch}','Synthetic freeze product','Synthetic',1000,500);
+    insert into public.pos_offline_branch_policy(branch_id,enabled) values('${branch}',true);`))
+  const server=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify'])
+  vi.stubEnv('POS_OFFLINE_SIGNING_KEY_ID','synthetic-freeze-server')
+  vi.stubEnv('POS_OFFLINE_SERVER_KEYS',JSON.stringify([{id:'synthetic-freeze-server',publicKeySpki:encodeBase64Url(new Uint8Array(await crypto.subtle.exportKey('spki',server.publicKey))),privateKeyPkcs8:encodeBase64Url(new Uint8Array(await crypto.subtle.exportKey('pkcs8',server.privateKey)))}]))
+  const prepared=[]
+  for(let i=0;i<2;i++){
+    const device=randomUUID(),shift=randomUUID(),pair=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify'])
+    await admin(()=>db.exec(`insert into public.pos_devices(id,organization_id,branch_id,name) values('${device}','${org}','${branch}','Synthetic freeze ${i}');
+      insert into public.pos_shifts(id,organization_id,branch_id,device_id,opened_by,opening_cash_fils) values('${shift}','${org}','${branch}','${device}','${actor}',0);`))
+    m.auth.mockResolvedValue({user:{id:actor}})
+    for(const flag of ['POS_ONLINE_PILOT','POS_LIVE_SALES_ENABLED','POS_OFFLINE_ISSUANCE_ENABLED'])vi.stubEnv(flag,'true')
+    const fingerprint=await publicKeyFingerprint(pair.publicKey),requestId=randomUUID()
+    await enrollOfflineDevice({requestId,branchId:branch,deviceId:device,deviceKeySha256:fingerprint,
+      publicKeySpki:encodeBase64Url(new Uint8Array(await crypto.subtle.exportKey('spki',pair.publicKey))),
+      proof:await signEnvelope({kind:'offline-enrollment',schemaVersion:1,requestId,branchId:branch,deviceId:device,actorId:actor,deviceKeySha256:fingerprint,issuedAt:new Date().toISOString()},fingerprint,pair.privateKey)})
+    const signed=await reserveOfflineAuthority({requestId:randomUUID(),branchId:branch,deviceId:device,shiftId:shift,count:3,lifetimeSeconds:3600,maxInvoiceTotalFils:100000,maxGrossFils:300000,permissions:{cash:true,recordedCard:true,mixedTender:true}})
+    const bundle=await verifyOfflineBundle(signed.snapshotEnvelope,signed.authorityEnvelope,{'synthetic-freeze-server':server.publicKey})
+    prepared.push({device,shift,pair,fingerprint,bundle})
+  }
+  await admin(()=>db.exec(`update public.pos_staff set active=false where user_id='${actor}';update public.pos_devices set active=false where branch_id='${branch}';update public.pos_offline_branch_policy set enabled=false where branch_id='${branch}';`))
+  m.auth.mockRejectedValue(new Error('revoked'))
+  for(const flag of ['POS_ONLINE_PILOT','POS_LIVE_SALES_ENABLED','POS_OFFLINE_ISSUANCE_ENABLED'])vi.stubEnv(flag,'false')
+  const digest=(value:unknown)=>sha256Hex(canonicalBytes(value))
+  for(const [index,f] of prepared.entries()){
+    const a=f.bundle.authority,orderId=randomUUID(),documentId=randomUUID(),paymentIntentId=randomUUID(),freezeId=randomUUID()
+    const request={authorityId:a.id,serviceType:'takeaway',customer:null,lines:[{productId:product,quantityMilli:1000}],cashTenderedFils:1500,recordedCardFils:0,presentedTotalFils:1000}
+    const freeze={kind:'offline-payment-freeze',schemaVersion:1,freezeId,paymentIntentId,orderId,documentId,
+      organizationId:org,branchId:branch,deviceId:f.device,actorId:actor,shiftId:f.shift,keyEpoch:a.keyEpoch,deviceKeySha256:f.fingerprint,
+      authorityId:a.id,authoritySha256:f.bundle.authoritySha256,snapshotSha256:f.bundle.snapshotSha256,requestSha256:await digest(request),request,
+      intentCreatedAt:a.issuedAt,chainHead:{sequence:0,eventSha256:null},observation:null,declaration:'local-intent-unissued-and-permanently-frozen'}
+    const frozen=await signEnvelope(freeze,f.fingerprint,f.pair.privateKey),freezeSha256=await digest(freeze)
+    const query=async(challenge:string)=>signEnvelope({kind:'offline-payment-resolution-query',schemaVersion:1,authorityId:a.id,keyEpoch:a.keyEpoch,deviceId:f.device,freezeId,freezeSha256,challenge},f.fingerprint,f.pair.privateKey)
+    const issuance:OfflineIssuance={kind:'offline-sale',schemaVersion:1,id:orderId,authorityId:a.id,authoritySha256:f.bundle.authoritySha256,snapshotSha256:f.bundle.snapshotSha256,deviceSequence:1,previousEventSha256:null,paymentIntentId,
+      clock:{estimatedServerAt:a.issuedAt,bootId:randomUUID(),elapsedRealtimeMs:1000},document:{schemaVersion:1,id:documentId,kind:'tax_invoice',documentNumber:`FRZ-INV-${String(a.invoiceRange.first).padStart(10,'0')}`,issuedAt:a.issuedAt,merchant:f.bundle.snapshot.profile,
+      orderId,branchId:branch,deviceId:f.device,shiftId:f.shift,actorId:actor,serviceType:'takeaway',customer:null,
+      lines:[{lineNumber:1,productId:product,name:'Synthetic freeze product',unit:'piece',quantityMilli:1000,unitPriceFils:1000,taxRateBps:500,grossFils:1000,netFils:952,taxFils:48}],
+      totals:{grossFils:1000,netFils:952,taxFils:48},payments:[{method:'cash',amountFils:1000}],paymentSettlement:'recorded',cashTenderedFils:1500,changeFils:500}}
+    const signedIssuance=await signEnvelope(issuance,f.fingerprint,f.pair.privateKey)
+    const readStatus=async(response:Awaited<ReturnType<typeof registerOfflinePaymentFreeze>>)=>(await verifySignedEnvelope(response.handoff,nativePaymentRegistrationStatusSchema,{'synthetic-freeze-server':server.publicKey})).payload
+    if(index===0){
+      expect((await readStatus(await registerOfflinePaymentFreeze(frozen,await query('a'.repeat(64))))).state).toBe('pending')
+      const resigned=await signEnvelope(freeze,f.fingerprint,f.pair.privateKey)
+      const replay=await readStatus(await registerOfflinePaymentFreeze(resigned,await query('b'.repeat(64))))
+      expect(replay).toMatchObject({state:'pending',challenge:'b'.repeat(64),freezeSha256})
+      expect(await importOfflineReceipt(signedIssuance)).toMatchObject({status:'reconciliation_required'})
+      expect((await readStatus(await registerOfflinePaymentFreeze(frozen,await query('c'.repeat(64))))).state).toBe('conflict')
+      expect(await admin(()=>scalar('select count(*)::int from public.pos_documents where id=$1',[documentId]))).toBe(0)
+      expect(await admin(()=>scalar('select count(*)::int from public.pos_offline_payment_freezes where id=$1',[freezeId]))).toBe(1)
+    }else{
+      const accepted=await importOfflineReceipt(signedIssuance)
+      if(accepted.status!=='accepted')throw new Error('Expected original receipt before freeze')
+      const response=await registerOfflinePaymentFreeze(frozen,await query('d'.repeat(64))),s=await readStatus(response)
+      expect(s).toMatchObject({state:'already_issued',issuanceSha256:await digest(issuance),freezeSha256})
+      expect(response.receipt).toEqual(accepted.receipt);expect(response.acknowledgement).toEqual(accepted.acknowledgement)
+      const retry=await importOfflineReceipt(signedIssuance)
+      expect(retry).toMatchObject({status:'accepted',acknowledgement:accepted.acknowledgement})
+      expect(await admin(()=>scalar('select count(*)::int from public.pos_documents where id=$1',[documentId]))).toBe(1)
+    }
+    await expect(admin(()=>db.query("update public.pos_shifts set status='closed',closed_at=now() where id=$1",[f.shift]))).rejects.toThrow()
+  }
+  expect(await admin(()=>scalar('select count(*)::int from public.pos_orders where branch_id=$1',[branch]))).toBe(1)
+  expect(await admin(()=>scalar('select count(*)::int from public.pos_payments where branch_id=$1',[branch]))).toBe(1)
+  expect(await admin(()=>scalar('select count(*)::int from public.pos_kitchen_tickets where branch_id=$1',[branch]))).toBe(0)
 })

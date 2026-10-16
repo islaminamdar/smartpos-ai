@@ -2,6 +2,8 @@
 
 Status: design candidate, 2026-10-16. No migration, route, native method, accounting entry, or release flag described here is implemented by this document. Existing customer sale issuance remains subject to its release gates. This is an engineering design, not a conclusion about tax treatment; the current-time invoice option needs the business/accountant decision identified below.
 
+Implementation checkpoint: native permanent freeze is implemented in candidate SQLite v4. Candidate SQL018 now implements registration/claims/conflicts and import/online collision guards, with a service that signs nonterminal registration status. The remaining decision/result tables, manager writers, HTTP/native transport and terminal result acceptance below are still design work. See [implemented registration scope](20261016-offline-payment-registration.md). Neither SQL017 nor SQL018 is enabled live.
+
 ## Problem and existing boundaries
 
 A native payment intent freezes a basket and its planned cash/card tender before the cashier confirms collection. `NativeCheckoutEngine.commitPaymentIntent` then checks the current clock and authority budget inside SQLite before creating the invoice. If permission expires after money was collected, this check correctly refuses issuance. Restart does not establish whether money was collected. The existing `cancelUncollectedIntent` is an explicit declaration that no payment was collected; using it to clear a returned or voided payment would misstate history.

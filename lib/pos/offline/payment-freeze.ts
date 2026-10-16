@@ -104,7 +104,7 @@ export async function verifyOfflinePaymentFreeze(rawFreeze: unknown, rawQuery: u
   const { data, error } = await posClient(undefined, true).rpc('pos_offline_authority', { p_id: routed.authorityId })
   if (error) throw new PosServerError('offline_storage_unavailable', 503)
   if (!data) throw new PosServerError('offline_authority_unavailable', 404)
-  let bundle, deviceKey
+  let bundle, deviceKey, custody
   try {
     const row = readerSchema.parse(data), original = data as Record<string, unknown>
     // The SQL reader duplicates payloads inside envelopes; bound each payload, not the wrapper.
@@ -115,6 +115,7 @@ export async function verifyOfflinePaymentFreeze(rawFreeze: unknown, rawQuery: u
       row.snapshotSha256 !== bundle.snapshotSha256 || row.authoritySha256 !== bundle.authoritySha256 ||
       row.keyEpoch !== bundle.authority.keyEpoch || row.deviceId !== bundle.authority.deviceId ||
       await publicKeyFingerprint(deviceKey) !== bundle.authority.deviceKeySha256) throw new Error()
+    custody = { snapshotEnvelope: row.snapshotEnvelope, authorityEnvelope: row.authorityEnvelope, publicKeySpki: row.publicKeySpki }
   } catch { throw new PosServerError('offline_storage_unavailable', 503) }
   let verified, queried
   try {
@@ -135,6 +136,8 @@ export async function verifyOfflinePaymentFreeze(rawFreeze: unknown, rawQuery: u
   // In particular an expired grant or a server behind queued receipts does not reject recovery.
   return immutable({ [verifiedFreezeBrand]: true as const, kind: 'verified-offline-payment-freeze' as const,
     purpose: 'reconciliation-only' as const, freeze, freezeSha256: verified.payloadSha256,
-    query, querySha256: queried.payloadSha256, quote, freezeEnvelope, queryEnvelope })
+    query, querySha256: queried.payloadSha256, quote, freezeEnvelope, queryEnvelope,
+    // Internal verified public material, never a new authority or a client-selected key.
+    custody })
 }
 export type VerifiedOfflinePaymentFreeze = Awaited<ReturnType<typeof verifyOfflinePaymentFreeze>>
