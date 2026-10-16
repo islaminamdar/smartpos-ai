@@ -41,6 +41,7 @@
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-hook-form": "^7.76.1",
+    "sharp": "0.35.5",
     "sonner": "^2.0.7",
     "stripe": "^22.2.0",
     "tailwind-merge": "^3.6.0",

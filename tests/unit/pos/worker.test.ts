@@ -40,6 +40,12 @@ function workerHarness(failPath?: string) {
 }
 
 describe('versioned offline worker', () => {
+  it('does not put manager uploads into the unbounded training-shell runtime cache', async () => {
+    const worker = workerHarness(); await worker.event('install');
+    const before = [...worker.namespaces.get('internext-pos-shell-test-release')!.keys()];
+    expect(worker.fetchEvent('http://localhost/pos-assets/menu/upload_123456781234123412341234567890ab.webp', 'cors')).toBeUndefined();
+    expect([...worker.namespaces.get('internext-pos-shell-test-release')!.keys()]).toEqual(before);
+  });
   it('caches shell, HTML scripts/styles, nested CSS dependencies and all menu assets before readiness', async () => {
     const worker = workerHarness(); await worker.event('install');
     const cache = worker.namespaces.get('internext-pos-shell-test-release')!;

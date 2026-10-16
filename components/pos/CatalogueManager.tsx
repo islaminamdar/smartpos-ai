@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { z } from 'zod'
 import { formatFils, parseMoney } from '@/lib/pos/money'
+import MenuPhotoEditor from './MenuPhotoEditor'
 import {
   catalogueProductSchema,
   catalogueUpdateSchema,
@@ -41,17 +42,24 @@ async function call(path: string, body?: unknown) {
     )
   return result
 }
-export default function CatalogueManager({
-  branchId,
-  deviceId,
-  disabled,
-  onChanged,
-}: {
+type CatalogueManagerProps = {
   branchId: string
   deviceId: string
   disabled: boolean
   onChanged: () => Promise<void>
-}) {
+}
+
+export default function CatalogueManager(props: CatalogueManagerProps) {
+  // A scope change must discard local drafts and ignore the old editor's uploads.
+  return <ScopedCatalogueManager key={`${props.branchId}:${props.deviceId}`} {...props} />
+}
+
+function ScopedCatalogueManager({
+  branchId,
+  deviceId,
+  disabled,
+  onChanged,
+}: CatalogueManagerProps) {
   const [items, setItems] = useState<CatalogueProduct[]>([])
   const [selected, setSelected] = useState<CatalogueProduct | null>(null)
   const [adding, setAdding] = useState(false)
@@ -65,6 +73,20 @@ export default function CatalogueManager({
   const [pending, setPending] = useState<CatalogueUpdate | null>(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [draftImage, setDraftImage] = useState<string | null>(null)
+  const [editorVersion, setEditorVersion] = useState(0)
+  const [photoBusy, setPhotoBusy] = useState(false)
+  const photoBusyRef = useRef(false)
+  const [photoFilePending, setPhotoFilePending] = useState(false)
+  const photoFilePendingRef = useRef(false)
+  const photoBusyChanged = useCallback((value: boolean) => {
+    photoBusyRef.current = value
+    setPhotoBusy(value)
+  }, [])
+  const photoFileChanged = useCallback((value: boolean) => {
+    photoFilePendingRef.current = value
+    setPhotoFilePending(value)
+  }, [])
   const editor = useRef<HTMLElement>(null)
   const load = useCallback(async () => {
     const data = listSchema.parse(
@@ -96,14 +118,14 @@ export default function CatalogueManager({
     }
   }, [branchId, deviceId, journalKey])
   useEffect(() => {
-    if (!pending) return
+    if (!pending && !photoBusy) return
     const warn = (event: BeforeUnloadEvent) => {
       event.preventDefault()
       event.returnValue = ''
     }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
-  }, [pending])
+  }, [pending, photoBusy])
   async function execute(command: CatalogueUpdate) {
     if (lock.current) return
     lock.current = true
@@ -128,6 +150,8 @@ export default function CatalogueManager({
       sessionStorage.removeItem(journalKey)
       setPending(null)
       setSelected(result.product)
+      setDraftImage(result.product.imageUrl)
+      photoFileChanged(false)
       setAdding(false)
       setNotice(`${result.product.name} saved. Existing bills keep their original details.`)
       await load()
@@ -174,7 +198,15 @@ export default function CatalogueManager({
   }
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (disabled || busy || pending || !journalReady) return
+    if (
+      disabled ||
+      busy ||
+      pending ||
+      !journalReady ||
+      photoBusyRef.current ||
+      photoFilePendingRef.current
+    )
+      return
     try {
       const values = new FormData(event.currentTarget)
       const command = catalogueUpdateSchema.parse({
@@ -187,7 +219,7 @@ export default function CatalogueManager({
           id: selected?.id ?? crypto.randomUUID(),
           name: String(values.get('name') || ''),
           category: String(values.get('category') || ''),
-          imageUrl: selected?.imageUrl ?? null,
+          imageUrl: draftImage,
           unit: String(values.get('unit') || 'piece'),
           unitPriceFils: parseMoney(String(values.get('price') || '')),
           taxRateBps: 500,
@@ -215,9 +247,13 @@ export default function CatalogueManager({
         </div>
         <button
           className="lc-primary"
-          disabled={disabled || busy || !!pending || !journalReady}
+          disabled={disabled || busy || photoBusy || !!pending || !journalReady}
           onClick={() => {
+            if (photoBusyRef.current) return
             setSelected(null)
+            setDraftImage(null)
+            photoFileChanged(false)
+            setEditorVersion((value) => value + 1)
             setAdding(true)
             setNotice('')
             setError('')
@@ -285,10 +321,14 @@ export default function CatalogueManager({
               {visible.map((p) => (
                 <button
                   key={p.id}
-                  disabled={busy || !!pending}
+                  disabled={busy || photoBusy || !!pending}
                   aria-pressed={selected?.id === p.id}
                   onClick={() => {
+                    if (photoBusyRef.current) return
                     setSelected(p)
+                    setDraftImage(p.imageUrl)
+                    photoFileChanged(false)
+                    setEditorVersion((value) => value + 1)
                     setAdding(false)
                     setError('')
                     setNotice('')
@@ -314,7 +354,7 @@ export default function CatalogueManager({
             </div>
           )}
           <button
-            disabled={busy || disabled || !!pending}
+            disabled={busy || photoBusy || disabled || !!pending}
             onClick={() => {
               setLoading(true)
               load()
@@ -332,12 +372,24 @@ export default function CatalogueManager({
           aria-label="Edit menu item"
         >
           {selected || adding ? (
-            <form key={selected ? `${selected.id}:${selected.revision}` : 'new'} onSubmit={submit}>
+            <form
+              key={`${selected ? `${selected.id}:${selected.revision}` : 'new'}:${editorVersion}`}
+              onSubmit={submit}
+            >
               <h2>{selected ? 'Edit item' : 'New item'}</h2>
-              {selected?.imageUrl && (
-                <img src={selected.imageUrl} alt={selected.name} width={160} height={120} />
-              )}
-              <fieldset disabled={disabled || busy || !!pending || !journalReady}>
+              <MenuPhotoEditor
+                key={selected ? `${selected.id}:${selected.revision}` : 'new'}
+                branchId={branchId}
+                deviceId={deviceId}
+                itemName={selected?.name ?? 'new item'}
+                savedImageUrl={selected?.imageUrl ?? null}
+                imageUrl={draftImage}
+                disabled={disabled || busy || !!pending || !journalReady}
+                onChange={setDraftImage}
+                onBusyChange={photoBusyChanged}
+                onFilePending={photoFileChanged}
+              />
+              <fieldset disabled={disabled || busy || photoBusy || !!pending || !journalReady}>
                 <label>
                   Item name
                   <input name="name" required maxLength={200} defaultValue={selected?.name ?? ''} />
@@ -393,7 +445,9 @@ export default function CatalogueManager({
                     placeholder="For example, approved counter price"
                   />
                 </label>
-                <button className="lc-primary">{busy ? 'Saving…' : 'Save menu item'}</button>
+                <button className="lc-primary" disabled={photoFilePending}>
+                  {busy ? 'Saving…' : 'Save menu item'}
+                </button>
               </fieldset>
             </form>
           ) : (

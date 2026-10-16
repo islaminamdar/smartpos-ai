@@ -1,0 +1,122 @@
+.editor {
+  min-width: 0;
+  margin: 20px 0 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #dce3eb;
+}
+.heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.heading h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #142d4e;
+}
+.heading span {
+  font-size: 12px;
+  color: #526176;
+}
+.preview {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: #f4f7fb;
+  border: 1px solid #dce3eb;
+  border-radius: 10px;
+  position: relative;
+}
+.editor .preview img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  margin: 0;
+  border-radius: 0;
+  object-fit: contain;
+}
+.empty {
+  height: 100%;
+  display: grid;
+  justify-items: center;
+  padding: 24px;
+  text-align: center;
+  color: #526176;
+}
+.empty p {
+  max-width: 24ch;
+  font-size: 14px;
+}
+.help {
+  color: #526176;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.editor .fileLabel {
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+.editor .fileInput {
+  display: block;
+  min-height: 48px;
+  width: 100%;
+  padding: 8px;
+  font-size: 13px;
+  overflow: hidden;
+}
+.fileInput::file-selector-button {
+  min-height: 32px;
+  font: inherit;
+  background: #f4f7fb;
+  color: #142d4e;
+  border: 1px solid #aebccd;
+  border-radius: 5px;
+  margin-right: 8px;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.filename {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  color: #526176;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.editor .actions button {
+  min-height: 48px;
+  flex: 1 1 150px;
+  font-size: 14px;
+}
+.success,
+.error {
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.success {
+  background: #eaf8f1;
+  color: #14543e;
+  border: 1px solid #b8dfcf;
+}
+.error {
+  background: #fff3f0;
+  color: #892d19;
+  border: 1px solid #efc6bd;
+}
+@media (max-width: 400px) {
+  .actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

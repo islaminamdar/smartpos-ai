@@ -97,6 +97,9 @@ self.addEventListener('fetch', event => {
   const request = event.request;
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
+  // Manager uploads are intentionally public, but are not part of this bounded
+  // training-shell download. Let the HTTP cache handle immutable image responses.
+  if (/^\/pos-assets\/menu\/upload_/i.test(url.pathname)) return;
   if (request.mode === 'navigate' && (url.pathname === '/pos' || url.pathname === '/pos/')) {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE);

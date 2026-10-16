@@ -96,10 +96,12 @@ export async function POST(request: Request) {
         throw new PosServerError('request_conflict', 409)
       if (
         error.message.includes('POS_ACCESS_DENIED') ||
+        error.message.includes('POS_MANAGER_REQUIRED') ||
+        error.message.includes('POS_MEDIA_SCOPE') ||
         error.message.includes('POS_DEVICE_INVALID')
       )
         throw new PosServerError('manager_access_required', 403)
-      if (error.message.includes('POS_INVALID_COMMAND'))
+      if (error.message.includes('POS_INVALID_COMMAND') || error.message.includes('POS_MEDIA_INVALID'))
         throw new PosServerError('invalid_catalogue_update', 422)
       throw new PosServerError('storage_unavailable', 503)
     }
