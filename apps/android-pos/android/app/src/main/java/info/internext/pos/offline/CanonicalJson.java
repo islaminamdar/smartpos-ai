@@ -36,7 +36,7 @@ public final class CanonicalJson {
 
     /** Strict, bounded JSON grammar before constructing Android JSON objects. No JSONTokener
      * leniency (comments, single quotes, duplicate keys, implicit nulls or unquoted tokens). */
-    static Object transport(String text, int maxBytes) throws Exception {
+    public static Object transport(String text, int maxBytes) throws Exception {
         if (text == null || text.length() > maxBytes || text.getBytes(StandardCharsets.UTF_8).length > maxBytes) throw invalid();
         Parser parser = new Parser(text); Object value = parser.value(0); parser.space();
         if (parser.offset != text.length()) throw invalid();

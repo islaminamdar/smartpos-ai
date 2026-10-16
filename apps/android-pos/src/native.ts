@@ -31,6 +31,10 @@ interface NativeLedgerPlugin {
   getIdentity(): Promise<unknown>
   getStatus(): Promise<unknown>
   listReceipts(): Promise<unknown>
+  getAccessState(): Promise<unknown>
+  signIn(): Promise<unknown>
+  signOut(): Promise<unknown>
+  enrollCounter(input: { branchId: string; name: string }): Promise<unknown>
 }
 const ledger = registerPlugin<NativeLedgerPlugin>('NativeLedger')
 
@@ -133,4 +137,145 @@ export async function readDeviceSnapshot(): Promise<DeviceSnapshot> {
     history: parseReceipts(receipts),
     checkedAt: new Date().toISOString(),
   }
+}
+
+export type NativeAccessState = {
+  schemaVersion: 1
+  status: 'signed_out' | 'signed_in'
+  actorId: string | null
+  branches: {
+    id: string
+    organizationId: string
+    name: string
+    role: 'owner' | 'manager' | 'cashier'
+  }[]
+  device: { id: string; branchId: string; name: string } | null
+  canPrepareOffline: boolean
+}
+const uuid = (value: unknown): value is string =>
+  typeof value === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+export function parseAccessState(value: unknown): NativeAccessState {
+  const result = record(value, [
+    'schemaVersion',
+    'status',
+    'actorId',
+    'branches',
+    'device',
+    'canPrepareOffline',
+  ])
+  if (
+    result.schemaVersion !== 1 ||
+    !['signed_out', 'signed_in'].includes(String(result.status)) ||
+    typeof result.canPrepareOffline !== 'boolean' ||
+    !Array.isArray(result.branches)
+  )
+    throw new Error('invalid_native_response')
+  const ids = new Set<string>()
+  const branches = result.branches.map((value) => {
+    const branch = record(value, ['id', 'organizationId', 'name', 'role'])
+    if (
+      !uuid(branch.id) ||
+      !uuid(branch.organizationId) ||
+      ids.has(branch.id) ||
+      typeof branch.name !== 'string' ||
+      !branch.name.trim() ||
+      branch.name.length > 200 ||
+      !['owner', 'manager', 'cashier'].includes(String(branch.role))
+    )
+      throw new Error('invalid_native_response')
+    ids.add(branch.id)
+    return branch as NativeAccessState['branches'][number]
+  })
+  let device: NativeAccessState['device'] = null
+  if (result.device !== null) {
+    const raw = record(result.device, ['id', 'branchId', 'name'])
+    if (
+      !uuid(raw.id) ||
+      !uuid(raw.branchId) ||
+      !ids.has(raw.branchId) ||
+      typeof raw.name !== 'string' ||
+      !raw.name.trim() ||
+      raw.name.length > 80
+    )
+      throw new Error('invalid_native_response')
+    device = raw as NonNullable<NativeAccessState['device']>
+  }
+  if (result.status === 'signed_out') {
+    if (result.actorId !== null || branches.length || device !== null || result.canPrepareOffline)
+      throw new Error('invalid_native_response')
+  } else if (!uuid(result.actorId)) throw new Error('invalid_native_response')
+  if (result.canPrepareOffline && !device) throw new Error('invalid_native_response')
+  return {
+    schemaVersion: 1,
+    status: result.status as NativeAccessState['status'],
+    actorId: result.actorId as string | null,
+    branches,
+    device,
+    canPrepareOffline: result.canPrepareOffline,
+  }
+}
+export function nativeAccessErrorCode(error: unknown): string {
+  if (!error || typeof error !== 'object') return ''
+  const candidate = error as { code?: unknown; message?: unknown }
+  return typeof candidate.code === 'string' && candidate.code.startsWith('native_')
+    ? candidate.code
+    : typeof candidate.message === 'string'
+      ? candidate.message
+      : ''
+}
+export function nativeAccessError(error: unknown): string {
+  switch (nativeAccessErrorCode(error)) {
+    case 'native_counter_account_required':
+      return 'This counter is enrolled to another staff account. Sign in with that account or ask your manager for recovery. Keep this device identity and its saved records.'
+    case 'native_sign_out_pending':
+      return 'Signed out on this device. Connect to finish server sign-out.'
+    case 'native_authentication_failed':
+      return 'Sign-in could not be confirmed. Check your details in the Android sign-in dialog and try again.'
+    case 'native_network_unavailable':
+      return 'Connect to the internet, then check access again. Saved device records are kept.'
+    case 'native_session_expired':
+      return 'Your session has expired. Check access, then sign in again using the Android dialog.'
+    case 'native_enrollment_uncertain':
+      return 'Counter enrollment needs confirmation. Check access before trying again; do not register another counter to replace this attempt.'
+    case 'native_storage_unavailable':
+      return 'Device access could not be saved or read. Keep this app’s data and retry the check. Do not clear storage or reinstall.'
+    case 'native_access_unavailable':
+      return 'Restaurant access could not be confirmed. Check access again, or ask your branch owner for help.'
+    default:
+      return 'Access could not be confirmed. Check access again before making another change.'
+  }
+}
+function requireNativeAccess() {
+  if (!hasNativeLedger()) throw new Error('native_unavailable')
+}
+export async function readAccessState(): Promise<NativeAccessState> {
+  requireNativeAccess()
+  return parseAccessState(await ledger.getAccessState())
+}
+export async function signInNative(): Promise<NativeAccessState> {
+  requireNativeAccess()
+  const state = parseAccessState(await ledger.signIn())
+  if (state.status !== 'signed_in') throw new Error('invalid_native_response')
+  return state
+}
+export async function signOutNative(): Promise<NativeAccessState> {
+  requireNativeAccess()
+  const state = parseAccessState(await ledger.signOut())
+  if (state.status !== 'signed_out') throw new Error('invalid_native_response')
+  return state
+}
+export async function enrollNativeCounter(input: {
+  branchId: string
+  name: string
+}): Promise<NativeAccessState> {
+  requireNativeAccess()
+  if (!uuid(input.branchId) || !input.name.trim() || input.name.trim().length > 80)
+    throw new Error('invalid_native_input')
+  const state = parseAccessState(
+    await ledger.enrollCounter({ branchId: input.branchId, name: input.name.trim() })
+  )
+  if (state.status !== 'signed_in' || state.device?.branchId !== input.branchId)
+    throw new Error('invalid_native_response')
+  return state
 }

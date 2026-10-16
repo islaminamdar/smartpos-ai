@@ -445,3 +445,102 @@ footer {
   background: #eaf3ef;
   color: #246048;
 }
+
+.access-note {
+  margin-top: 18px;
+  color: #526778;
+}
+.access-actions {
+  margin: 24px 0 16px;
+}
+.access-error {
+  margin: 20px 0;
+}
+.access-account {
+  margin-top: 22px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #dce3eb;
+}
+.access-account strong,
+.access-account span {
+  display: block;
+}
+.access-account span {
+  margin-top: 6px;
+  color: #526778;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+.access-device {
+  margin-top: 22px;
+}
+.enrollment-form {
+  margin-top: 20px;
+}
+.enrollment-form label {
+  display: grid;
+  gap: 8px;
+  font-weight: 700;
+  margin: 18px 0;
+}
+.enrollment-form input,
+.enrollment-form select {
+  font: inherit;
+  color: #17324d;
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid #bdcbd9;
+  border-radius: 6px;
+  background: white;
+}
+.enrollment-form input:disabled,
+.enrollment-form select:disabled {
+  opacity: 0.65;
+}
+.enrollment-form input:focus-visible,
+.enrollment-form select:focus-visible {
+  outline: 3px solid #175cd3;
+  outline-offset: 3px;
+}
+.role-name {
+  text-transform: capitalize;
+}
+.signout,
+.access-refresh {
+  margin-top: 20px;
+  margin-right: 10px;
+}
+.offline-next {
+  margin: 28px 0 16px;
+  padding-top: 22px;
+  border-top: 1px solid #dce3eb;
+}
+.offline-next p {
+  font-size: 0.95rem;
+  color: #526778;
+}
+.setup-panel > .external-link {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+@media (max-width: 420px) {
+  .access-actions > button,
+  .enrollment-form > button,
+  .signout,
+  .access-refresh {
+    width: 100%;
+    margin-right: 0;
+  }
+}
+
+.device-layout[hidden] {
+  display: none;
+}
+
+.selected-branch {
+  overflow-wrap: anywhere;
+}

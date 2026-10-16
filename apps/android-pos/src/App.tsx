@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { hasNativeLedger, readDeviceSnapshot, type DeviceSnapshot } from './native'
+import {
+  hasNativeLedger,
+  readDeviceSnapshot,
+  type DeviceSnapshot,
+  readAccessState,
+  signInNative,
+  signOutNative,
+  enrollNativeCounter,
+  nativeAccessError,
+  nativeAccessErrorCode,
+  type NativeAccessState,
+} from './native'
 import './app.css'
 
 const date = (value: string) =>
@@ -8,6 +19,325 @@ const date = (value: string) =>
     timeStyle: 'short',
     timeZone: 'Asia/Dubai',
   }).format(new Date(value))
+
+function NativeAccess({ available }: { available: boolean }) {
+  const [access, setAccess] = useState<NativeAccessState | null>(null)
+  const [fresh, setFresh] = useState(false)
+  const [busy, setBusy] = useState<'check' | 'signin' | 'signout' | 'enroll' | null>(null)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [pendingLogout, setPendingLogout] = useState(false)
+  const [branchId, setBranchId] = useState('')
+  const [name, setName] = useState('')
+  const locked = useRef(false)
+  const mounted = useRef(false)
+  const apply = useCallback((next: NativeAccessState) => {
+    setAccess(next)
+    setFresh(true)
+    setBranchId(
+      (previous) =>
+        next.device?.branchId ??
+        (next.branches.some((branch) => branch.id === previous)
+          ? previous
+          : next.branches.length === 1
+            ? next.branches[0].id
+            : '')
+    )
+    if (next.status === 'signed_out') setName('')
+  }, [])
+  const check = useCallback(async () => {
+    if (!available || locked.current) return
+    locked.current = true
+    setBusy('check')
+    setFresh(false)
+    setError('')
+    setNotice('')
+    try {
+      const next = await readAccessState()
+      if (mounted.current) apply(next)
+    } catch (failure) {
+      if (mounted.current) setError(nativeAccessError(failure))
+    } finally {
+      locked.current = false
+      if (mounted.current) setBusy(null)
+    }
+  }, [available, apply])
+  useEffect(() => {
+    mounted.current = true
+    void check()
+    return () => {
+      mounted.current = false
+    }
+  }, [check])
+  const branch = access?.branches.find((candidate) => candidate.id === branchId)
+  async function change(kind: 'signin' | 'signout' | 'enroll') {
+    if (!available || locked.current || !fresh || !access) return
+    if (kind === 'signin' && (access.status !== 'signed_out' || pendingLogout)) return
+    if (
+      kind !== 'signin' &&
+      access.status !== 'signed_in' &&
+      !(kind === 'signout' && pendingLogout)
+    )
+      return
+    if (
+      kind === 'enroll' &&
+      (access.device ||
+        !branch ||
+        branch.role === 'cashier' ||
+        !name.trim() ||
+        name.trim().length > 80)
+    )
+      return
+    locked.current = true
+    setBusy(kind)
+    setError('')
+    setNotice('')
+    const actorId = access.actorId
+    try {
+      const next = await (kind === 'signin'
+        ? signInNative()
+        : kind === 'signout'
+          ? signOutNative()
+          : enrollNativeCounter({ branchId, name: name.trim() }))
+      if (kind === 'enroll' && (next.actorId !== actorId || next.device?.branchId !== branchId))
+        throw new Error('invalid_native_response')
+      if (mounted.current) {
+        apply(next)
+        if (kind === 'signout') setPendingLogout(false)
+        setNotice(
+          kind === 'signin'
+            ? 'Signed in. Offline sales are still paused.'
+            : kind === 'signout'
+              ? 'Signed out. Saved device records have not been removed.'
+              : 'Counter enrolled. Offline sales are still paused until offline preparation is available.'
+        )
+      }
+    } catch (failure) {
+      if (mounted.current) {
+        if (nativeAccessErrorCode(failure) === 'native_sign_out_pending') {
+          setPendingLogout(true)
+          setFresh(false)
+          setNotice(nativeAccessError(failure))
+          try {
+            const next = await readAccessState()
+            if (next.status !== 'signed_out') throw new Error('invalid_native_response')
+            if (mounted.current) apply(next)
+          } catch (readFailure) {
+            if (mounted.current) setError(nativeAccessError(readFailure))
+          }
+        } else if (
+          kind === 'signin' &&
+          nativeAccessErrorCode(failure) === 'native_sign_in_cancelled'
+        )
+          setNotice('Sign-in cancelled.')
+        else {
+          setFresh(false)
+          setError(nativeAccessError(failure))
+        }
+      }
+    } finally {
+      locked.current = false
+      if (mounted.current) setBusy(null)
+    }
+  }
+  const paused = !!busy || !fresh
+  return (
+    <section className="setup-panel" aria-labelledby="setup-heading">
+      <h2 id="setup-heading">
+        {access?.device ? 'Your counter access' : 'Connect to set up your counter'}
+      </h2>
+      <p>
+        Sign in through the Android dialog, then enroll this counter for your branch. Internet is
+        required for account access and enrollment.
+      </p>
+      {!available ? (
+        <p className="access-note">
+          Secure sign-in is available in the installed Android app. Passwords are never entered on
+          this screen.
+        </p>
+      ) : (
+        <>
+          {busy && (
+            <p className="access-note" role="status">
+              {busy === 'check'
+                ? 'Checking account access…'
+                : busy === 'signin'
+                  ? 'Complete sign-in in the Android dialog.'
+                  : busy === 'signout'
+                    ? 'Signing out…'
+                    : 'Confirming counter enrollment…'}
+            </p>
+          )}
+          {error && (
+            <div className="error access-error" role="alert">
+              <h3>Access needs checking</h3>
+              <p>{error}</p>
+              {access && (
+                <p>
+                  The last confirmed account is shown. Account changes are paused until access is
+                  checked.
+                </p>
+              )}
+            </div>
+          )}
+          {notice && (
+            <p className="access-note" role="status">
+              {notice}
+            </p>
+          )}
+          {access?.status === 'signed_out' && (
+            <div className="access-actions">
+              <button
+                className="primary"
+                disabled={paused || pendingLogout}
+                onClick={() => void change('signin')}
+              >
+                Sign in securely
+              </button>
+              <p className="help">
+                The Android dialog handles your credentials. Signing in does not enable offline
+                sales.
+              </p>
+            </div>
+          )}
+          {access?.status === 'signed_in' && (
+            <>
+              <div className="access-account">
+                <strong>{fresh ? 'Signed in' : 'Last confirmed account'}</strong>
+                <span>Staff reference {access.actorId}</span>
+              </div>
+              {access.branches.length === 0 ? (
+                <p className="access-note">
+                  No restaurant branches are available for this account. Ask your branch owner to
+                  check your access.
+                </p>
+              ) : access.device ? (
+                <dl className="record-values access-device">
+                  <div>
+                    <dt>Enrolled counter</dt>
+                    <dd>{access.device.name}</dd>
+                  </div>
+                  <div>
+                    <dt>Restaurant branch</dt>
+                    <dd>
+                      {branch?.name ??
+                        access.branches.find((item) => item.id === access.device?.branchId)?.name}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Your role</dt>
+                    <dd className="role-name">{branch?.role}</dd>
+                  </div>
+                </dl>
+              ) : (
+                <div className="enrollment-form">
+                  <label>
+                    Restaurant branch
+                    <select
+                      value={branchId}
+                      onChange={(event) => setBranchId(event.target.value)}
+                      disabled={paused}
+                    >
+                      <option value="">Select your branch</option>
+                      {access.branches.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name} — {item.role}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {branch && (
+                    <p className="help selected-branch">
+                      Selected branch: <strong>{branch.name}</strong>.<br />
+                      Your role: <strong className="role-name">{branch.role}</strong>.
+                    </p>
+                  )}
+                  {branch?.role === 'cashier' ? (
+                    <p className="access-note">
+                      A manager or owner must enroll this counter. Sign out so they can complete
+                      setup with their own account.
+                    </p>
+                  ) : (
+                    <>
+                      <label>
+                        Counter name
+                        <input
+                          value={name}
+                          onChange={(event) => setName(event.target.value)}
+                          maxLength={80}
+                          autoComplete="off"
+                          placeholder="For example, Front counter"
+                          disabled={paused || !branch}
+                        />
+                      </label>
+                      <button
+                        className="primary"
+                        disabled={paused || !branch || !name.trim()}
+                        onClick={() => void change('enroll')}
+                      >
+                        Enroll this counter
+                      </button>
+                      <p className="help">
+                        Enroll only this installation for the selected branch. This does not prepare
+                        a menu or permit offline billing.
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+              <button
+                className="secondary signout"
+                disabled={paused}
+                onClick={() => void change('signout')}
+              >
+                Sign out of this app
+              </button>
+            </>
+          )}
+          {pendingLogout && (
+            <div className="access-note">
+              <p>New sign-in is paused until server sign-out is confirmed.</p>
+              <button
+                className="secondary"
+                disabled={paused || !access}
+                onClick={() => void change('signout')}
+              >
+                Finish sign-out
+              </button>
+            </div>
+          )}
+          <button
+            className="secondary access-refresh"
+            disabled={!!busy}
+            onClick={() => void check()}
+          >
+            {busy === 'check' ? 'Checking access…' : 'Check access'}
+          </button>
+        </>
+      )}
+      <div className="offline-next">
+        <h3>Offline preparation is next</h3>
+        <p>
+          The bundled app can open without internet. A prepared menu, signed selling permission and
+          invoice allocation are still required before it can record sales offline. These are not
+          enabled in this version.
+        </p>
+      </div>
+      <a
+        className="external-link"
+        href="https://pos.internext.info/counter"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Open online web counter <span aria-hidden="true">↗</span>
+      </a>
+      <p className="help">
+        Opens separately and requires internet and staff sign-in. The web counter does not enroll
+        this Android installation.
+      </p>
+    </section>
+  )
+}
 
 export default function App() {
   const [view, setView] = useState<'device' | 'receipts'>('device')
@@ -120,95 +450,57 @@ export default function App() {
               and cannot make this device ready for offline selling.
             </p>
           )}
-          {view === 'device' ? (
-            <div className="device-layout">
-              <section className="setup-panel" aria-labelledby="setup-heading">
-                <h2 id="setup-heading">Connect to set up your counter</h2>
-                <p>
-                  Live offline selling requires online enrollment for your restaurant, branch and
-                  staff account. Enrollment is not available in this app version.
-                </p>
-                <ol className="setup-list">
-                  <li>
-                    <strong>Open the installed app</strong>
-                    <span>
-                      The bundled app can open without internet. Device checks read local storage.
-                    </span>
-                  </li>
-                  <li>
-                    <strong>Enroll this device online</strong>
-                    <span>
-                      Restaurant access, the menu and permission to issue receipts must be prepared
-                      before offline sales.
-                    </span>
-                  </li>
-                  <li>
-                    <strong>Verify offline readiness</strong>
-                    <span>Sales stay paused until the app confirms that setup is complete.</span>
-                  </li>
-                </ol>
-                <a
-                  className="primary external-link"
-                  href="https://pos.internext.info/counter"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Open online web counter <span aria-hidden="true">↗</span>
-                </a>
+          <div className="device-layout" hidden={view !== 'device'}>
+            <NativeAccess available={native} />
+            <section className="records-panel" aria-labelledby="records-heading">
+              <h2 id="records-heading">Records on this device</h2>
+              <dl className="record-values">
+                <div>
+                  <dt>Saved receipts</dt>
+                  <dd>{snapshot ? snapshot.status.receiptCount : 'Unavailable'}</dd>
+                </div>
+                <div>
+                  <dt>Waiting for server confirmation</dt>
+                  <dd>{snapshot ? snapshot.status.pendingCount : 'Unavailable'}</dd>
+                </div>
+                <div>
+                  <dt>Last server acknowledgement</dt>
+                  <dd>
+                    {snapshot?.status.lastAcknowledgedAt
+                      ? `${date(snapshot.status.lastAcknowledgedAt)} Dubai time`
+                      : snapshot
+                        ? 'None recorded'
+                        : 'Unavailable'}
+                  </dd>
+                </div>
+              </dl>
+              {snapshot && (
                 <p className="help">
-                  Opens separately and requires internet and staff sign-in. Using the web counter
-                  does not enroll this Android device.
+                  {failed ? 'Last successful check' : 'Device checked'} {date(snapshot.checkedAt)}{' '}
+                  Dubai time. A device check does not synchronize sales.
                 </p>
-              </section>
-              <section className="records-panel" aria-labelledby="records-heading">
-                <h2 id="records-heading">Records on this device</h2>
-                <dl className="record-values">
-                  <div>
-                    <dt>Saved receipts</dt>
-                    <dd>{snapshot ? snapshot.status.receiptCount : 'Unavailable'}</dd>
-                  </div>
-                  <div>
-                    <dt>Waiting for server confirmation</dt>
-                    <dd>{snapshot ? snapshot.status.pendingCount : 'Unavailable'}</dd>
-                  </div>
-                  <div>
-                    <dt>Last server acknowledgement</dt>
-                    <dd>
-                      {snapshot?.status.lastAcknowledgedAt
-                        ? `${date(snapshot.status.lastAcknowledgedAt)} Dubai time`
-                        : snapshot
-                          ? 'None recorded'
-                          : 'Unavailable'}
-                    </dd>
-                  </div>
-                </dl>
-                {snapshot && (
+              )}
+              <p className="help">
+                Keep this app’s data. Any saved receipts belong to this installation; reinstalling
+                is not a recovery step.
+              </p>
+              {snapshot && (
+                <details className="identity">
+                  <summary>Device identification</summary>
+                  <dl>
+                    <dt>Installation reference</dt>
+                    <dd>{snapshot.identity.installationId}</dd>
+                    <dt>Device key fingerprint</dt>
+                    <dd>{snapshot.identity.deviceKeySha256}</dd>
+                  </dl>
                   <p className="help">
-                    {failed ? 'Last successful check' : 'Device checked'} {date(snapshot.checkedAt)}{' '}
-                    Dubai time. A device check does not synchronize sales.
+                    For device setup and support. This is not proof of restaurant enrollment.
                   </p>
-                )}
-                <p className="help">
-                  Keep this app’s data. Any saved receipts belong to this installation; reinstalling
-                  is not a recovery step.
-                </p>
-                {snapshot && (
-                  <details className="identity">
-                    <summary>Device identification</summary>
-                    <dl>
-                      <dt>Installation reference</dt>
-                      <dd>{snapshot.identity.installationId}</dd>
-                      <dt>Device key fingerprint</dt>
-                      <dd>{snapshot.identity.deviceKeySha256}</dd>
-                    </dl>
-                    <p className="help">
-                      For device setup and support. This is not proof of restaurant enrollment.
-                    </p>
-                  </details>
-                )}
-              </section>
-            </div>
-          ) : (
+                </details>
+              )}
+            </section>
+          </div>
+          {view === 'receipts' && (
             <section className="history-panel" aria-labelledby="history-heading">
               <h2 id="history-heading">Receipts stored by this app</h2>
               {unavailable ? (
@@ -286,7 +578,7 @@ export default function App() {
         </main>
       </div>
       <footer>
-        Internext POS · Device storage foundation
+        Internext POS · Android counter setup
         <span>Offline selling is not enabled in this version.</span>
       </footer>
     </div>

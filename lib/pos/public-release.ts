@@ -21,6 +21,8 @@ export function publicReleaseAccess(
     )
       return 'allow'
     const apiMethods: Record<string, string[]> = {
+      '/api/pos/native/access': ['GET'],
+      '/api/pos/native/device': ['POST'],
       '/api/pos/offline/enroll': ['POST'],
       '/api/pos/offline/authority': ['POST'],
       '/api/billing/paypal/status': ['GET'],

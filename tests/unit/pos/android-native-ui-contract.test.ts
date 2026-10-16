@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { parseIdentity, parseReceipts, parseStatus } from '../../../apps/android-pos/src/native'
+import {
+  parseIdentity,
+  parseReceipts,
+  parseStatus,
+  parseAccessState,
+  nativeAccessError,
+} from '../../../apps/android-pos/src/native'
 
 const status = {
   schemaVersion: 1,
@@ -62,5 +68,46 @@ describe('Android foundation UI contract', () => {
     { receipts: [receipt] },
   ])('fails closed on malformed receipt summaries', (value) => {
     expect(() => parseReceipts(value)).toThrow()
+  })
+})
+
+describe('Native access response boundary', () => {
+  const branch = {
+    id: '10000000-0000-4000-8000-000000000001',
+    organizationId: '10000000-0000-4000-8000-000000000002',
+    name: 'Synthetic branch',
+    role: 'manager',
+  }
+  const access = {
+    schemaVersion: 1,
+    status: 'signed_in',
+    actorId: '10000000-0000-4000-8000-000000000003',
+    branches: [branch],
+    device: null,
+    canPrepareOffline: false,
+  }
+  it('accepts signed-in scope without implying offline preparation', () => {
+    expect(parseAccessState(access).canPrepareOffline).toBe(false)
+    expect(
+      parseAccessState({ ...access, status: 'signed_out', actorId: null, branches: [] }).status
+    ).toBe('signed_out')
+  })
+  it.each([
+    { ...access, status: 'signed_out' },
+    { ...access, actorId: null },
+    { ...access, branches: [branch, branch] },
+    { ...access, branches: [{ ...branch, role: 'admin' }] },
+    { ...access, canPrepareOffline: true },
+    { ...access, accessToken: 'must-never-cross-bridge' },
+    {
+      ...access,
+      device: { id: branch.id, branchId: access.actorId, name: 'Foreign branch device' },
+    },
+  ])('rejects inconsistent scope or secret-bearing responses', (value) => {
+    expect(() => parseAccessState(value)).toThrow()
+  })
+  it('shows safe recovery directions for uncertain enrollment and generic failures', () => {
+    expect(nativeAccessError({ code: 'native_enrollment_uncertain' })).toMatch(/Check access/)
+    expect(nativeAccessError(new Error('sensitive unexpected payload'))).not.toContain('sensitive')
   })
 })
