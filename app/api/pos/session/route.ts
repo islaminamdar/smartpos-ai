@@ -74,7 +74,7 @@ export async function POST(request: Request) {
 }
 export async function GET() {
   try {
-    requirePilot()
+    // Historical request recovery needs identity without enabling new selling.
     const { user } = await authenticatedPosClient()
     return NextResponse.json(
       { status: 'authenticated', userId: user.id },

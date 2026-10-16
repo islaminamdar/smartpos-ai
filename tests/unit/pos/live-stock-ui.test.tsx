@@ -148,3 +148,13 @@ it('keeps historical stock recovery reachable when current bootstrap authorizati
   render(<LiveCounter />)
   expect(await screen.findByRole('button',{name:'Check saved stock work'})).toBeVisible()
 })
+
+// These feature tests isolate empty station journals; station custody has its own race tests.
+vi.mock('@/lib/pos/kitchen-station-journal', () => ({
+  stationJournalEvent: 'station-config-test',
+  readPendingStationRequests: async () => [],
+}))
+vi.mock('@/lib/pos/kitchen-station-work-journal', () => ({
+  stationWorkJournalEvent: 'station-work-test',
+  readPendingStationWorkRequests: async () => [],
+}))

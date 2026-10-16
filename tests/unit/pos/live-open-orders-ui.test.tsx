@@ -481,3 +481,13 @@ it('manager feature gate shows the dedicated review tab without making any decis
   await screen.findByRole('heading', { name: 'Offline payment reviews' })
   expect(screen.getByText(/Device confirmation is not available on this screen/)).toBeVisible()
 })
+
+// These feature tests isolate empty station journals; station custody has its own race tests.
+vi.mock('@/lib/pos/kitchen-station-journal', () => ({
+  stationJournalEvent: 'station-config-test',
+  readPendingStationRequests: async () => [],
+}))
+vi.mock('@/lib/pos/kitchen-station-work-journal', () => ({
+  stationWorkJournalEvent: 'station-work-test',
+  readPendingStationWorkRequests: async () => [],
+}))

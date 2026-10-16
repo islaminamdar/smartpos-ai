@@ -42,6 +42,10 @@ import PendingStockRecovery from './inventory/PendingStockRecovery'
 import KitchenBoard, { KitchenPendingRecovery } from './kitchen/KitchenBoard'
 import TabKitchenBoard, { TabKitchenPendingRecovery } from './tab-kitchen/TabKitchenBoard'
 import TabKitchenDispatch from './tab-kitchen/TabKitchenDispatch'
+import KitchenStationManager from './kitchen-stations/KitchenStationManager'
+import StationWorkBoard from './kitchen-stations/StationWorkBoard'
+import PendingKitchenStationRecovery from './kitchen-stations/PendingKitchenStationRecovery'
+import { useStationCustody } from './kitchen-stations/useStationCustody'
 import {
   readPendingTabKitchenRequests,
   tabKitchenJournalEvent,
@@ -79,6 +83,7 @@ type View =
   | 'payment-review'
   | 'operations'
   | 'stock'
+  | 'kitchen-stations'
 class ApiError extends Error {
   constructor(
     public status: number,
@@ -141,8 +146,14 @@ async function api(path: string, method = 'GET', body?: unknown): Promise<unknow
 
 export default function LiveCounter({
   offlinePaymentReviewEnabled = false,
-}: { offlinePaymentReviewEnabled?: boolean } = {}) {
+  kitchenStationsEnabled = false,
+}: { offlinePaymentReviewEnabled?: boolean; kitchenStationsEnabled?: boolean } = {}) {
   const [boot, setBoot] = useState<LiveBootstrap | null>(null)
+  const stationCustody = useStationCustody(boot?.userId)
+  const [stationEditorBlocked, setStationEditorBlocked] = useState(false)
+  const [stationWorkBlocked, setStationWorkBlocked] = useState(false)
+  const stationInteractionHeld = stationEditorBlocked || stationWorkBlocked
+  const stationHeld = stationCustody.held || stationInteractionHeld
   const [needsLogin, setNeedsLogin] = useState(false)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -261,6 +272,7 @@ export default function LiveCounter({
   const requiresOrderSave =
     openOrderMetadataDirty || !!initialTableId || (!!sourceTab && !savedBasketMatches)
   const basketLocked =
+    stationHeld ||
     reviewHeld ||
     busy ||
     !!pending ||
@@ -292,6 +304,7 @@ export default function LiveCounter({
     online &&
     boot.device &&
     !busy &&
+    !stationHeld &&
     !reviewHeld &&
     !pending &&
     !tabKitchenBusy &&
@@ -1009,6 +1022,7 @@ export default function LiveCounter({
           <p role="alert">{error || 'The account service is not ready yet.'}</p>
           <PendingAccessRecovery />
           <PendingStockRecovery disabled={busy || !online} />
+          <PendingKitchenStationRecovery disabled={busy || !online} />
           <KitchenPendingRecovery disabled={busy || !online} />
           <TabKitchenPendingRecovery disabled={busy || !online} />
           <OpenOrderPendingRecovery disabled={busy || !online} />
@@ -1042,6 +1056,7 @@ export default function LiveCounter({
           disabled={
             busy ||
             stockBusy ||
+            stationHeld ||
             !!pending ||
             reviewHeld ||
             tabKitchenBusy ||
@@ -1055,6 +1070,8 @@ export default function LiveCounter({
           }
           onClick={() =>
             void run(async () => {
+              if (stationInteractionHeld || (await stationCustody.check()))
+                throw new Error('Resolve or finish the kitchen station change before signing out.')
               if (await readPendingRequest(boot.userId))
                 throw new Error('Recover the pending request before signing out.')
               if (reviewBusy || (await checkReviewPending(boot.userId)).length)
@@ -1144,6 +1161,34 @@ export default function LiveCounter({
               </button>
             </details>
           </section>
+        )}
+        {!stationCustody.ready && (
+          <section className="lc-warning" aria-label="Checking saved station work">
+            <p>
+              Saved kitchen station changes could not yet be checked. Account changes and counter
+              registration are paused.
+            </p>
+            <button
+              disabled={busy || stationInteractionHeld}
+              onClick={() => void stationCustody.check().catch(() => undefined)}
+            >
+              Check saved station changes
+            </button>
+          </section>
+        )}
+        {(stationCustody.configuration || stationCustody.work) && (
+          <PendingKitchenStationRecovery
+            actorId={boot.userId}
+            excludeConfigurationBranchId={
+              kitchenStationsEnabled && view === 'kitchen-stations' && manager && boot.device
+                ? branchId
+                : undefined
+            }
+            excludeWorkBranchId={
+              kitchenStationsEnabled && view === 'kitchen' && boot.device ? branchId : undefined
+            }
+            disabled={busy || !online || reviewBusy || openOrderBusy || tabKitchenBusy}
+          />
         )}
         {!reviewReady && (
           <p className="lc-warning">
@@ -1301,6 +1346,10 @@ export default function LiveCounter({
                   event.preventDefault()
                   const data = new FormData(event.currentTarget)
                   void run(async () => {
+                    if (stationInteractionHeld || (await stationCustody.check()))
+                      throw new Error(
+                        'Resolve the saved kitchen station change before registering a counter.'
+                      )
                     if (reviewBusy || (await checkReviewPending(boot.userId)).length)
                       throw new Error(
                         'Check the saved manager decision before changing account or counter access.'
@@ -1354,6 +1403,7 @@ export default function LiveCounter({
                   disabled={
                     busy ||
                     !branchId ||
+                    stationHeld ||
                     !!pending ||
                     reviewHeld ||
                     tabKitchenBusy ||
@@ -1387,6 +1437,7 @@ export default function LiveCounter({
                   ? [
                       'menu',
                       'stock',
+                      ...(kitchenStationsEnabled ? ['kitchen-stations'] : []),
                       'offers',
                       'reports',
                       'staff',
@@ -1400,13 +1451,14 @@ export default function LiveCounter({
               <button
                 key={item}
                 aria-current={view === item ? 'page' : undefined}
-                disabled={openOrderBusy || reviewBusy || stockBusy}
+                disabled={openOrderBusy || reviewBusy || stockBusy || stationInteractionHeld}
                 onClick={() => setView(item)}
               >
                 {
                   {
                     sell: 'Sell',
                     kitchen: 'Kitchen',
+                    'kitchen-stations': 'Kitchen stations',
                     'open-orders': 'Orders & tables',
                     receipts: 'Receipts',
                     shift: 'Shift',
@@ -1455,9 +1507,17 @@ export default function LiveCounter({
                 branchId={branchId}
                 branchName={branch?.name ?? 'Branch'}
                 branches={boot.branches}
-                disabled={busy || openOrderBusy || reviewBusy || tabKitchenBusy}
+                disabled={
+                  busy || openOrderBusy || reviewBusy || tabKitchenBusy || stationInteractionHeld
+                }
                 onNavigate={(destination) => {
-                  if (!busy && !openOrderBusy && !reviewBusy && !tabKitchenBusy)
+                  if (
+                    !busy &&
+                    !openOrderBusy &&
+                    !reviewBusy &&
+                    !tabKitchenBusy &&
+                    !stationInteractionHeld
+                  )
                     setView(destination)
                 }}
               />
@@ -1489,6 +1549,30 @@ export default function LiveCounter({
                 }}
               />
             )}
+            {view === 'kitchen-stations' && manager && branch && kitchenStationsEnabled && (
+              <KitchenStationManager
+                actorId={boot.userId}
+                branchId={branchId}
+                deviceId={boot.device.id}
+                role={branch.role}
+                disabled={
+                  busy || !!pending || !online || reviewHeld || openOrderBusy || tabKitchenBusy
+                }
+                onBlockedChange={setStationEditorBlocked}
+              />
+            )}
+            {view === 'kitchen' && branch && kitchenStationsEnabled && (
+              <StationWorkBoard
+                actorId={boot.userId}
+                branchId={branchId}
+                deviceId={boot.device.id}
+                role={branch.role}
+                disabled={
+                  busy || !!pending || !online || reviewHeld || openOrderBusy || tabKitchenBusy
+                }
+                onBlockedChange={setStationWorkBlocked}
+              />
+            )}
             {view === 'kitchen' && branch && (
               <KitchenReturnNotices
                 key={`${boot.userId}:${branchId}:${boot.device.id}`}
@@ -1501,7 +1585,7 @@ export default function LiveCounter({
             )}
             {view === 'kitchen' && branch && (
               <TabKitchenBoard
-                key={`${boot.userId}:${branchId}:${kitchenReturnRevision}`}
+                key={`tab-kitchen:${boot.userId}:${branchId}:${kitchenReturnRevision}`}
                 actorId={boot.userId}
                 branchId={branchId}
                 branchName={branch.name}
@@ -1517,7 +1601,7 @@ export default function LiveCounter({
             )}
             {view === 'kitchen' && branch && (
               <KitchenBoard
-                key={`${boot.userId}:${branchId}:${kitchenReturnRevision}`}
+                key={`paid-kitchen:${boot.userId}:${branchId}:${kitchenReturnRevision}`}
                 actorId={boot.userId}
                 branchId={branchId}
                 branchName={branch.name}
@@ -1559,6 +1643,7 @@ export default function LiveCounter({
                   !!pending ||
                   !online ||
                   !!shift ||
+                  stationHeld ||
                   reviewHeld ||
                   tabKitchenBusy ||
                   tabKitchenPending ||

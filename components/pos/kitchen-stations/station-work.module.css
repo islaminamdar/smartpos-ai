@@ -1,0 +1,169 @@
+.board {
+  color: #20362d;
+  min-width: 0;
+  margin: 24px 0;
+}
+.board * {
+  box-sizing: border-box;
+}
+.board p {
+  line-height: 1.5;
+  max-width: 76ch;
+}
+.heading,
+.filters,
+.actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.heading {
+  justify-content: space-between;
+}
+.heading h2 {
+  margin: 0;
+}
+.filters label {
+  flex: 1 1 180px;
+}
+.board label {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+}
+.board input,
+.board select {
+  min-height: 46px;
+  padding: 10px;
+  border: 1px solid #9eafa5;
+  border-radius: 6px;
+  background: white;
+  color: inherit;
+  font: inherit;
+  min-width: 0;
+  width: 100%;
+}
+.board button {
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid #235b42;
+  border-radius: 7px;
+  background: #235b42;
+  color: white;
+  font: inherit;
+  cursor: pointer;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.board button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.board button.secondary {
+  background: white;
+  color: #235b42;
+}
+.board :focus-visible {
+  outline: 3px solid #377ad6;
+  outline-offset: 3px;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(0, 2fr);
+  gap: 24px;
+}
+.cards {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+.board .card {
+  display: grid;
+  gap: 8px;
+  text-align: left;
+  background: white;
+  color: #20362d;
+  border-color: #a7bbb0;
+}
+.board .card[aria-pressed='true'] {
+  border: 2px solid #235b42;
+  background: #edf6ef;
+}
+.card span {
+  font-size: 0.9rem;
+}
+.detail {
+  min-width: 0;
+}
+.stage {
+  border-top: 1px solid #cfdbd3;
+  padding: 12px 0;
+}
+.stage h4 {
+  margin: 0;
+}
+.stage ul {
+  padding: 0;
+  list-style: none;
+}
+.stage li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  overflow-wrap: anywhere;
+}
+.stage li strong {
+  white-space: nowrap;
+}
+.notice {
+  padding: 16px;
+  border: 1px solid #a7bbb0;
+  margin: 16px 0;
+  overflow-wrap: anywhere;
+}
+.notice h4 {
+  margin: 0 0 8px;
+}
+.notice time {
+  font-size: 0.85rem;
+  color: #52655a;
+}
+.notice li {
+  padding: 6px 0;
+}
+.attention {
+  padding: 14px;
+  background: #fff8e5;
+  border-left: 4px solid #9e7318;
+}
+.error {
+  padding: 12px;
+  color: #842923;
+  background: #fff0ee;
+}
+.note {
+  padding: 12px;
+  background: #edf3f9;
+}
+.summary {
+  color: #52655a;
+}
+@media (max-width: 680px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .actions > button {
+    width: 100%;
+  }
+  .heading > button {
+    width: 100%;
+  }
+  .stage li {
+    flex-wrap: wrap;
+  }
+  .board {
+    margin: 16px 0;
+  }
+}

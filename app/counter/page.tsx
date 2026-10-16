@@ -11,6 +11,7 @@ export default function CounterPage() {
   return (
     <LiveCounter
       offlinePaymentReviewEnabled={process.env.POS_OFFLINE_PAYMENT_REVIEW_ENABLED === 'true'}
+      kitchenStationsEnabled={process.env.POS_KITCHEN_STATIONS_ENABLED === 'true'}
     />
   )
 }

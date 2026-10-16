@@ -1,16 +1,16 @@
 # Kitchen station workflow
 
-Design direction reviewed against the existing restaurant counter. This is not a rendered or delivered screen. The configuration foundation is defined in the [station contract](../contracts/20261016-kitchen-stations.md); the editor and station-scoped preparation/notice workflow remain pending.
+Candidate implementation extends the existing restaurant counter. The manager editor and unified station board have been rendered with synthetic fixtures at 320px, 375px and 1280px. Customer activation remains pending. See the [configuration contract](../contracts/20261016-kitchen-stations.md), [workflow contract](../contracts/20261016-kitchen-station-workflow.md) and [manager guide](../operations/kitchen-stations.md).
 
 ## Purpose and visual direction
 
-Give each kitchen worker an accurate view of their station without losing changes, withdrawals or unassigned work. Keep the existing Kitchen navigation and the branch name visible. Extend the current Arial/Noto Sans type system and operational palette: navy `#142d4e`, action blue `#165dcc`, white, canvas `#f4f7fb`, attention amber `#744609` and stop red `#812b22`. Station identity uses names, not colours already reserved for preparation state. Hierarchy comes from order references, quantities and clear actions; avoid decorative summary cards.
+Give each kitchen worker an accurate view of their station without losing changes, withdrawals or unassigned work. Keep the existing Kitchen navigation and the branch name visible. Use the inherited counter typeface with dark green `#20362d`, action green `#235b42`, white, selected-work tint `#edf6ef`, attention amber `#9e7318` and stop red `#842923`. The final visual pass uses green preparation controls within the existing counter chrome, with blue keyboard focus. Station identity uses names, not colours already reserved for preparation state. Hierarchy comes from order references, quantities and clear actions; avoid decorative summary cards.
 
-Use one shared, labelled station select above both existing kitchen families. Default to All stations, with General for unassigned work. The review rejected a filter-only implementation: existing actions affect whole tickets or stage buckets. Do not label an action “Start Grill items” until its server command enforces exactly that station's scope.
+Use one labelled station select for the unified routed paid/unpaid board; retain separate legacy boards below for previously sent work. Default to All stations, with General for unassigned work. The review rejected a filter-only implementation: existing actions affect whole tickets or stage buckets. Do not label an action “Start Grill items” until its server command enforces exactly that station's scope.
 
 ## Manager setup
 
-Kitchen → Manage stations opens an in-page editor with a Back button and branch identity. Managers create, rename, archive or reactivate stations. Search products and assign a station or General; keep these edits separate from unsaved menu prices/photos. Saving uses the exact durable request and confirms only its matching acknowledgement. Uncertain saves remain visible for recovery; changing branch/account cannot adopt another actor's request.
+The manager-only **Kitchen stations** navigation opens an in-page editor within the branch counter. Managers create, rename, archive or reactivate stations. Search products and assign a station or General; keep these edits separate from unsaved menu prices/photos. Saving uses the exact durable request and confirms only its matching acknowledgement. Uncertain saves remain visible for recovery; changing branch/account cannot adopt another actor's request.
 
 Explain the effect beside the editor: “Changes apply to future kitchen work. Existing preparation stays where it was sent.” Archiving requires clearing/reassigning current product routes first. Existing preparation and history remain associated with the original station, including archived stations with unfinished work. Do not imply that archiving recalls food or deletes history.
 
@@ -35,6 +35,6 @@ At 375px, stack branch heading, full-width select, attention links and single-co
 
 ## Integration and acceptance
 
-Planned components: `KitchenStationToolbar`, `KitchenStationManager` and a shared attention tray, integrated through the existing `LiveCounter` scope/recovery boundary. These names are a plan, not existing implementation claims. Both paid and unpaid boards require authoritative scoped stage and notice APIs first. All stations is an overview, not permission to silently move every station's work.
+Implemented components are `KitchenStationManager` and `StationWorkBoard`, integrated through the `LiveCounter` account/counter recovery boundary. The unified board handles routed paid and unpaid work; existing boards retain pre-routing work. Station preparation and notice actions use the authoritative scoped APIs. All stations is an overview, not permission to silently move every station's work.
 
 Acceptance covers mixed-station orders, fully withdrawn lines, archived stations, served quantities plus additions, payment promotion, partial/final returns, stale responses, changed branch/account, uncertain saves, complete pagination, keyboard use and actual responsive overflow checks. Station selection is a viewing preference, not a separate staff authorization role. Printer routing remains a separate physical acceptance item.

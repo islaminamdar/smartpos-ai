@@ -250,3 +250,13 @@ it.each(['actor', 'shift', 'actor away and back'] as const)(
     expect(screen.queryByText('QA-CN-0000000001 saved on the server.')).toBeNull()
   }
 )
+
+// These feature tests isolate empty station journals; station custody has its own race tests.
+vi.mock('@/lib/pos/kitchen-station-journal', () => ({
+  stationJournalEvent: 'station-config-test',
+  readPendingStationRequests: async () => [],
+}))
+vi.mock('@/lib/pos/kitchen-station-work-journal', () => ({
+  stationWorkJournalEvent: 'station-work-test',
+  readPendingStationWorkRequests: async () => [],
+}))

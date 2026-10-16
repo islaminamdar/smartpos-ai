@@ -165,16 +165,16 @@ describe('station strict contracts', () => {
   })
 })
 describe('station HTTP authority and exact confirmations', () => {
-  it('keeps configuration and recovery unavailable on the public release until routing is complete', () => {
+  it('gates new configuration while preserving historical recovery during pause', () => {
     for (const onlinePilot of [true, false]) {
       expect(publicReleaseAccess('/api/pos/kitchen-stations', 'GET', onlinePilot)).toBe(
-        'unavailable'
+        onlinePilot ? 'allow' : 'unavailable'
       )
       expect(publicReleaseAccess('/api/pos/kitchen-stations', 'POST', onlinePilot)).toBe(
-        'unavailable'
+        onlinePilot ? 'allow' : 'unavailable'
       )
       expect(publicReleaseAccess('/api/pos/kitchen-stations/recovery', 'POST', onlinePilot)).toBe(
-        'unavailable'
+        'allow'
       )
     }
   })

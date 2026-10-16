@@ -1,0 +1,153 @@
+.manager {
+  color: #20362d;
+  max-width: 1180px;
+  margin: 20px auto;
+  min-width: 0;
+}
+.manager * {
+  box-sizing: border-box;
+}
+.heading,
+.toolbar,
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.heading {
+  justify-content: space-between;
+}
+.manager h2,
+.manager h3 {
+  margin: 0 0 10px;
+}
+.manager h2 {
+  font-size: 1.5rem;
+}
+.manager p {
+  line-height: 1.55;
+  max-width: 75ch;
+}
+.candidate {
+  background: #e8eef8;
+  color: #24446d;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+.policy {
+  border-left: 4px solid #5076a0;
+  padding: 12px 16px;
+  background: #f2f6fc;
+}
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 32px;
+  margin-top: 24px;
+}
+.columns section {
+  min-width: 0;
+}
+.manager label {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-weight: 600;
+}
+.manager input,
+.manager select {
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  border: 1px solid #9eafa5;
+  border-radius: 6px;
+  padding: 10px;
+  background: white;
+  font: inherit;
+  color: inherit;
+}
+.manager button {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid #235b42;
+  border-radius: 7px;
+  background: #235b42;
+  color: white;
+  font: inherit;
+  cursor: pointer;
+}
+.manager button.secondary {
+  background: white;
+  color: #235b42;
+}
+.manager button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.manager :focus-visible {
+  outline: 3px solid #377ad6;
+  outline-offset: 3px;
+}
+.stationList {
+  list-style: none;
+  padding: 0;
+  margin: 20px 0;
+}
+.stationList li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  border-bottom: 1px solid #d6e0d9;
+  padding: 16px 0;
+  overflow-wrap: anywhere;
+}
+.stationList li span {
+  display: block;
+  color: #52655a;
+  font-size: 0.875rem;
+  margin-top: 4px;
+}
+.help,
+.toolbar span {
+  color: #52655a;
+  font-size: 0.9rem;
+}
+.recovery {
+  padding: 18px;
+  margin: 16px 0;
+  border: 2px solid #9e7318;
+  background: #fff8e5;
+  overflow-wrap: anywhere;
+}
+.error {
+  color: #842923;
+  background: #fff0ee;
+  padding: 12px;
+}
+.notice {
+  color: #1e5234;
+  background: #edf7ef;
+  padding: 12px;
+}
+@media (max-width: 680px) {
+  .columns {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+  .manager {
+    margin: 16px 0;
+  }
+  .toolbar > button {
+    flex: 1 1 150px;
+  }
+  .actions {
+    width: 100%;
+  }
+  .actions button {
+    flex: 1;
+  }
+}

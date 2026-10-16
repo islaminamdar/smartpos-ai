@@ -385,3 +385,13 @@ it.each(['Name', 'Address', 'TRN, if registered'])(
     expect(button).toBeEnabled()
   }
 )
+
+// These feature tests isolate empty station journals; station custody has its own race tests.
+vi.mock('@/lib/pos/kitchen-station-journal', () => ({
+  stationJournalEvent: 'station-config-test',
+  readPendingStationRequests: async () => [],
+}))
+vi.mock('@/lib/pos/kitchen-station-work-journal', () => ({
+  stationWorkJournalEvent: 'station-work-test',
+  readPendingStationWorkRequests: async () => [],
+}))

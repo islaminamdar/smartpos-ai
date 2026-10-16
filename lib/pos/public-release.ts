@@ -6,6 +6,10 @@ export function publicReleaseAccess(
 ): 'allow' | 'not_found' | 'unavailable' {
   const read = method === 'GET' || method === 'HEAD'
   if (path === '/api/pos/health') return read ? 'allow' : 'not_found'
+  // Authenticated identity is needed to discover saved requests even while selling
+  // is paused. Sign-in and sign-out writes keep their existing online gate.
+  if (path === '/api/pos/session' && read) return 'allow'
+  if ((path === '/counter' || path === '/counter/') && read) return 'allow'
   // Current authenticated manager reads have their own server-side feature gate and
   // permissions. The candidate decision writer is intentionally NOT exposed yet.
   if (
@@ -24,7 +28,9 @@ export function publicReleaseAccess(
     path === '/api/pos/native/pin-recovery' ||
     path === '/api/pos/native/clock-recovery' ||
     path === '/api/pos/native/clock-bootstrap' ||
-    path === '/api/pos/inventory/recovery'
+    path === '/api/pos/inventory/recovery' ||
+    path === '/api/pos/kitchen-stations/recovery' ||
+    path === '/api/pos/kitchen-station-work/recovery'
   )
     return method === 'POST' ? 'allow' : 'not_found'
   if (onlinePilot) {
@@ -58,6 +64,9 @@ export function publicReleaseAccess(
       '/api/pos/inventory/history': ['GET'],
       '/api/pos/offers': ['GET', 'POST'],
       '/api/pos/kitchen': ['GET', 'POST'],
+      '/api/pos/kitchen-stations': ['GET', 'POST'],
+      '/api/pos/kitchen-station-work': ['GET', 'POST'],
+      '/api/pos/kitchen-station-work/detail': ['GET'],
       '/api/pos/kitchen/recovery': ['POST'],
       '/api/pos/tab-kitchen': ['GET', 'POST'],
       '/api/pos/tab-kitchen/recovery': ['POST'],
