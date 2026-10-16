@@ -1,18 +1,21 @@
 // Actual disposable PostgreSQL engine + actual P256 signatures + production service functions.
-// Only cookie identity and Supabase transport are replaced. Embedded DB or explicitly
+// Cookie identity, password Auth/session revocation and Supabase transport are mocked.
+// Database authorization and P256 proofs are real. Embedded DB or explicitly
 // supplied private local Unix-socket PostgreSQL only; never a live merchant database.
 import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { readFile, readdir } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
-const m=vi.hoisted(()=>({rpc:vi.fn(),auth:vi.fn()}))
-vi.mock('@/lib/pos/server/client',async original=>({...await original<typeof import('@/lib/pos/server/client')>(),authenticatedPosClient:m.auth,posClient:()=>({rpc:m.rpc})}))
+const m=vi.hoisted(()=>({rpc:vi.fn(),auth:vi.fn(),password:vi.fn(),revoke:vi.fn()}))
+vi.mock('@/lib/pos/server/client',async original=>({...await original<typeof import('@/lib/pos/server/client')>(),authenticatedPosClient:m.auth,posClient:()=>({rpc:m.rpc,auth:{signInWithPassword:m.password,admin:{signOut:m.revoke}}})}))
 import { OfflineEnrollmentProofExpired, enrollOfflineDevice, reserveOfflineAuthority, importOfflineReceipt, sealOfflineAuthority } from '@/lib/pos/offline/server'
 import { encodeBase64Url, decodeBase64Url, parseCanonicalPayload, sha256Hex, canonicalBytes } from '@/lib/pos/offline/canonical'
 import { publicKeyFingerprint, signEnvelope, verifyOfflineBundle, verifySignedEnvelope, p1363ToDer } from '@/lib/pos/offline/authority'
 import { recoverOfflineBundle, nativeOfflineRecoveredSchema } from '@/lib/pos/offline/bundle-recovery'
 import { offlineAckSchema } from '@/lib/pos/offline/server-contracts'
 import { registerOfflinePaymentFreeze, nativePaymentRegistrationStatusSchema } from '@/lib/pos/offline/payment-registration'
+import { listPaymentReviews, readPaymentReview, decidePaymentReview } from '@/lib/pos/offline/payment-review'
+import { offlinePaymentResolutionSchema, type PaymentDecisionRequest } from '@/lib/pos/offline/payment-review-contracts'
 import type { OfflineIssuance } from '@/lib/pos/offline/contracts'
 
 interface TestDb { exec(sql:string):Promise<unknown>; query(sql:string,args?:unknown[]):Promise<{rows:Record<string,unknown>[]}>; close():Promise<void> }
@@ -53,7 +56,7 @@ beforeAll(async()=>{
     create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz);
     create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('app.user_id',true),'')::uuid$$;
     grant usage on schema auth to authenticated;grant execute on function auth.uid() to authenticated;`)
-  for(const name of (await readdir('supabase/migrations')).filter(name=>/^20261016/.test(name)&&!name.includes('007')&&!name.includes('009')).sort())
+  for(const name of (await readdir('supabase/migrations')).filter(name=>/^20261016/.test(name)&&!name.includes('007')).sort())
     await db.exec(await readFile('supabase/migrations/'+name,'utf8'))
   const {actor,org,branch,device,device2,shift,shift2,profile,product}=ids
   await db.exec(`insert into auth.users values('${actor}','synthetic@example.test',now());
@@ -68,7 +71,7 @@ beforeAll(async()=>{
     insert into public.pos_offline_branch_policy(branch_id,enabled) values('${branch}',true);set role service_role;`)
   m.auth.mockResolvedValue({user:{id:actor}})
   m.rpc.mockImplementation(async(name:string,args:Record<string,unknown>)=>{
-    if(!/^pos_offline_[a-z_]+$/.test(name)||Object.keys(args).some(key=>!/^p_[a-z_]+$/.test(key)))throw new Error('Unsafe test RPC name')
+    if(!/^pos_(?:offline_[a-z_]+|login_attempt)$/.test(name)||Object.keys(args).some(key=>!/^p_[a-z_]+$/.test(key)))throw new Error('Unsafe test RPC name')
     try {
       const params=Object.entries(args)
       return {data:await scalar(`select public.${name}(${params.map(([key],i)=>`${key} => $${i+1}`).join(',')})`,params.map(([,value])=>value!==null&&typeof value==='object'?JSON.stringify(value):value)),error:null}
@@ -230,7 +233,7 @@ it('registers signed freezes, verifies invoice collisions, and retains unsupport
   vi.stubEnv('POS_OFFLINE_SIGNING_KEY_ID','synthetic-freeze-server')
   vi.stubEnv('POS_OFFLINE_SERVER_KEYS',JSON.stringify([{id:'synthetic-freeze-server',publicKeySpki:encodeBase64Url(new Uint8Array(await crypto.subtle.exportKey('spki',server.publicKey))),privateKeyPkcs8:encodeBase64Url(new Uint8Array(await crypto.subtle.exportKey('pkcs8',server.privateKey)))}]))
   const prepared=[]
-  for(let i=0;i<4;i++){
+  for(let i=0;i<6;i++){
     const device=randomUUID(),shift=randomUUID(),pair=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify'])
     await admin(()=>db.exec(`insert into public.pos_devices(id,organization_id,branch_id,name) values('${device}','${org}','${branch}','Synthetic freeze ${i}');
       insert into public.pos_shifts(id,organization_id,branch_id,device_id,opened_by,opening_cash_fils) values('${shift}','${org}','${branch}','${device}','${actor}',0);`))
@@ -250,7 +253,7 @@ it('registers signed freezes, verifies invoice collisions, and retains unsupport
   const digest=(value:unknown)=>sha256Hex(canonicalBytes(value))
   for(const [index,f] of prepared.entries()){
     const a=f.bundle.authority,orderId=randomUUID(),documentId=randomUUID(),paymentIntentId=randomUUID(),freezeId=randomUUID()
-    const request={authorityId:a.id,serviceType:'takeaway',customer:index>=2?{name:'Buyer\u0000Name',address:'دبي 🍬',trn:null}:null,lines:[{productId:product,quantityMilli:1000}],cashTenderedFils:1500,recordedCardFils:0,presentedTotalFils:1000}
+    const request={authorityId:a.id,serviceType:'takeaway',customer:(index===2||index===3)?{name:'Buyer\u0000Name',address:'دبي 🍬',trn:null}:null,lines:[{productId:product,quantityMilli:1000}],cashTenderedFils:index===5?0:1500,recordedCardFils:index===5?1000:0,presentedTotalFils:1000}
     const freeze={kind:'offline-payment-freeze',schemaVersion:1,freezeId,paymentIntentId,orderId,documentId,
       organizationId:org,branchId:branch,deviceId:f.device,actorId:actor,shiftId:f.shift,keyEpoch:a.keyEpoch,deviceKeySha256:f.fingerprint,
       authorityId:a.id,authoritySha256:f.bundle.authoritySha256,snapshotSha256:f.bundle.snapshotSha256,requestSha256:await digest(request),request,
@@ -261,7 +264,7 @@ it('registers signed freezes, verifies invoice collisions, and retains unsupport
       clock:{estimatedServerAt:a.issuedAt,bootId:randomUUID(),elapsedRealtimeMs:1000},document:{schemaVersion:1,id:documentId,kind:'tax_invoice',documentNumber:`FRZ-INV-${String(a.invoiceRange.first).padStart(10,'0')}`,issuedAt:a.issuedAt,merchant:f.bundle.snapshot.profile,
       orderId,branchId:branch,deviceId:f.device,shiftId:f.shift,actorId:actor,serviceType:'takeaway',customer:request.customer,
       lines:[{lineNumber:1,productId:product,name:'Synthetic freeze product',unit:'piece',quantityMilli:1000,unitPriceFils:1000,taxRateBps:500,grossFils:1000,netFils:952,taxFils:48}],
-      totals:{grossFils:1000,netFils:952,taxFils:48},payments:[{method:'cash',amountFils:1000}],paymentSettlement:'recorded',cashTenderedFils:1500,changeFils:500}}
+      totals:{grossFils:1000,netFils:952,taxFils:48},payments:[{method:index===5?'card':'cash',amountFils:1000}],paymentSettlement:'recorded',cashTenderedFils:index===5?0:1500,changeFils:index===5?0:500}}
     const signedIssuance=await signEnvelope(issuance,f.fingerprint,f.pair.privateKey)
     const readStatus=async(response:Awaited<ReturnType<typeof registerOfflinePaymentFreeze>>)=>(await verifySignedEnvelope(response.handoff,nativePaymentRegistrationStatusSchema,{'synthetic-freeze-server':server.publicKey})).payload
     if(index===0){
@@ -283,7 +286,7 @@ it('registers signed freezes, verifies invoice collisions, and retains unsupport
       expect(retry).toMatchObject({status:'accepted',acknowledgement:accepted.acknowledgement})
       expect(await admin(()=>scalar('select count(*)::int from public.pos_documents where id=$1',[documentId]))).toBe(1)
     }
-    if(index>=2){
+    if(index===2||index===3){
       const envelope=index===2?frozen:signedIssuance
       const payload=index===2?freeze:issuance
       const canonical=new TextDecoder().decode(canonicalBytes(payload))
@@ -313,6 +316,55 @@ it('registers signed freezes, verifies invoice collisions, and retains unsupport
       expect(await admin(()=>scalar('select count(*)::int from public.pos_documents where id=$1',[documentId]))).toBe(0)
       expect(await admin(()=>scalar('select count(*)::int from public.pos_offline_receipts where authority_id=$1',[a.id]))).toBe(0)
       expect(await admin(()=>scalar('select count(*)::int from public.pos_offline_payment_freezes where authority_id=$1',[a.id]))).toBe(0)
+    }
+    if(index>=4){
+      await registerOfflinePaymentFreeze(frozen,await query('e'.repeat(64)))
+      await admin(()=>db.query('update public.pos_staff set active=true where user_id=$1',[actor]))
+      vi.stubEnv('POS_OFFLINE_PAYMENT_REVIEW_ENABLED','true');vi.stubEnv('POS_OFFLINE_PAYMENT_RESOLUTION_ENABLED','true')
+      vi.stubEnv('POS_LOGIN_SOURCE_MODE','loopback-development');vi.stubEnv('POS_PUBLIC_ORIGIN','http://127.0.0.1:3099')
+      const actorUser={id:actor,email:'synthetic-manager@example.test'}
+      m.password.mockResolvedValue({data:{user:actorUser,session:{access_token:'synthetic-temporary-session'}},error:null})
+      m.revoke.mockResolvedValue({error:null})
+      if(index===4){
+        expect((await readPaymentReview(actor,branch,freezeId,'freeze')).capabilities.canDecide).toBe(false)
+        await admin(()=>db.query('insert into public.pos_offline_payment_resolution_policy values($1,true)',[branch]))
+      }
+      const detail=await readPaymentReview(actor,branch,freezeId,'freeze')
+      expect(detail.capabilities.canDecide).toBe(true)
+      expect(detail.quote?.payments).toEqual([{method:index===5?'card':'cash',amountFils:1000}])
+      const list=await listPaymentReviews(actor,branch,null)
+      expect(list.cases.some(c=>c.caseId===freezeId)).toBe(true)
+      await expect(readPaymentReview(ids.actor,branch,freezeId,'freeze')).rejects.toMatchObject({status:403})
+      const observed=new Date(Date.now()-5000).toISOString(),completed=new Date(Date.now()-2000).toISOString()
+      const command:PaymentDecisionRequest={requestId:randomUUID(),freezeId,freezeSha256,decision:index===5?'payment_voided':'funds_returned',reason:'Synthetic completed return or void',
+        evidence:[{method:index===5?'card':'cash',amountFils:1000,paymentObservedAt:observed,completedAt:completed,reference:'Synthetic reference',note:'Synthetic manager attestation'}],cashDrawerShiftId:index===5?null:f.shift}
+      const http=new Request('http://127.0.0.1:3099/api/pos/manager/offline-payments/resolve',{method:'POST',headers:{Origin:'http://127.0.0.1:3099'}})
+      const sign=crypto.subtle.sign.bind(crypto.subtle)
+      const spy=vi.spyOn(crypto.subtle,'sign').mockImplementation(async(...args)=>{
+        if(index===4&&new TextDecoder().decode(args[2] as ArrayBuffer).includes('offline-payment-resolution'))throw new Error('Synthetic signing interruption')
+        return sign(...args)
+      })
+      const response=await decidePaymentReview(http,actorUser,branch,command,'Synthetic confirmation only')
+      spy.mockRestore()
+      expect(response.status).toBe(index===4?'delivery_pending':'recorded')
+      expect(response.nativeDelivery).toBe('not_implemented')
+      expect(await admin(()=>scalar('select count(*)::int from public.pos_offline_payment_decisions where freeze_id=$1',[freezeId]))).toBe(1)
+      expect(await admin(()=>scalar('select public.pos_offline_payment_hold($1)',[a.keyEpoch]))).toBe(index===4)
+      const recovered=await readPaymentReview(actor,branch,freezeId,'freeze')
+      expect(recovered.summary.state).toBe('resolved');expect(recovered.resolution).toEqual(response.resolution)
+      if(!recovered.resolutionEnvelope)throw new Error('Missing stored result signature')
+      expect((await verifySignedEnvelope(recovered.resolutionEnvelope,offlinePaymentResolutionSchema,{'synthetic-freeze-server':server.publicKey})).payload).toEqual(response.resolution)
+      const attempts=m.password.mock.calls.length
+      const replay=await decidePaymentReview(http,actorUser,branch,command,'Never used for exact recovery')
+      expect(replay.resolutionEnvelope).toEqual(recovered.resolutionEnvelope);expect(m.password.mock.calls.length).toBe(attempts)
+      expect(await admin(()=>scalar('select public.pos_offline_payment_hold($1)',[a.keyEpoch]))).toBe(false)
+      expect(await admin(()=>scalar('select count(*)::int from public.pos_orders where id=$1',[orderId]))).toBe(0)
+      expect(await admin(()=>scalar('select count(*)::int from public.pos_payments where order_id=$1',[orderId]))).toBe(0)
+      expect(await importOfflineReceipt(signedIssuance)).toMatchObject({status:'reconciliation_required'})
+      const contradicted=await readPaymentReview(actor,branch,freezeId,'freeze')
+      expect(contradicted.summary.state).toBe('conflict');expect(contradicted.capabilities.canDecide).toBe(false)
+      expect(contradicted.resolutionEnvelope).toEqual(recovered.resolutionEnvelope)
+      expect(await admin(()=>scalar('select public.pos_offline_payment_hold($1)',[a.keyEpoch]))).toBe(true)
     }
     await expect(admin(()=>db.query("update public.pos_shifts set status='closed',closed_at=now() where id=$1",[f.shift]))).rejects.toThrow()
   }

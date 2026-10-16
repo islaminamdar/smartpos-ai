@@ -111,3 +111,8 @@ Before any release, reconcile this checkpoint with the exact candidate hash, mig
 ## Subsequent candidate progress: registration and unsupported text
 
 After the checkpoint above, candidate `6096801` added SQL018 freeze registration, global identity claims and independently verified signed status. SQL019 adds [unsupported historical buyer-text custody](../contracts/20261016-offline-unsupported-text.md), while new web/native entries reject U+0000. These remain local candidates; SQL017–019 have not been deployed, and production offline sales remain disabled. Native saved exceptions now recognize this custody response without acknowledging or deleting the local receipt. The manager decision, result delivery, acceptance and operational requirements above remain pending.
+
+
+## Subsequent candidate progress: manager payment review
+
+SQL020 adds authenticated manager/owner case reads and full return/card-void attestations with immutable signed results. The candidate browser review has a private retry journal and fresh same-account password confirmation. See [implemented scope and verification limits](../contracts/20261016-offline-payment-manager-review.md). SQL017–020 remain unapplied; decision POST is excluded from the hosted allowlist. Native result retrieval/acceptance and full operational acceptance remain pending. These checks do not establish an actual payment-provider void, physical cash return or native delivery.

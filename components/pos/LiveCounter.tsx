@@ -20,6 +20,12 @@ import {
   type PendingOnlineRequest,
 } from '@/lib/pos/online-journal'
 import FiscalReceipt from './FiscalReceipt'
+import OfflinePaymentReviews from './offline-payments/OfflinePaymentReviews'
+import {
+  readPendingPaymentReviews,
+  paymentReviewJournalEvent,
+  type PendingPaymentReview,
+} from './offline-payments/journal'
 import CatalogueManager from './CatalogueManager'
 import BranchReports from './reports/BranchReports'
 import OfferManager from './offers/OfferManager'
@@ -64,6 +70,7 @@ type View =
   | 'account'
   | 'kitchen'
   | 'open-orders'
+  | 'payment-review'
 class ApiError extends Error {
   constructor(
     public status: number,
@@ -120,7 +127,9 @@ async function api(path: string, method = 'GET', body?: unknown): Promise<unknow
   return data
 }
 
-export default function LiveCounter() {
+export default function LiveCounter({
+  offlinePaymentReviewEnabled = false,
+}: { offlinePaymentReviewEnabled?: boolean } = {}) {
   const [boot, setBoot] = useState<LiveBootstrap | null>(null)
   const [needsLogin, setNeedsLogin] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -131,6 +140,16 @@ export default function LiveCounter() {
   const [notice, setNotice] = useState('')
   const [online, setOnline] = useState(true)
   const [pending, setPending] = useState<PendingOnlineRequest | null>(null)
+  const [reviewPending, setReviewPending] = useState<PendingPaymentReview[]>([])
+  const [reviewReady, setReviewReady] = useState(false)
+  const [reviewBusy, setReviewBusy] = useState(false)
+  const reviewOperations = useRef(new Set<string>())
+  const reviewOperation = (scope: string, active: boolean) => {
+    if (active) reviewOperations.current.add(scope)
+    else reviewOperations.current.delete(scope)
+    setReviewBusy(reviewOperations.current.size > 0)
+  }
+  const reviewHeld = reviewBusy || reviewPending.length > 0 || !reviewReady
   const [tabKitchenPending, setTabKitchenPending] = useState(false)
   const [tabKitchenJournalReady, setTabKitchenJournalReady] = useState(false)
   const [tabKitchenBusy, setTabKitchenBusy] = useState(false)
@@ -224,6 +243,7 @@ export default function LiveCounter() {
   const requiresOrderSave =
     openOrderMetadataDirty || !!initialTableId || (!!sourceTab && !savedBasketMatches)
   const basketLocked =
+    reviewHeld ||
     busy ||
     !!pending ||
     openOrderBusy ||
@@ -254,6 +274,7 @@ export default function LiveCounter() {
     online &&
     boot.device &&
     !busy &&
+    !reviewHeld &&
     !pending &&
     !tabKitchenBusy &&
     !tabKitchenPending &&
@@ -263,6 +284,49 @@ export default function LiveCounter() {
     openOrderJournalReady &&
     branch?.profile
   )
+
+  const checkReviewPending = useCallback(async (actorId: string) => {
+    const records = await readPendingPaymentReviews(actorId)
+    if (currentActor.current === actorId) {
+      setReviewPending(records)
+      setReviewReady(true)
+    }
+    return records
+  }, [])
+  useEffect(() => {
+    if (!boot?.userId) return
+    setReviewReady(false)
+    const actorId = boot.userId
+    let alive = true
+    const check = () => {
+      void readPendingPaymentReviews(actorId)
+        .then((records) => {
+          if (alive) {
+            setReviewPending(records)
+            setReviewReady(true)
+          }
+        })
+        .catch(() => {
+          if (alive) setReviewReady(false)
+        })
+    }
+    check()
+    window.addEventListener(paymentReviewJournalEvent, check)
+    window.addEventListener('focus', check)
+    let channel: BroadcastChannel | null = null
+    try {
+      channel = new BroadcastChannel(paymentReviewJournalEvent)
+      channel.onmessage = check
+    } catch {
+      /* Focus read remains available. */
+    }
+    return () => {
+      alive = false
+      window.removeEventListener(paymentReviewJournalEvent, check)
+      window.removeEventListener('focus', check)
+      channel?.close()
+    }
+  }, [boot?.userId])
 
   const checkTabKitchenPending = useCallback(async (actorId: string) => {
     const requests = await readPendingTabKitchenRequests(actorId)
@@ -668,6 +732,8 @@ export default function LiveCounter() {
         (boot && (await checkOpenOrderPending(boot.userId)).length)
       )
         throw new Error('Resolve the saved unpaid-order change before taking payment.')
+      if (reviewBusy || !reviewReady || (boot && (await checkReviewPending(boot.userId)).length))
+        throw new Error('Check the saved manager decision before taking payment.')
       if (
         tabKitchenBusy ||
         !tabKitchenJournalReady ||
@@ -933,6 +999,7 @@ export default function LiveCounter() {
           disabled={
             busy ||
             !!pending ||
+            reviewHeld ||
             tabKitchenBusy ||
             tabKitchenPending ||
             !tabKitchenJournalReady ||
@@ -946,6 +1013,10 @@ export default function LiveCounter() {
             void run(async () => {
               if (await readPendingRequest(boot.userId))
                 throw new Error('Recover the pending request before signing out.')
+              if (reviewBusy || (await checkReviewPending(boot.userId)).length)
+                throw new Error(
+                  'Check the saved manager decision before changing account or counter access.'
+                )
               if ((await checkTabKitchenPending(boot.userId)).length)
                 throw new Error(
                   'Resolve the saved kitchen dispatch before changing account or counter access.'
@@ -1020,6 +1091,38 @@ export default function LiveCounter() {
               </button>
             </details>
           </section>
+        )}
+        {!reviewReady && (
+          <p className="lc-warning">
+            Checking saved manager decisions. Account changes and payments are paused until they can
+            be checked.
+          </p>
+        )}
+        {reviewPending.map(
+          (record) =>
+            (view !== 'payment-review' || record.branchId !== branchId || !boot.device) && (
+              <section key={`${record.actorId}:${record.branchId}`} className="lc-warning">
+                <h2>A manager decision needs confirmation</h2>
+                <p>
+                  Do not repeat the external return or void. Check the original saved decision
+                  before changing account or counter access.
+                </p>
+                <OfflinePaymentReviews
+                  actorId={boot.userId}
+                  branchId={record.branchId}
+                  branchName={
+                    boot.branches.find((item) => item.id === record.branchId)?.name ??
+                    'Original branch'
+                  }
+                  allowDecisions={offlinePaymentReviewEnabled}
+                  disabled={busy || !online || openOrderBusy || tabKitchenBusy}
+                  onBusyChange={(active) => reviewOperation(record.branchId, active)}
+                  onPendingChange={() => {
+                    void checkReviewPending(boot.userId).catch(() => setReviewReady(false))
+                  }}
+                />
+              </section>
+            )
         )}
         {replacement && (
           <section className="lc-warning" aria-label="Replace current basket">
@@ -1112,6 +1215,10 @@ export default function LiveCounter() {
               event.preventDefault()
               const data = new FormData(event.currentTarget)
               void run(async () => {
+                if (reviewBusy || (await checkReviewPending(boot.userId)).length)
+                  throw new Error(
+                    'Check the saved manager decision before changing account or counter access.'
+                  )
                 if ((await checkTabKitchenPending(boot.userId)).length)
                   throw new Error(
                     'Resolve the saved kitchen dispatch before changing account or counter access.'
@@ -1134,7 +1241,11 @@ export default function LiveCounter() {
           >
             <label>
               Branch
-              <select value={branchId} onChange={(event) => setBranchId(event.target.value)}>
+              <select
+                value={branchId}
+                disabled={reviewHeld}
+                onChange={(event) => setBranchId(event.target.value)}
+              >
                 {boot.branches.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
@@ -1158,6 +1269,7 @@ export default function LiveCounter() {
                 busy ||
                 !branchId ||
                 !!pending ||
+                reviewHeld ||
                 tabKitchenBusy ||
                 tabKitchenPending ||
                 !tabKitchenJournalReady ||
@@ -1182,7 +1294,15 @@ export default function LiveCounter() {
                 'open-orders',
                 'receipts',
                 'shift',
-                ...(manager ? ['menu', 'offers', 'reports', 'staff'] : []),
+                ...(manager
+                  ? [
+                      'menu',
+                      'offers',
+                      'reports',
+                      'staff',
+                      ...(offlinePaymentReviewEnabled ? ['payment-review'] : []),
+                    ]
+                  : []),
                 'branch',
                 'account',
               ] as View[]
@@ -1190,7 +1310,7 @@ export default function LiveCounter() {
               <button
                 key={item}
                 aria-current={view === item ? 'page' : undefined}
-                disabled={openOrderBusy}
+                disabled={openOrderBusy || reviewBusy}
                 onClick={() => setView(item)}
               >
                 {
@@ -1206,6 +1326,7 @@ export default function LiveCounter() {
                     reports: 'Reports',
                     staff: 'Staff',
                     account: 'Account',
+                    'payment-review': 'Payment review',
                   }[item]
                 }
               </button>
@@ -1224,6 +1345,7 @@ export default function LiveCounter() {
                   busy ||
                   !!pending ||
                   !online ||
+                  reviewHeld ||
                   tabKitchenBusy ||
                   tabKitchenPending ||
                   !tabKitchenJournalReady
@@ -1267,6 +1389,18 @@ export default function LiveCounter() {
                 }}
               />
             )}
+            {view === 'payment-review' && manager && branch && offlinePaymentReviewEnabled && (
+              <OfflinePaymentReviews
+                actorId={boot.userId}
+                branchId={branchId}
+                branchName={branch.name}
+                disabled={busy || !!pending || !online || openOrderBusy || tabKitchenBusy}
+                onBusyChange={(active) => reviewOperation(branchId, active)}
+                onPendingChange={() => {
+                  void checkReviewPending(boot.userId).catch(() => setReviewReady(false))
+                }}
+              />
+            )}
             {view === 'staff' && manager && (
               <StaffManager
                 key={`${boot.userId}:${branchId}`}
@@ -1286,6 +1420,7 @@ export default function LiveCounter() {
                   !!pending ||
                   !online ||
                   !!shift ||
+                  reviewHeld ||
                   tabKitchenBusy ||
                   tabKitchenPending ||
                   !tabKitchenJournalReady ||
@@ -1550,6 +1685,7 @@ export default function LiveCounter() {
                       busy ||
                       !!pending ||
                       !online ||
+                      reviewHeld ||
                       tabKitchenBusy ||
                       tabKitchenPending ||
                       !tabKitchenJournalReady

@@ -8,39 +8,8 @@ import { offlineUuid } from './server-contracts'
 
 const MAX_FILS = 100_000_000
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
-const integer = (max: number) => z.number().int().min(0).max(max)
-const text = (max: number) => z.string().min(1).max(max).refine(value => value === value.trim())
-const instant = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
-  .refine(value => Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value)
-
-export const offlinePaymentIntentRequestSchema = z.object({
-  authorityId: offlineUuid, serviceType: z.enum(['dine_in', 'takeaway', 'delivery']),
-  customer: z.object({ name: text(200), address: text(400), trn: z.string().regex(/^[0-9]{15}$/).nullable() }).strict().nullable(),
-  lines: z.array(z.object({ productId: offlineUuid, quantityMilli: z.number().int().min(1).max(1_000_000) }).strict()).min(1).max(200),
-  cashTenderedFils: integer(MAX_FILS), recordedCardFils: integer(MAX_FILS), presentedTotalFils: z.number().int().min(1).max(MAX_FILS),
-}).strict().superRefine((request, ctx) => {
-  if (new Set(request.lines.map(line => line.productId)).size !== request.lines.length)
-    ctx.addIssue({ code: 'custom', message: 'Duplicate frozen product.' })
-})
-export const offlinePaymentFreezeSchema = z.object({
-  kind: z.literal('offline-payment-freeze'), schemaVersion: z.literal(1),
-  freezeId: offlineUuid, paymentIntentId: offlineUuid, orderId: offlineUuid, documentId: offlineUuid,
-  organizationId: offlineUuid, branchId: offlineUuid, deviceId: offlineUuid, actorId: offlineUuid, shiftId: offlineUuid,
-  keyEpoch: offlineUuid, deviceKeySha256: hash, authorityId: offlineUuid, authoritySha256: hash, snapshotSha256: hash,
-  requestSha256: hash, request: offlinePaymentIntentRequestSchema, intentCreatedAt: instant,
-  chainHead: z.object({ sequence: integer(Number.MAX_SAFE_INTEGER), eventSha256: hash.nullable() }).strict(),
-  observation: z.object({ bootId: offlineUuid, elapsedRealtimeMs: integer(Number.MAX_SAFE_INTEGER), wallTimeMs: integer(253_402_300_799_999) }).strict().nullable(),
-  declaration: z.literal('local-intent-unissued-and-permanently-frozen'),
-}).strict().superRefine((freeze, ctx) => {
-  if ((freeze.chainHead.sequence === 0) !== (freeze.chainHead.eventSha256 === null))
-    ctx.addIssue({ code: 'custom', message: 'Invalid observed chain head.' })
-  if (freeze.request.authorityId !== freeze.authorityId)
-    ctx.addIssue({ code: 'custom', message: 'Frozen request authority differs.' })
-})
-export const offlinePaymentResolutionQuerySchema = z.object({
-  kind: z.literal('offline-payment-resolution-query'), schemaVersion: z.literal(1),
-  authorityId: offlineUuid, keyEpoch: offlineUuid, deviceId: offlineUuid, freezeId: offlineUuid, freezeSha256: hash, challenge: hash,
-}).strict()
+import { offlinePaymentFreezeSchema, offlinePaymentIntentRequestSchema, offlinePaymentResolutionQuerySchema } from './payment-contracts'
+export { offlinePaymentFreezeSchema, offlinePaymentIntentRequestSchema, offlinePaymentResolutionQuerySchema } from './payment-contracts'
 const readerSchema = z.object({
   snapshot: offlineSnapshotSchema, authority: offlineAuthoritySchema,
   snapshotEnvelope: signedEnvelopeSchema, authorityEnvelope: signedEnvelopeSchema,
@@ -88,17 +57,13 @@ function calculate(request: z.infer<typeof offlinePaymentIntentRequestSchema>, b
     payments, cashTenderedFils: request.cashTenderedFils, changeFils: request.cashTenderedFils - cashApplied, requiresBuyerDetails }
 }
 
-/** Evidence verification ONLY. Does not establish an unused identity, physical collection,
- * a durable native freeze, server chain position, manager approval, or a financial result.
- * Future SQL018 must claim/check IDs and serialize against imports before accepting custody.
- * No routes or financial writes may consume this until those guards exist. */
-export async function verifyOfflinePaymentFreeze(rawFreeze: unknown, rawQuery: unknown) {
-  let freezeEnvelope, queryEnvelope, routed
+/** Historical enrolled proof and exact arithmetic verification. This alone does not prove
+ * an unused identity, physical collection, current manager authority or a decision. */
+export async function verifyStoredOfflinePaymentFreeze(rawFreeze: unknown) {
+  let freezeEnvelope, routed
   try {
     freezeEnvelope = signedEnvelopeSchema.parse(rawFreeze)
-    queryEnvelope = signedEnvelopeSchema.parse(rawQuery)
     routed = offlinePaymentFreezeSchema.parse(parseCanonicalPayload(decodeBase64Url(freezeEnvelope.payloadBase64Url)))
-    offlinePaymentResolutionQuerySchema.parse(parseCanonicalPayload(decodeBase64Url(queryEnvelope.payloadBase64Url)))
   } catch { return invalid() }
   const keys = await offlineServerKeys()
   const { data, error } = await posClient(undefined, true).rpc('pos_offline_authority', { p_id: routed.authorityId })
@@ -107,7 +72,6 @@ export async function verifyOfflinePaymentFreeze(rawFreeze: unknown, rawQuery: u
   let bundle, deviceKey, custody
   try {
     const row = readerSchema.parse(data), original = data as Record<string, unknown>
-    // The SQL reader duplicates payloads inside envelopes; bound each payload, not the wrapper.
     if (canonicalJson(row.snapshot) !== canonicalJson(original.snapshot) || canonicalJson(row.authority) !== canonicalJson(original.authority)) throw new Error()
     bundle = await verifyOfflineBundle(row.snapshotEnvelope, row.authorityEnvelope, keys.publicKeys)
     deviceKey = await importOfflinePublicKey(row.publicKeySpki)
@@ -117,27 +81,36 @@ export async function verifyOfflinePaymentFreeze(rawFreeze: unknown, rawQuery: u
       await publicKeyFingerprint(deviceKey) !== bundle.authority.deviceKeySha256) throw new Error()
     custody = { snapshotEnvelope: row.snapshotEnvelope, authorityEnvelope: row.authorityEnvelope, publicKeySpki: row.publicKeySpki }
   } catch { throw new PosServerError('offline_storage_unavailable', 503) }
-  let verified, queried
-  try {
-    const trusted = { [bundle.authority.deviceKeySha256]: deviceKey }
-    verified = await verifySignedEnvelope(freezeEnvelope, offlinePaymentFreezeSchema, trusted)
-    queried = await verifySignedEnvelope(queryEnvelope, offlinePaymentResolutionQuerySchema, trusted)
-  } catch { throw new PosServerError('offline_device_proof_invalid', 403) }
-  const freeze = verified.payload, query = queried.payload, a = bundle.authority
+  let verified
+  try { verified = await verifySignedEnvelope(freezeEnvelope, offlinePaymentFreezeSchema, { [bundle.authority.deviceKeySha256]: deviceKey }) }
+  catch { throw new PosServerError('offline_device_proof_invalid', 403) }
+  const freeze = verified.payload, a = bundle.authority
   if (freeze.authorityId !== a.id || freeze.organizationId !== a.organizationId || freeze.branchId !== a.branchId ||
     freeze.deviceId !== a.deviceId || freeze.actorId !== a.actorId || freeze.shiftId !== a.shiftId || freeze.keyEpoch !== a.keyEpoch ||
-    freeze.deviceKeySha256 !== a.deviceKeySha256 || freeze.authoritySha256 !== bundle.authoritySha256 || freeze.snapshotSha256 !== bundle.snapshotSha256 ||
-    query.authorityId !== freeze.authorityId || query.keyEpoch !== freeze.keyEpoch || query.deviceId !== freeze.deviceId ||
-    query.freezeId !== freeze.freezeId || query.freezeSha256 !== verified.payloadSha256) return invalid()
+    freeze.deviceKeySha256 !== a.deviceKeySha256 || freeze.authoritySha256 !== bundle.authoritySha256 || freeze.snapshotSha256 !== bundle.snapshotSha256) return invalid()
   const requestBytes = canonicalBytes(freeze.request)
   if (requestBytes.length > 131_072 || await sha256Hex(requestBytes) !== freeze.requestSha256) return invalid()
   const quote = calculate(freeze.request, bundle)
-  // Observation, intent time, and chain head are retained evidence, not present-day authority.
-  // In particular an expired grant or a server behind queued receipts does not reject recovery.
   return immutable({ [verifiedFreezeBrand]: true as const, kind: 'verified-offline-payment-freeze' as const,
-    purpose: 'reconciliation-only' as const, freeze, freezeSha256: verified.payloadSha256,
-    query, querySha256: queried.payloadSha256, quote, freezeEnvelope, queryEnvelope,
-    // Internal verified public material, never a new authority or a client-selected key.
-    custody })
+    purpose: 'reconciliation-only' as const, freeze, freezeSha256: verified.payloadSha256, quote, freezeEnvelope, custody })
+}
+export type VerifiedStoredOfflinePaymentFreeze = Awaited<ReturnType<typeof verifyStoredOfflinePaymentFreeze>>
+
+/** Device registration/retrieval additionally requires a separate signed fresh query. */
+export async function verifyOfflinePaymentFreeze(rawFreeze: unknown, rawQuery: unknown) {
+  let queryEnvelope
+  try {
+    queryEnvelope = signedEnvelopeSchema.parse(rawQuery)
+    offlinePaymentResolutionQuerySchema.parse(parseCanonicalPayload(decodeBase64Url(queryEnvelope.payloadBase64Url)))
+  } catch { return invalid() }
+  const evidence = await verifyStoredOfflinePaymentFreeze(rawFreeze)
+  const deviceKey = await importOfflinePublicKey(evidence.custody.publicKeySpki)
+  let queried
+  try { queried = await verifySignedEnvelope(queryEnvelope, offlinePaymentResolutionQuerySchema, { [evidence.freeze.deviceKeySha256]: deviceKey }) }
+  catch { throw new PosServerError('offline_device_proof_invalid', 403) }
+  const query = queried.payload, freeze = evidence.freeze
+  if (query.authorityId !== freeze.authorityId || query.keyEpoch !== freeze.keyEpoch || query.deviceId !== freeze.deviceId ||
+    query.freezeId !== freeze.freezeId || query.freezeSha256 !== evidence.freezeSha256) return invalid()
+  return immutable({ ...evidence, query, querySha256: queried.payloadSha256, queryEnvelope })
 }
 export type VerifiedOfflinePaymentFreeze = Awaited<ReturnType<typeof verifyOfflinePaymentFreeze>>

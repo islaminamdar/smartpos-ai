@@ -1,3 +1,7 @@
+vi.mock('@/components/pos/offline-payments/journal', () => ({
+  paymentReviewJournalEvent: 'review-test-event',
+  readPendingPaymentReviews: vi.fn(async () => []),
+}))
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import LiveCounter from '@/components/pos/LiveCounter'

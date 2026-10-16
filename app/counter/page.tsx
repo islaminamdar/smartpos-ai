@@ -8,5 +8,9 @@ export const metadata: Metadata = {
 }
 export const dynamic = 'force-dynamic'
 export default function CounterPage() {
-  return <LiveCounter />
+  return (
+    <LiveCounter
+      offlinePaymentReviewEnabled={process.env.POS_OFFLINE_PAYMENT_REVIEW_ENABLED === 'true'}
+    />
+  )
 }

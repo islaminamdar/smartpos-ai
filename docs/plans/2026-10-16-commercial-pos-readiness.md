@@ -67,3 +67,8 @@ The next increment implements [dispatch before payment](2026-10-16-unpaid-kitche
 ## Android and billing hardening
 
 The Android package is an internal engineering candidate, not a live-selling APK. Earlier journal force-stop/reboot and later bounded native/server/UI checks exist; they do not establish complete two-device or physical POS acceptance. Server allocation/import, native fiscal issuance engine, secure access/preparation and recovery are now implemented in candidate source, with issuance hard-disabled and SQL017 unapplied live. Permanent local payment freeze is implemented; manager submission/decision/result delivery remain pending at checkpoint `0a78059`. Billing cancellation binds consent to one exact subscription, with further candidate UI hardening; incomplete provider transaction responses cannot advance reconciliation. PayPal remains disabled until merchant configuration and real sandbox evidence exist.
+
+
+### Manager review candidate following the earlier checkpoint
+
+SQL020, current-authorized case reads, fresh password confirmation, immutable full-return/card-void attestations and the candidate manager browser recovery journal are implemented. [Manager review scope](../contracts/20261016-offline-payment-manager-review.md) records the exact boundary. Native signed-result acceptance is pending; the decision POST remains excluded from hosted release and all review/resolution policies default off. SQL017–020 are not applied live. No customer-ready offline APK or provider payment/refund integration is established by this increment.

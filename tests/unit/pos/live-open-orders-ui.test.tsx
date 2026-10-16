@@ -1,3 +1,7 @@
+vi.mock('@/components/pos/offline-payments/journal', () => ({
+  paymentReviewJournalEvent: 'review-test-event',
+  readPendingPaymentReviews: vi.fn(async () => []),
+}))
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import LiveCounter from '@/components/pos/LiveCounter'
@@ -453,4 +457,27 @@ it('disables payment for saved kitchen changes that have not been dispatched', a
   )
   expect(screen.getByRole('button', { name: 'Save sale · AED 5.00' })).toBeDisabled()
   expect(sent).toBeNull()
+})
+
+it('retained manager request blocks sign-out with feature disabled and exposes read-only recovery', async () => {
+  const journal = await import('@/components/pos/offline-payments/journal')
+  const { reviewRequest } = await import('./fixtures/payment-review-ui')
+  vi.mocked(journal.readPendingPaymentReviews).mockResolvedValue([
+    { actorId, branchId, caseId: reviewRequest.freezeId, request: reviewRequest },
+  ])
+  try {
+    render(<LiveCounter />)
+    await screen.findByText('A manager decision needs confirmation')
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Payment review' })).toBeNull()
+    expect(screen.getByText(/New manager decisions and retries are disabled/)).toBeVisible()
+  } finally {
+    vi.mocked(journal.readPendingPaymentReviews).mockResolvedValue([])
+  }
+})
+it('manager feature gate shows the dedicated review tab without making any decision', async () => {
+  render(<LiveCounter offlinePaymentReviewEnabled />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Payment review' }))
+  await screen.findByRole('heading', { name: 'Offline payment reviews' })
+  expect(screen.getByText(/Android confirmation is not implemented yet/)).toBeVisible()
 })

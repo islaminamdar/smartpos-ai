@@ -6,6 +6,10 @@ export function publicReleaseAccess(
 ): 'allow' | 'not_found' | 'unavailable' {
   const read = method === 'GET' || method === 'HEAD'
   if (path === '/api/pos/health') return read ? 'allow' : 'not_found'
+  // Current authenticated manager reads have their own server-side feature gate and
+  // permissions. The candidate decision writer is intentionally NOT exposed yet.
+  if (path === '/api/pos/manager/offline-payments' || path === '/api/pos/manager/offline-payments/case')
+    return read ? 'allow' : 'not_found'
   // Previously issued device evidence must remain recoverable when new selling is paused.
   if (path === '/api/pos/offline/import' || path === '/api/pos/offline/seal' || path === '/api/pos/offline/bundle-recovery')
     return method === 'POST' ? 'allow' : 'not_found'

@@ -3,6 +3,18 @@ import { NextRequest } from 'next/server'
 import { publicReleaseAccess } from '@/lib/pos/public-release'
 import { middleware } from '@/middleware'
 
+it('exposes only exact manager review reads and keeps candidate payment decisions unreachable', () => {
+  for (const pilot of [true, false]) {
+    for (const path of ['/api/pos/manager/offline-payments', '/api/pos/manager/offline-payments/case']) {
+      expect(publicReleaseAccess(path, 'GET', pilot)).toBe('allow')
+      expect(publicReleaseAccess(path, 'POST', pilot)).not.toBe('allow')
+      expect(publicReleaseAccess(path + '/other', 'GET', pilot)).not.toBe('allow')
+    }
+    for (const method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
+      expect(publicReleaseAccess('/api/pos/manager/offline-payments/resolve', method, pilot)).not.toBe('allow')
+  }
+})
+
 it('keeps signed historical offline recovery reachable when new selling is paused', () => {
   for (const enabled of [false, true]) {
     for (const suffix of ['import', 'seal', 'bundle-recovery']) {
