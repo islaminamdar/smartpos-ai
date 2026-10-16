@@ -1,6 +1,6 @@
-# Partial item and weight returns — candidate contract
+# Partial item and weight returns
 
-Implementation target, not a deployment claim. Preserve existing invoices, v1/v2 full credit notes and exact `refund.full` replay. The new command is `refund.items`; managers/owners use their own current open shift and bound device. Partial returns never reprice a sale, reapply an offer, reinstate redemption limits, automatically restock food, physically return cash or initiate a card-provider refund.
+Implemented in web release `2de794a` with SQL029–030. Preserve existing invoices, v1/v2 full credit notes and exact `refund.full` replay. The new command is `refund.items`; managers/owners use their own current open shift and bound device. Partial returns never reprice a sale, reapply an offer, reinstate redemption limits, automatically restock food, physically return cash or initiate a card-provider refund.
 
 ## Monetary allocation
 

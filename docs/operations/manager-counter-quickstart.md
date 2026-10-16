@@ -78,7 +78,7 @@ Review the shift totals, count the actual cash in the drawer, then use **Close s
 
 - Real sales require an internet connection. The separate `/pos` workspace is training only and must not be used to issue customer bills.
 - Do not clear browser storage while a request is waiting for confirmation.
-- Issued bills preserve their original details. A refund creates a credit note; it does not erase the original invoice. The live pilot supports full returns, with a reason and confirmation.
+- Issued bills preserve their original details. A refund creates a credit note; it does not erase the original invoice. Managers can return selected items or weights, or all remaining items, with a reason and confirmation.
 - Android APK installation, offline live selling, automatic card charging, physical printer integration and the broader planned restaurant features are still under development.
 - Subscription payments are handled separately from customer counter payments. Visiting the billing screen does not change the existing manually collected pilot arrangement.
 
@@ -100,9 +100,9 @@ Payment retains the same dispatched ticket and preparation progress. An order pa
 
 If confirmation is lost, keep browser data and use the saved change's recovery controls. The checkbox permits permanent cancellation only if the server proves that particular change was not saved. It does not void an existing order, cancel an issued bill or return money.
 
-## Item and weight returns — prepared for the next release
+## Item and weight returns
 
-This flow is a tested candidate and is not yet available in live release `8bd118c`.
+Available in web release `2de794a`. Use this flow only for an actual return against an issued invoice.
 
 1. Sign in as a manager on an enrolled counter and open your own shift. In **Receipts**, choose the original invoice, then **Return items**.
 2. Check the sold, already returned and remaining quantities for each original line. Select only the items being returned. Pieces and packs use whole quantities; weights use kilograms with up to three decimal places (0.125 means 125 grams).

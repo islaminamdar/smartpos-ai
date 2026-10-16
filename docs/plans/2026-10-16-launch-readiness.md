@@ -1,5 +1,9 @@
 # Launch readiness and manager payment review
 
+## Latest deployment checkpoint
+
+Release `2de794a` and SQL001–030 are deployed. The partial-return update passed a quiesced backup and actual isolated restore, preservation of all 95 existing public/auth table fingerprints, exact migration checks and public HTTP acceptance on a synthetic branch. Four test invoices and seven credits verified full/partial, weight, discounted and zero-value returns, immutable original records, kitchen acknowledgement controls, access denial, exact recovery, report conservation and a balanced close. These are test-branch records, not restaurant sales or physical payment/printing evidence. Offline issuance and PayPal remain disabled; customer APK delivery and the wider feature/operational scope remain pending. This checkpoint supersedes earlier unapplied-migration and partial-return-candidate statements below.
+
 ## Candidate stock baseline — 2026-10-16
 
 SQL027 and the manager **Stock** view add branch stock items, explicit opening counts, receiving, waste, adjustments, low-stock visibility and immutable movement history. New items remain uncounted until a physical count; unknown quantities never become zero implicitly. Exact item revisions prevent competing edits, durable original requests prevent duplicate movements after lost replies, and authenticated historical lookup/cancellation remains available without current selling authority. Browser mutation requests also bind the intended actor to the authenticated request so an account change in another tab cannot apply an old form under a different staff member.
