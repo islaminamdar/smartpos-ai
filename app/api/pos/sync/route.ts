@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
         'POS_OFFER_UNAVAILABLE',
         'POS_OFFER_LIMIT_REACHED',
         'POS_DISCOUNT_MISMATCH',
+        'POS_KITCHEN_DISPATCH_REQUIRED',
         'POS_TAB_CHANGED',
         'POS_TAB_NOT_FOUND',
         'POS_TAB_STATE_INVALID',

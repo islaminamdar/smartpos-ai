@@ -25,6 +25,10 @@ vi.mock('@/lib/pos/online-journal', () => ({
     journal.current = null
   },
 }))
+vi.mock('@/lib/pos/tab-kitchen-journal', () => ({
+  readPendingTabKitchenRequests: async () => [],
+  tabKitchenJournalEvent: 'test-tab-kitchen',
+}))
 vi.mock('@/lib/pos/open-order-journal', () => ({
   readPendingOpenOrderRequests: async () => [],
   openOrderJournalEvent: 'test-open-order-journal',

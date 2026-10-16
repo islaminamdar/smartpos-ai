@@ -71,7 +71,7 @@ const availability = [
   {
     title: 'Shared orders, tables & kitchen',
     detail:
-      'Save unpaid orders across counters, manage tables and settle each bill once. Track paid orders from queued to served in the kitchen.',
+      'Share unpaid orders and tables across counters. Send items to the kitchen before payment and track additions without repeating served food.',
     status: 'Online pilot',
     ready: true,
   },

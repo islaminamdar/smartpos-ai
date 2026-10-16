@@ -20,13 +20,13 @@ For the online pilot at [pos.internext.info/counter](https://pos.internext.info/
 
 ## Use the kitchen board
 
-On the kitchen browser, sign in with branch staff access and register that device. An open cash shift is not required to use **Kitchen**. New confirmed paid sales appear automatically; old invoices are not resent to the kitchen. Check the invoice reference, order type, items and quantities, then use **Start preparing**, **Mark ready**, and **Mark served**. Confirm served only after handing over the order.
+On the kitchen browser, sign in with branch staff access and register that device. An open cash shift is not required to use **Kitchen**. The kitchen has two sections: **Sent orders** for orders explicitly dispatched before payment, and the paid-order section for sales paid without prior dispatch. Old invoices are not resent to the kitchen. Check the invoice reference, order type, items and quantities, then use **Start preparing**, **Mark ready**, and **Mark served**. Confirm served only after handing over the order.
 
 The board refreshes every 10 seconds while visible. If a refresh fails, the previous tickets remain visible with a warning and stage changes pause. All active tickets are counted regardless of age; use the page controls for a large queue. The recent history shows up to 50 served or cancelled tickets.
 
 Managers can correct one stage backwards with a reason. A full refund automatically marks its ticket cancelled, even after serving; check with the counter if preparation or handover already happened. Kitchen controls do not issue refunds or send physical printer instructions.
 
-If a change has no confirmation, keep browser data and use the saved-change controls. Retry sends the same request. **Check or cancel saved change** retrieves the original result or permanently cancels the unsaved change; it does not cancel the order. Resolve saved kitchen work before signing out, changing your password or registering a replacement counter. Shared tables, unpaid orders, courses and station routing remain in development.
+If a change has no confirmation, keep browser data and use the saved-change controls. Retry sends the same request. **Check or cancel saved change** retrieves the original result or permanently cancels the unsaved change; it does not cancel the order. Resolve saved kitchen work before signing out, changing your password or registering a replacement counter. Courses and station routing remain in development.
 
 ## Update the menu
 
@@ -84,6 +84,10 @@ Practice only in the training workspace or an explicitly designated test branch.
 4. Open your own cash shift, choose payment and save the sale. The server settles the saved bill and releases its table together. A retry uses the same payment request.
 5. To serve another guest, choose **New order / clear counter**. The confirmation clears only this browser basket; the saved order remains in the branch list. Managers can void an unpaid order with a reason or review and reopen a voided order. Paid orders cannot be reopened this way.
 
-Unpaid orders reach the kitchen **only after payment in this release**. Kitchen dispatch before payment, courses and station routing remain under development. Table names and preparation notes are currently shared-order details; they are not added to existing fiscal receipts or kitchen tickets.
+To prepare before payment, open the saved order in **Sell**, review **Kitchen preparation**, then choose **Send to kitchen** and confirm. The kitchen reviews its new-order notice before starting preparation. Saving later edits does not automatically send them: use **Review kitchen changes** and confirm. Saved kitchen changes must be sent before payment. Price-only updates do not create more preparation.
+
+The sent-order board keeps separate queued, preparing, ready and served quantities. Adding two items after eight were served queues only the two additions. Each stage button moves the quantities shown in that stage. Removing work already preparing, ready or served requires a manager and reason; the kitchen must review the withdrawal notice. A void or refund leaves a stop notice visible until reviewed. Reopening a voided draft requires a separate manager dispatch to start a new preparation round.
+
+Payment retains the same dispatched ticket and preparation progress. An order paid without prior dispatch appears in the separate paid-order section. Table names and notes are included in dispatched kitchen details; existing fiscal receipts are unchanged. Physical kitchen printing, courses and station routing remain pending.
 
 If confirmation is lost, keep browser data and use the saved change's recovery controls. The checkbox permits permanent cancellation only if the server proves that particular change was not saved. It does not void an existing order, cancel an issued bill or return money.

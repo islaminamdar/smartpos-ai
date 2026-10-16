@@ -28,6 +28,12 @@ import StaffManager from './staff/StaffManager'
 import AccountSettings from './staff/AccountSettings'
 import PendingAccessRecovery from './staff/PendingAccessRecovery'
 import KitchenBoard, { KitchenPendingRecovery } from './kitchen/KitchenBoard'
+import TabKitchenBoard, { TabKitchenPendingRecovery } from './tab-kitchen/TabKitchenBoard'
+import TabKitchenDispatch from './tab-kitchen/TabKitchenDispatch'
+import {
+  readPendingTabKitchenRequests,
+  tabKitchenJournalEvent,
+} from '@/lib/pos/tab-kitchen-journal'
 import OpenOrdersBoard from './open-orders/OpenOrdersBoard'
 import OpenOrderSave from './open-orders/OpenOrderSave'
 import { OpenOrderPendingRecovery } from './open-orders/OpenOrderPendingRecovery'
@@ -40,6 +46,7 @@ import type {
 } from '@/lib/pos/server/open-order-contracts'
 import { basketFromOpenOrder, openOrderBasketMatches } from '@/lib/pos/open-order-basket'
 import { readPendingKitchenRequests, kitchenJournalEvent } from '@/lib/pos/kitchen-journal'
+import { tabKitchenTabSchema } from '@/lib/pos/server/tab-kitchen'
 import type { OfferSelection, EligibleOfferQuote } from '@/lib/pos/server/offers'
 import { invoiceMatchesSale, settlementMatchesSale } from '@/lib/pos/server/sale-ack'
 
@@ -74,6 +81,8 @@ const humanError = (error: unknown) => {
       return 'Sign in again to continue. Any pending sale is kept on this device.'
     if (error.status === 429)
       return 'Too many attempts. Please wait a few minutes before trying again.'
+    if (error.code === 'POS_KITCHEN_DISPATCH_REQUIRED')
+      return 'Send the saved changes to the kitchen before payment. Resolve this saved payment request first and reconcile any money collected.'
     if (error.code.includes('PRICE') || error.code.includes('PROFILE'))
       return 'The menu or business details changed. This request needs review before you take another payment.'
     if (error.code.includes('OFFER'))
@@ -122,11 +131,18 @@ export default function LiveCounter() {
   const [notice, setNotice] = useState('')
   const [online, setOnline] = useState(true)
   const [pending, setPending] = useState<PendingOnlineRequest | null>(null)
+  const [tabKitchenPending, setTabKitchenPending] = useState(false)
+  const [tabKitchenJournalReady, setTabKitchenJournalReady] = useState(false)
+  const [tabKitchenBusy, setTabKitchenBusy] = useState(false)
   const [kitchenPending, setKitchenPending] = useState(false)
   const [kitchenJournalReady, setKitchenJournalReady] = useState(false)
   const [openOrderPending, setOpenOrderPending] = useState(false)
   const [openOrderJournalReady, setOpenOrderJournalReady] = useState(false)
   const [openOrderBusy, setOpenOrderBusy] = useState(false)
+  const [kitchenPaymentReadiness, setKitchenPaymentReadiness] = useState<{
+    key: string
+    ready: boolean
+  } | null>(null)
   const [sourceTab, setSourceTab] = useState<OpenOrderTab | null>(null)
   const [initialTableId, setInitialTableId] = useState<string | null>(null)
   const [openOrderMetadataDirty, setOpenOrderMetadataDirty] = useState(false)
@@ -205,7 +221,14 @@ export default function LiveCounter() {
   const requiresOrderSave =
     openOrderMetadataDirty || !!initialTableId || (!!sourceTab && !savedBasketMatches)
   const basketLocked =
-    busy || !!pending || openOrderBusy || openOrderPending || !openOrderJournalReady
+    busy ||
+    !!pending ||
+    openOrderBusy ||
+    openOrderPending ||
+    !openOrderJournalReady ||
+    tabKitchenBusy ||
+    tabKitchenPending ||
+    !tabKitchenJournalReady
   const offerScope = JSON.stringify({ branchId, serviceType, lines: offerLines })
   const activeOffer = chosenOffer?.scope === offerScope ? chosenOffer : null
   const total = activeOffer?.quote.grossFils ?? beforeDiscount
@@ -218,6 +241,10 @@ export default function LiveCounter() {
     },
     [offerScope]
   )
+  const kitchenPaymentKey = sourceTab ? `${branchId}:${sourceTab.id}:${sourceTab.revision}` : null
+  const kitchenPaymentReady =
+    !sourceTab ||
+    (kitchenPaymentReadiness?.key === kitchenPaymentKey && kitchenPaymentReadiness.ready)
   const mayWrite = !!(
     boot?.capabilities.onlineSales &&
     branch?.canSell &&
@@ -225,11 +252,60 @@ export default function LiveCounter() {
     boot.device &&
     !busy &&
     !pending &&
+    !tabKitchenBusy &&
+    !tabKitchenPending &&
+    tabKitchenJournalReady &&
     !openOrderBusy &&
     !openOrderPending &&
     openOrderJournalReady &&
     branch?.profile
   )
+
+  const checkTabKitchenPending = useCallback(async (actorId: string) => {
+    const requests = await readPendingTabKitchenRequests(actorId)
+    if (currentActor.current === actorId) {
+      setTabKitchenPending(requests.length > 0)
+      setTabKitchenJournalReady(true)
+    }
+    return requests
+  }, [])
+  useEffect(() => {
+    if (!boot?.userId) {
+      setTabKitchenJournalReady(false)
+      return
+    }
+    const actorId = boot.userId
+    let alive = true
+    const check = () => {
+      void readPendingTabKitchenRequests(actorId)
+        .then((requests) => {
+          if (!alive) return
+          setTabKitchenPending(requests.length > 0)
+          setTabKitchenJournalReady(true)
+        })
+        .catch(() => {
+          if (!alive) return
+          setTabKitchenJournalReady(false)
+        })
+    }
+    check()
+    window.addEventListener(tabKitchenJournalEvent, check)
+    window.addEventListener('focus', check)
+    let channel: BroadcastChannel | null = null
+    try {
+      if (typeof BroadcastChannel !== 'undefined')
+        channel = new BroadcastChannel(tabKitchenJournalEvent)
+    } catch {
+      /* Focus and same-tab events still reconcile persistent work. */
+    }
+    if (channel) channel.onmessage = check
+    return () => {
+      alive = false
+      window.removeEventListener(tabKitchenJournalEvent, check)
+      window.removeEventListener('focus', check)
+      channel?.close()
+    }
+  }, [boot?.userId])
 
   const checkKitchenPending = useCallback(async (actorId: string) => {
     const requests = await readPendingKitchenRequests(actorId)
@@ -589,10 +665,33 @@ export default function LiveCounter() {
         (boot && (await checkOpenOrderPending(boot.userId)).length)
       )
         throw new Error('Resolve the saved unpaid-order change before taking payment.')
+      if (
+        tabKitchenBusy ||
+        !tabKitchenJournalReady ||
+        (boot && (await checkTabKitchenPending(boot.userId)).length)
+      )
+        throw new Error('Resolve the saved kitchen dispatch before taking payment.')
       if (requiresOrderSave)
         throw new Error('Save your unpaid order changes before taking payment.')
       if (!boot?.device || !branch?.profile || !shift || !basket.length || total <= 0)
         throw new Error('Open your shift and add an item first.')
+      if (sourceTab) {
+        const detail = tabKitchenTabSchema.parse(
+          await api(
+            `/api/pos/tab-kitchen?branchId=${branchId}&deviceId=${boot.device.id}&tabId=${sourceTab.id}`
+          )
+        )
+        if (
+          detail.branchId !== branchId ||
+          detail.tabId !== sourceTab.id ||
+          detail.tabRevision !== sourceTab.revision
+        )
+          throw new Error(
+            'This saved order changed. Reopen it and review the items before payment.'
+          )
+        if (detail.dispatchRequired)
+          throw new Error('Send the saved changes to the kitchen before taking payment.')
+      }
       if (
         basket.some(
           (line) =>
@@ -795,6 +894,7 @@ export default function LiveCounter() {
           <p role="alert">{error || 'The account service is not ready yet.'}</p>
           <PendingAccessRecovery />
           <KitchenPendingRecovery disabled={busy || !online} />
+          <TabKitchenPendingRecovery disabled={busy || !online} />
           <OpenOrderPendingRecovery disabled={busy || !online} />
           <button
             onClick={() =>
@@ -826,6 +926,9 @@ export default function LiveCounter() {
           disabled={
             busy ||
             !!pending ||
+            tabKitchenBusy ||
+            tabKitchenPending ||
+            !tabKitchenJournalReady ||
             kitchenPending ||
             !kitchenJournalReady ||
             openOrderPending ||
@@ -836,6 +939,10 @@ export default function LiveCounter() {
             void run(async () => {
               if (await readPendingRequest(boot.userId))
                 throw new Error('Recover the pending request before signing out.')
+              if ((await checkTabKitchenPending(boot.userId)).length)
+                throw new Error(
+                  'Resolve the saved kitchen dispatch before changing account or counter access.'
+                )
               if ((await checkKitchenPending(boot.userId)).length)
                 throw new Error('Resolve the saved kitchen change before signing out.')
               if ((await checkOpenOrderPending(boot.userId)).length)
@@ -950,6 +1057,27 @@ export default function LiveCounter() {
             are paused; keep this browser’s data.
           </p>
         )}
+        {!tabKitchenJournalReady && (
+          <p className="lc-warning">
+            Kitchen recovery storage is unavailable. Keep this browser’s data; sales and account
+            changes are paused.
+          </p>
+        )}
+        {(tabKitchenPending || !boot.device) && (
+          <TabKitchenPendingRecovery
+            key={boot.userId}
+            actorId={boot.userId}
+            excludeBranchId={
+              (view === 'kitchen' || (view === 'sell' && sourceTab)) && boot.device
+                ? branchId
+                : undefined
+            }
+            disabled={busy || !online}
+            onPendingChange={() => {
+              void checkTabKitchenPending(boot.userId).catch(() => setTabKitchenJournalReady(false))
+            }}
+          />
+        )}
         {kitchenPending && view !== 'kitchen' && boot.device && (
           <section className="lc-warning" aria-label="Saved kitchen change">
             <p>A kitchen change needs confirmation before signing out or changing your password.</p>
@@ -977,6 +1105,10 @@ export default function LiveCounter() {
               event.preventDefault()
               const data = new FormData(event.currentTarget)
               void run(async () => {
+                if ((await checkTabKitchenPending(boot.userId)).length)
+                  throw new Error(
+                    'Resolve the saved kitchen dispatch before changing account or counter access.'
+                  )
                 if ((await checkKitchenPending(boot.userId)).length)
                   throw new Error(
                     'Resolve the saved kitchen change before registering a replacement counter.'
@@ -1019,6 +1151,9 @@ export default function LiveCounter() {
                 busy ||
                 !branchId ||
                 !!pending ||
+                tabKitchenBusy ||
+                tabKitchenPending ||
+                !tabKitchenJournalReady ||
                 kitchenPending ||
                 !kitchenJournalReady ||
                 openOrderPending ||
@@ -1078,7 +1213,14 @@ export default function LiveCounter() {
                 branchId={branchId}
                 branchName={branch.name}
                 deviceId={boot.device.id}
-                disabled={busy || !!pending || !online}
+                disabled={
+                  busy ||
+                  !!pending ||
+                  !online ||
+                  tabKitchenBusy ||
+                  tabKitchenPending ||
+                  !tabKitchenJournalReady
+                }
                 onOpen={requestBasket}
                 onStartTable={requestBasket}
                 onBusyChange={setOpenOrderBusy}
@@ -1086,6 +1228,22 @@ export default function LiveCounter() {
                 onPendingChange={() => {
                   void checkOpenOrderPending(boot.userId).catch(() =>
                     setOpenOrderJournalReady(false)
+                  )
+                }}
+              />
+            )}
+            {view === 'kitchen' && branch && (
+              <TabKitchenBoard
+                key={`${boot.userId}:${branchId}`}
+                actorId={boot.userId}
+                branchId={branchId}
+                branchName={branch.name}
+                deviceId={boot.device.id}
+                disabled={busy || !!pending || !online || openOrderBusy || openOrderPending}
+                onBusyChange={setTabKitchenBusy}
+                onPendingChange={() => {
+                  void checkTabKitchenPending(boot.userId).catch(() =>
+                    setTabKitchenJournalReady(false)
                   )
                 }}
               />
@@ -1121,6 +1279,9 @@ export default function LiveCounter() {
                   !!pending ||
                   !online ||
                   !!shift ||
+                  tabKitchenBusy ||
+                  tabKitchenPending ||
+                  !tabKitchenJournalReady ||
                   kitchenPending ||
                   !kitchenJournalReady ||
                   openOrderPending ||
@@ -1378,7 +1539,14 @@ export default function LiveCounter() {
                     initialTableId={initialTableId}
                     serviceType={serviceType}
                     lines={offerLines}
-                    disabled={busy || !!pending || !online}
+                    disabled={
+                      busy ||
+                      !!pending ||
+                      !online ||
+                      tabKitchenBusy ||
+                      tabKitchenPending ||
+                      !tabKitchenJournalReady
+                    }
                     onDirtyChange={setOpenOrderMetadataDirty}
                     onBusyChange={setOpenOrderBusy}
                     onPendingChange={() => {
@@ -1395,6 +1563,34 @@ export default function LiveCounter() {
                       setNotice('Unpaid order saved for your branch. Payment has not been taken.')
                     }}
                   />
+                  {view === 'sell' && sourceTab && branch && (
+                    <TabKitchenDispatch
+                      key={`${boot.userId}:${branchId}:${sourceTab.id}`}
+                      actorId={boot.userId}
+                      branchId={branchId}
+                      branchName={branch.name}
+                      deviceId={boot.device.id}
+                      tab={sourceTab}
+                      onPaymentReady={(ready) =>
+                        setKitchenPaymentReadiness({ key: kitchenPaymentKey!, ready })
+                      }
+                      disabled={
+                        busy ||
+                        !!pending ||
+                        !online ||
+                        openOrderBusy ||
+                        openOrderPending ||
+                        !openOrderJournalReady ||
+                        requiresOrderSave
+                      }
+                      onBusyChange={setTabKitchenBusy}
+                      onPendingChange={() => {
+                        void checkTabKitchenPending(boot.userId).catch(() =>
+                          setTabKitchenJournalReady(false)
+                        )
+                      }}
+                    />
+                  )}
                   {requiresOrderSave && (
                     <p className="lc-warning">Save this unpaid order before taking payment.</p>
                   )}
@@ -1496,7 +1692,9 @@ export default function LiveCounter() {
                   </details>
                   <button
                     className="lc-primary"
-                    disabled={!mayWrite || !shift || total <= 0 || requiresOrderSave}
+                    disabled={
+                      !mayWrite || !kitchenPaymentReady || !shift || total <= 0 || requiresOrderSave
+                    }
                     onClick={checkout}
                   >
                     {busy ? 'Waiting for confirmation…' : `Save sale · ${currency(total)}`}

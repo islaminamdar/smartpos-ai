@@ -520,7 +520,7 @@ function Board(props: Props) {
       <header className={styles.heading}>
         <div>
           <h2>Kitchen at {branchName}</h2>
-          <p>Paid orders only. Oldest active orders appear first.</p>
+          <p>Orders paid without prior kitchen dispatch. Oldest active orders appear first.</p>
         </div>
         <button disabled={loading || state.busy || disabled} onClick={() => void load()}>
           {loading ? 'Refreshing…' : 'Refresh tickets'}
@@ -566,7 +566,7 @@ function Board(props: Props) {
                   setConfirm(null)
                 }}
               >
-                Served & cancelled
+                Served &amp; cancelled
               </button>
             </div>
             <div className={styles.counts} aria-label="All active tickets in this branch">

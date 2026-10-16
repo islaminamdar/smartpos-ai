@@ -161,8 +161,8 @@ function Save(props: Props) {
             : 'Save this order for later'}
         </summary>
         <p className={styles.help}>
-          Saving takes no payment. Unpaid orders reach the kitchen only after payment in this
-          release. Offers are applied at payment.
+          Saving takes no payment. After saving, use Kitchen preparation to send this order before
+          payment. Offers are applied at payment.
         </p>
         {list.error && (
           <p className={styles.error} role="alert">

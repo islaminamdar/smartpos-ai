@@ -27,6 +27,9 @@ Apply migrations in order:
 13. `20261016001300_pos_staff_access.sql`: staff permissions, application invitations, authority locks and historical recovery.
 14. `20261016001400_pos_kitchen.sql`: transactional paid-order kitchen tickets, shared revision-controlled stages and request recovery. Private release records establish whether this candidate is deployed.
 
+15. `20261016001500_pos_open_tabs.sql`: shared unpaid orders, dining tables and once-only linked settlement.
+16. `20261016001600_pos_tab_kitchen.sql`: explicit unpaid dispatch, stable preparation identity, bounded quantity buckets, immutable notices and exact recovery; linked payment preserves work and rejects unsent changes.
+
 Privately provision the organization, branch, `auth.users` account, active `pos_staff` membership, confirmed merchant profile and approved `pos_products`. Migrations contain no real staff credentials or customer seed records. The first intended customer is Abdul Gafoor Suleman Usman Mithaiwala Restaurant LLC, Bur Dubai. Confirm business details and tax setup through the operator workflow rather than public source files.
 
 Products use integer fils and VAT-inclusive unit prices; 500 basis points means 5%. Kilogram quantities use thousandths of a kilogram, while pieces and packs require whole quantities. Unpriced items must remain unavailable. The profile is immutable: update merchant details by creating a new version and selecting it for subsequent documents.
@@ -105,3 +108,9 @@ Kitchen writes take shared staff authority lock15, request lock18, then device, 
 `GET /api/pos/open-orders?branchId&deviceId` returns complete table occupancy, total open count, a page of100open orders and latest50closed orders. Use paired `afterCreatedAt`/`afterId` for paging, or `tabId` for scoped detail. `POST /api/pos/open-orders` takes the strict `OpenOrderCommand` directly. `POST /api/pos/open-orders/recovery` takes that exact original command and returns its canonical result or immutable cancellation. These reads/writes require branch authority and bound devices; drafting does not require a cash shift.
 
 A live sale may include `sourceTab:{id,expectedRevision}`. Settlement requires the same saved service type and line prices, quantities and catalogue revisions, and returns `settledTab:{id,revision}` in addition to the existing fiscal receipt. Every HTTP/browser financial recovery path validates both. Exact original outer requests are private; changing or stripping the link on replay conflicts. An earlier ordinary invoice cannot be adopted to settle a draft. Refunds preserve settled order history. See the shared-order contract for lock order, immutable journals and limits.
+
+## Dispatched kitchen orders (migration016)
+
+`GET /api/pos/tab-kitchen` selects a branch list (optional paired `afterIssuedAt`/`afterId`), a ticket event page (`ticketId`, optional `afterSequence`), or saved-order dispatch status (`tabId`). These modes are mutually exclusive and require a branch-bound device. `POST` and `/recovery` accept strict dispatch, stage or prefix-acknowledgement commands. No prices, tenders, customer details or coupon data enter kitchen responses.
+
+The separate family preserves SQL014 request formats and journals. A private pre-invoice reservation routes a dispatched tab's invoice to its existing preparation identity. Payment never resets buckets or duplicates a ticket. The exact [SQL016 contract](../../../docs/contracts/20261016-tab-kitchen-contract.md) documents lock order, historical authority, event bounds and rollback-reader requirements. Public deployment state is recorded privately; source implementation alone is not proof of activation.

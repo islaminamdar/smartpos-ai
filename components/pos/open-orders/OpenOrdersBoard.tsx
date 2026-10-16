@@ -159,8 +159,8 @@ function Board(props: Props) {
         </button>
       </header>
       <p className={styles.scope}>
-        Unpaid orders are saved for your team. They reach the kitchen only after payment in this
-        release.
+        Unpaid orders are saved for your team. Open an order at the counter and use Kitchen
+        preparation to send it before payment.
       </p>
       <OpenOrderPendingPanel
         key={state.pending?.id ?? 'none'}

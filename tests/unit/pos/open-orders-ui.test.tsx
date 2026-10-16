@@ -176,7 +176,7 @@ async function newForm() {
   fireEvent.click(screen.getByText('Save this order for later'))
   fireEvent.change(screen.getByLabelText('Order label'), { target: { value: 'Ahmed takeaway' } })
   await waitFor(() =>
-    expect(screen.getByRole('button', { name: 'Save unpaid order', exact: true })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Save unpaid order' })).toBeEnabled()
   )
 }
 beforeEach(() => {
@@ -221,7 +221,7 @@ it('persists exact new save before network and adopts canonical source before cl
   )
   render(<OpenOrderSave {...saveProps} onSaved={saved} />)
   await newForm()
-  fireEvent.click(screen.getByRole('button', { name: 'Save unpaid order', exact: true }))
+  fireEvent.click(screen.getByRole('button', { name: 'Save unpaid order' }))
   await waitFor(() => expect(journal.records).toHaveLength(0))
   expect(saved).toHaveBeenCalledOnce()
   expect(sent[0]).toMatchObject({
@@ -310,7 +310,7 @@ it('storage failure sends no mutation', async () => {
   vi.stubGlobal('fetch', fetcher)
   render(<OpenOrderSave {...saveProps} />)
   await newForm()
-  fireEvent.click(screen.getByRole('button', { name: 'Save unpaid order', exact: true }))
+  fireEvent.click(screen.getByRole('button', { name: 'Save unpaid order' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('no new request was sent')
   expect(fetcher.mock.calls.some((c: unknown[]) => (c[1] as RequestInit)?.method === 'POST')).toBe(
     false
@@ -373,9 +373,9 @@ it('occupied table assigned to another order cannot be selected or saved', async
   render(<OpenOrderSave {...saveProps} serviceType="dine_in" initialTableId={tableId} />)
   await screen.findByText(/This table is no longer available/)
   fireEvent.change(screen.getByLabelText('Order label'), { target: { value: 'New table order' } })
-  expect(screen.getByRole('button', { name: 'Save unpaid order', exact: true })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Save unpaid order' })).toBeDisabled()
 })
-it('board opens latest server detail and shows paid-only dispatch boundary', async () => {
+it('board opens latest server detail and explains explicit kitchen dispatch', async () => {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url) =>
@@ -395,7 +395,7 @@ it('board opens latest server detail and shows paid-only dispatch boundary', asy
   render(<OpenOrdersBoard {...props} />)
   fireEvent.click(await screen.findByRole('button', { name: 'Open at counter' }))
   await waitFor(() => expect(props.onOpen).toHaveBeenCalledWith({ ...tab, revision: 2 }))
-  expect(screen.getByText(/They reach the kitchen only after payment/)).toBeInTheDocument()
+  expect(screen.getByText(/use Kitchen preparation to send it before payment/)).toBeInTheDocument()
 })
 it('table overview opens off-page occupied order and starts free table without creating an order', async () => {
   const sent: string[] = []
@@ -598,7 +598,7 @@ it('a second pending request requires fresh cancellation consent', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Check or cancel saved change' }))
   await waitFor(() => expect(journal.records).toHaveLength(0))
   await newForm()
-  fireEvent.click(screen.getByRole('button', { name: 'Save unpaid order', exact: true }))
+  fireEvent.click(screen.getByRole('button', { name: 'Save unpaid order' }))
   expect(await screen.findByRole('checkbox')).not.toBeChecked()
   expect(screen.getByRole('button', { name: 'Check or cancel saved change' })).toBeDisabled()
 })
@@ -616,7 +616,7 @@ it('busy guard is raised before persistence and released only after canonical ca
   )
   render(<OpenOrderSave {...saveProps} onBusyChange={busy} onSaved={saved} />)
   await newForm()
-  fireEvent.click(screen.getByRole('button', { name: 'Save unpaid order', exact: true }))
+  fireEvent.click(screen.getByRole('button', { name: 'Save unpaid order' }))
   await waitFor(() => expect(busy).toHaveBeenLastCalledWith(false))
   expect(saved).toHaveBeenCalledOnce()
 })

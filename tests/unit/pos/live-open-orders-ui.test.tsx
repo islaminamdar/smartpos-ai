@@ -18,6 +18,10 @@ vi.mock('@/lib/pos/online-journal', () => ({
     journals.financial = null
   },
 }))
+vi.mock('@/lib/pos/tab-kitchen-journal', () => ({
+  readPendingTabKitchenRequests: async () => [],
+  tabKitchenJournalEvent: 'test-tab-kitchen',
+}))
 vi.mock('@/lib/pos/kitchen-journal', () => ({
   readPendingKitchenRequests: async () => [],
   kitchenJournalEvent: 'test-kitchen',
@@ -171,7 +175,68 @@ function list() {
     recentTruncated: false,
   }
 }
+let kitchenMode: 'clear' | 'unsent' | 'stale' | 'unavailable' = 'clear'
+function kitchenStatus() {
+  return {
+    status: 'ready',
+    organizationId: id(7),
+    branchId,
+    actorRole: 'manager',
+    tabId: saved!.id,
+    tabRevision: saved!.revision + (kitchenMode === 'stale' ? 1 : 0),
+    dispatchRequired: kitchenMode === 'unsent',
+    ticket:
+      kitchenMode !== 'unsent'
+        ? null
+        : {
+            id: id(9),
+            tabId: saved!.id,
+            branchId,
+            revision: 1,
+            generation: 1,
+            dispatchedTabRevision: saved!.revision,
+            state: 'open',
+            payment: 'unpaid',
+            paidOrderId: null,
+            invoiceId: null,
+            invoiceNumber: null,
+            paidAt: null,
+            refundedAt: null,
+            metadata: {
+              label: saved!.label,
+              serviceType: saved!.serviceType,
+              tableId: null,
+              tableName: null,
+              guestCount: null,
+              note: '',
+            },
+            lines: saved!.lines.map(({ productId, name, unit, quantityMilli }) => ({
+              productId,
+              name,
+              unit,
+              quantityMilli,
+            })),
+            stages: {
+              queued: saved!.lines.map(({ productId, name, unit, quantityMilli }) => ({
+                productId,
+                name,
+                unit,
+                quantityMilli,
+              })),
+              preparing: [],
+              ready: [],
+              served: [],
+            },
+            eventSequence: 1,
+            acknowledgedSequence: 0,
+            pendingChangeCount: 1,
+            issuedAt: saved!.createdAt,
+            updatedAt: saved!.updatedAt,
+          },
+  }
+}
 beforeEach(() => {
+  kitchenMode = 'clear'
   saved = null
   sent = null
   original = null
@@ -184,6 +249,10 @@ beforeEach(() => {
     vi.fn(async (url: string, options?: RequestInit) => {
       if (url === '/api/pos/bootstrap') return response(boot)
       if (url.startsWith('/api/pos/receipts')) return response({ receipts: [], nextCursor: null })
+      if (url.startsWith('/api/pos/tab-kitchen?'))
+        return kitchenMode === 'unavailable'
+          ? response({ code: 'kitchen_unavailable' }, 503)
+          : response(kitchenStatus())
       if (url.startsWith('/api/pos/open-orders?')) {
         if (new URL(url, 'http://localhost').searchParams.has('tabId'))
           return response({
@@ -346,5 +415,42 @@ it('keeps an unsaved checkout basket when a manager creates an unrelated table',
   expect(screen.getByLabelText('Quantity')).toHaveValue(1)
   expect(screen.getByRole('button', { name: 'Save sale · AED 5.00' })).toBeEnabled()
   expect(saved).toBeNull()
+  expect(sent).toBeNull()
+})
+
+for (const mode of ['unsent', 'stale', 'unavailable'] as const) {
+  it(`checks current kitchen ${mode} status again before persisting a payment`, async () => {
+    await start()
+    await labelOrder()
+    const save = screen.getByRole('button', { name: 'Save unpaid order' })
+    await waitFor(() => expect(save).toBeEnabled())
+    fireEvent.click(save)
+    const pay = screen.getByRole('button', { name: 'Save sale · AED 5.00' })
+    await waitFor(() => expect(pay).toBeEnabled())
+    // Another counter changes the kitchen after the displayed status was read.
+    kitchenMode = mode
+    fireEvent.click(pay)
+    await screen.findByText(
+      mode === 'unsent'
+        ? 'Send the saved changes to the kitchen before taking payment.'
+        : mode === 'stale'
+          ? 'This saved order changed. Reopen it and review the items before payment.'
+          : 'The counter service is not ready. Please retry shortly.'
+    )
+    expect(sent).toBeNull()
+    expect(journals.financial).toBeNull()
+  })
+}
+it('disables payment for saved kitchen changes that have not been dispatched', async () => {
+  kitchenMode = 'unsent'
+  await start()
+  await labelOrder()
+  const save = screen.getByRole('button', { name: 'Save unpaid order' })
+  await waitFor(() => expect(save).toBeEnabled())
+  fireEvent.click(save)
+  await screen.findByText(
+    'Saved changes have not reached the kitchen. Send them before taking payment.'
+  )
+  expect(screen.getByRole('button', { name: 'Save sale · AED 5.00' })).toBeDisabled()
   expect(sent).toBeNull()
 })

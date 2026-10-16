@@ -119,7 +119,7 @@ it('shows paid scope, weight units, state counts and exact confirmed change', as
   expect(sent).toHaveLength(1)
   expect(sent[0]).toMatchObject({ ...command, id: expect.any(String) })
   expect(journal.records).toHaveLength(0)
-  expect(screen.getByText(/Paid orders only/)).toBeInTheDocument()
+  expect(screen.getByText(/Orders paid without prior kitchen dispatch/)).toBeInTheDocument()
   expect(screen.getByText('kg')).toBeInTheDocument()
 })
 it('retains uncertain request and retries the exact ID and body', async () => {

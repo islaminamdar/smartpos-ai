@@ -59,3 +59,7 @@ Role/scope/deactivation changes require the affected staff member to close open 
 Password change requires current credentials and checks for open shifts, then revokes provider refresh sessions and clears local cookies. The external provider update and shift check are not one database transaction; another device can open a shift concurrently. Already-issued access tokens follow the provider's expiry semantics. If the password changes but sign-out is unconfirmed, the UI explicitly says to use the new password.
 
 Release status and exact test/deployment evidence are recorded privately; this source description does not establish production activation or email delivery.
+
+## Unpaid kitchen release candidate
+
+The next increment implements [dispatch before payment](2026-10-16-unpaid-kitchen-dispatch.md): persistent preparation identity, separate quantity buckets, additions without repeating served food, visible reasoned withdrawal/void/refund notices, exact prefix acknowledgement and payment integration. Existing paid-ticket requests retain their original recovery format. These features require the SQL016/application release and public acceptance before being described as live. Courses, station routing and physical printing remain pending.
