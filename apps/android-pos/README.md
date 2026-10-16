@@ -1,6 +1,6 @@
 # Android counter candidate
 
-This is a bundled Capacitor 8 Android client for Internext POS. It opens without internet and uses a native SQLite journal. The current candidate implements native access/enrollment, preparation, checkout and recovery flows, but **production sale issuance is hard-disabled and the required server candidate is not deployed**. This is an internal engineering APK, not a customer release. The recorded live website remains the online counter. See the [launch readiness audit](../../docs/plans/2026-10-16-launch-readiness.md) for the release boundary.
+This is a bundled Capacitor 8 Android client for Internext POS. It opens without internet and uses a native SQLite journal. The current candidate implements native access/enrollment, preparation, checkout and recovery flows, but **production offline sale issuance is hard-disabled**. Server support through SQL030 is deployed; signing configuration and complete native/server acceptance remain pending. This is an internal engineering APK, not a customer release. The live website remains the online counter. See the [launch readiness audit](../../docs/plans/2026-10-16-launch-readiness.md) for the release boundary.
 
 ## What exists
 

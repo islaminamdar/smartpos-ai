@@ -23,6 +23,7 @@ export function publicReleaseAccess(
     path === '/api/pos/native/shift-close' ||
     path === '/api/pos/native/pin-recovery' ||
     path === '/api/pos/native/clock-recovery' ||
+    path === '/api/pos/native/clock-bootstrap' ||
     path === '/api/pos/inventory/recovery'
   )
     return method === 'POST' ? 'allow' : 'not_found'

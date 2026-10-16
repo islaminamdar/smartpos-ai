@@ -99,6 +99,13 @@ public final class NativeStaffUnlock implements NativeCheckoutEngine.UnlockGuard
         synchronized(NativeStaffUnlock.class){SQLiteDatabase db=store.getReadableDatabase();load(db,"absent-probe");
             try(Cursor c=db.rawQuery("SELECT scope FROM credentials",null)){boolean found=false;while(c.moveToNext()){if(load(db,c.getString(0))==null)throw failure("pin_state_missing");found=true;}return found;}}
     }
+    void requireBootstrapPristine()throws Exception{
+        synchronized(NativeStaffUnlock.class){
+            SQLiteDatabase db=store.getReadableDatabase();load(db,"absent-probe");
+            try(Cursor c=db.rawQuery("SELECT 1 FROM credentials LIMIT 1",null)){if(c.moveToFirst())throw new NativeAccessError("clock_bootstrap_not_eligible");}
+            for(String table:RECOVERY_TABLES)try(Cursor c=db.rawQuery("SELECT 1 FROM "+table+" LIMIT 1",null)){if(c.moveToFirst())throw new NativeAccessError("clock_bootstrap_not_eligible");}
+        }
+    }
     /** One-time provisioning ONLY. Same-actor retries do not replace an existing PIN. */
     void provisionVerifiedStaff(OfflineBundle.Binding binding,char[] pin) throws Exception {
         try {

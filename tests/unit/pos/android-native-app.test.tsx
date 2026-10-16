@@ -2,6 +2,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../../../apps/android-pos/node_modules/react', async () => await import('react'))
 const bridge = vi.hoisted(() => ({
+  getNativeClockBootstrapState: vi.fn(),
+  verifyNativeClockBootstrap: vi.fn(),
   getNativeClockRecoveryState: vi.fn(),
   startNativeClockRecovery: vi.fn(),
   retryNativeClockRecovery: vi.fn(),
@@ -41,6 +43,7 @@ import App from '../../../apps/android-pos/src/App'
 import { parseNativeClockRecoveryState } from '../../../apps/android-pos/src/native'
 import { state as checkoutState, receipt } from './fixtures/native-checkout'
 import actualClock from './fixtures/native-clock-recovery-android-output.json'
+import actualBootstrap from './fixtures/native-clock-bootstrap-android-output.json'
 const snapshot = {
   identity: { installationId: 'qa-installation', deviceKeySha256: 'b'.repeat(64) },
   status: { receiptCount: 2, pendingCount: 1, lastAcknowledgedAt: null },
@@ -119,6 +122,12 @@ const reconciliation = {
   noticeCode: null,
 }
 beforeEach(() => {
+  bridge.getNativeClockBootstrapState.mockResolvedValue({
+    schemaVersion: 1,
+    status: 'not_available',
+    canVerify: false,
+    reasonCode: 'clock_bootstrap_not_eligible',
+  })
   bridge.getNativeClockRecoveryState.mockResolvedValue({
     schemaVersion: 1,
     status: 'not_available',
@@ -1426,5 +1435,104 @@ it.each(['start', 'retry'] as const)(
     assertPrivateDetailsCleared()
     expect(nativeAction).toHaveBeenCalledTimes(1)
     expect(bridge.unlockNativeOffline).not.toHaveBeenCalled()
+  }
+)
+
+const bootstrapReady = actualBootstrap.states.ready
+const bootstrapCompleted = actualBootstrap.states.completed
+function configureBootstrap() {
+  bridge.readDeviceSnapshot.mockResolvedValue({
+    ...snapshot,
+    status: { receiptCount: 0, pendingCount: 0, lastAcknowledgedAt: null },
+    history: { receipts: [], hasMore: false },
+  })
+  bridge.readNativeReconciliation.mockResolvedValue({
+    ...reconciliation,
+    pendingReceipts: 0,
+    unsealedAuthorities: 0,
+    status: 'idle',
+  })
+  bridge.getNativeClockBootstrapState.mockResolvedValue(bootstrapReady)
+  bridge.getNativeClockRecoveryState.mockResolvedValue(
+    parseNativeClockRecoveryState(actualBootstrap.ordinaryStates.fault)
+  )
+  bridge.verifyNativeClockBootstrap.mockImplementation(async () => {
+    bridge.subscribeNativeCheckoutLock.mock.calls.forEach(([listener]) => listener())
+    bridge.getNativeClockBootstrapState.mockResolvedValue(bootstrapCompleted)
+    bridge.getNativeClockRecoveryState.mockResolvedValue(
+      parseNativeClockRecoveryState(actualBootstrap.ordinaryStates.completed)
+    )
+    return bootstrapCompleted
+  })
+}
+async function verifyBootstrapInApp() {
+  const verify = await screen.findByRole('button', { name: 'Verify clock in Android' })
+  const consent = screen.getByRole('checkbox', {
+    name: /I have corrected Android automatic date and time/,
+  })
+  await waitFor(() => expect(consent).toBeEnabled())
+  expect(verify).toBeDisabled()
+  fireEvent.click(consent)
+  await waitFor(() => expect(verify).toBeEnabled())
+  fireEvent.click(verify)
+  await screen.findByText(/Device time checked\. Continue setting up/)
+}
+it('repairs a pristine clock while signed out and keeps sign-in, enrollment and preparation explicit', async () => {
+  configureBootstrap()
+  bridge.signInNative.mockImplementation(async () => {
+    bridge.readOfflineState.mockResolvedValue({ ...offline, stage: 'enroll_counter' })
+    return signedIn
+  })
+  render(<App />)
+  await verifyBootstrapInApp()
+  expect(bridge.verifyNativeClockBootstrap).toHaveBeenCalledExactlyOnceWith()
+  expect(bridge.signInNative).not.toHaveBeenCalled()
+  expect(bridge.enrollNativeCounter).not.toHaveBeenCalled()
+  expect(bridge.prepareNativeOffline).not.toHaveBeenCalled()
+  expect(bridge.unlockNativeOffline).not.toHaveBeenCalled()
+  expect(bridge.startNativePinRecovery).not.toHaveBeenCalled()
+  expect(bridge.startNativeClockRecovery).not.toHaveBeenCalled()
+  const signIn = screen.getByRole('button', { name: 'Sign in securely' })
+  await waitFor(() => expect(signIn).toBeEnabled())
+  fireEvent.click(signIn)
+  const enroll = await screen.findByRole('button', { name: 'Enroll this counter' })
+  fireEvent.change(screen.getByLabelText('Counter name'), { target: { value: 'New counter' } })
+  await waitFor(() => expect(enroll).toBeEnabled())
+  expect(screen.getByText('New sales paused')).toBeVisible()
+})
+it.each(['PIN', 'payment'])(
+  'does not clear an unrelated %s hold after clock verification',
+  async (hold) => {
+    // Deliberately contradictory capability metadata must not override independent holds.
+    configureBootstrap()
+    bridge.readAccessState.mockResolvedValue(signedIn)
+    bridge.readOfflineState.mockResolvedValue({ ...offline, stage: 'enroll_counter' })
+    if (hold === 'PIN') bridge.getNativePinRecoveryState.mockResolvedValue(pinPending)
+    else
+      bridge.readNativeCheckout.mockResolvedValue({
+        ...checkoutState,
+        canIssue: false,
+        reasonCode: 'pin_unlock_required',
+        context: null,
+        pendingIntentId: branchId,
+        unresolvedIntent: null,
+        lastReceipt: null,
+      })
+    render(<App />)
+    await verifyBootstrapInApp()
+    const enroll = screen.getByRole('button', { name: 'Enroll this counter' })
+    fireEvent.change(screen.getByLabelText('Counter name'), { target: { value: 'Held counter' } })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Check access' })).toBeEnabled())
+    expect(enroll).toBeDisabled()
+    if (hold === 'PIN')
+      expect(screen.getByRole('button', { name: 'Check / retry saved PIN recovery' })).toBeVisible()
+    else
+      expect(
+        screen.getByText(/Check the saved payment in Counter before changing account/)
+      ).toBeVisible()
+    expect(bridge.enrollNativeCounter).not.toHaveBeenCalled()
+    expect(bridge.prepareNativeOffline).not.toHaveBeenCalled()
+    expect(bridge.unlockNativeOffline).not.toHaveBeenCalled()
+    expect(screen.getByText('New sales paused')).toBeVisible()
   }
 )

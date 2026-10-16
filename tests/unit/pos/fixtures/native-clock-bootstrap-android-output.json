@@ -1,0 +1,74 @@
+{
+  "states": {
+    "healthy": {
+      "schemaVersion": 1,
+      "status": "not_available",
+      "canVerify": false,
+      "reasonCode": "clock_healthy"
+    },
+    "ready": {
+      "schemaVersion": 1,
+      "status": "ready",
+      "canVerify": true,
+      "reasonCode": null
+    },
+    "completed": {
+      "schemaVersion": 1,
+      "status": "completed",
+      "canVerify": false,
+      "reasonCode": "clock_bootstrap_completed"
+    },
+    "not_eligible": {
+      "schemaVersion": 1,
+      "status": "not_available",
+      "canVerify": false,
+      "reasonCode": "clock_bootstrap_not_eligible"
+    }
+  },
+  "ordinaryStates": {
+    "healthy": {
+      "schemaVersion": 1,
+      "status": "not_available",
+      "requestId": null,
+      "canStart": false,
+      "canRetry": false,
+      "passwordRequired": false,
+      "reasonCode": "clock_healthy"
+    },
+    "fault": {
+      "schemaVersion": 1,
+      "status": "blocked",
+      "requestId": null,
+      "canStart": false,
+      "canRetry": false,
+      "passwordRequired": false,
+      "reasonCode": "offline_not_configured"
+    },
+    "completed": {
+      "schemaVersion": 1,
+      "status": "not_available",
+      "requestId": null,
+      "canStart": false,
+      "canRetry": false,
+      "passwordRequired": false,
+      "reasonCode": "clock_healthy"
+    }
+  },
+  "request": {
+    "challenge": "182d5e6e01600dac4c97c56b66e6b1a7e8b9e569c22a33f15e84501a5a4c9f6e",
+    "deviceKeySha256": "868f243e9f819912c6f4346d721571874c498084934a771bd8df0ed3c9e28848",
+    "installationId": "434b62dc-505d-4cae-a1d2-bad62b704cc2",
+    "oldClockGeneration": 0,
+    "oldClockSha256": "3f8fc8cd2cc47d56593ef08361c5275de192a07bc815da29b75752e06460e928",
+    "schemaVersion": 1
+  },
+  "canonicalRequest": "{\"challenge\":\"182d5e6e01600dac4c97c56b66e6b1a7e8b9e569c22a33f15e84501a5a4c9f6e\",\"deviceKeySha256\":\"868f243e9f819912c6f4346d721571874c498084934a771bd8df0ed3c9e28848\",\"installationId\":\"434b62dc-505d-4cae-a1d2-bad62b704cc2\",\"oldClockGeneration\":0,\"oldClockSha256\":\"3f8fc8cd2cc47d56593ef08361c5275de192a07bc815da29b75752e06460e928\",\"schemaVersion\":1}",
+  "time": {
+    "format": "pos-signed-v1",
+    "alg": "ECDSA-P256-SHA256-DER",
+    "keyId": "synthetic-server",
+    "payloadBase64Url": "eyJjaGFsbGVuZ2UiOiIxODJkNWU2ZTAxNjAwZGFjNGM5N2M1NmI2NmU2YjFhN2U4YjllNTY5YzIyYTMzZjE1ZTg0NTAxYTVhNGM5ZjZlIiwiZGV2aWNlS2V5U2hhMjU2IjoiODY4ZjI0M2U5ZjgxOTkxMmM2ZjQzNDZkNzIxNTcxODc0YzQ5ODA4NDkzNGE3NzFiZDhkZjBlZDNjOWUyODg0OCIsImluc3RhbGxhdGlvbklkIjoiNDM0YjYyZGMtNTA1ZC00Y2FlLWExZDItYmFkNjJiNzA0Y2MyIiwia2luZCI6Im5hdGl2ZS1jbG9jay1ib290c3RyYXAtdGltZSIsIm9sZENsb2NrR2VuZXJhdGlvbiI6MCwib2xkQ2xvY2tTaGEyNTYiOiIzZjhmYzhjZDJjYzQ3ZDU2NTkzZWYwODM2MWM1Mjc1ZGUxOTJhMDdiYzgxNWRhMjliNzU3NTJlMDY0NjBlOTI4Iiwic2NoZW1hVmVyc2lvbiI6MSwic2VydmVyVGltZU1zIjoxNzkyMTMyMjAwMDAwfQ",
+    "signatureBase64Url": "MEYCIQDvPgHnbODR9gq2MeO_Sh9gHcGeW1nkUY-PWnZgyf-LRQIhALP5EPgsnrQJgzkc8p5C3zaRwSrYcqJJiBkG3KWSIvDY"
+  },
+  "serverPublicKeySpki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGk4tJDzY6sxayKJVlcRmmvmSb9j2lu4YmbIXn-KDIXQ9UGXVH4nKFYaryQr_AyVgnRDt_wnvy4Kk_wOlF-ARoQ"
+}

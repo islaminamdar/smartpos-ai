@@ -47,6 +47,7 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
     Map<String,PublicKey> shiftCloseKeys(){return keys;}
     NativeClockSource shiftCloseClock(){return clock;}
     NativeStaffUnlock shiftCloseUnlock(){return unlock;}
+    DeviceIdentity bootstrapIdentity(){return identity;}
     PublicKey shiftCloseDeviceKey(){return publicKey;}
     public synchronized JSONObject getState()throws Exception{
         JSONObject state=session.nativeState(),offline=state.optJSONObject("offline");

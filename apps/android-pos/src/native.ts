@@ -28,6 +28,8 @@ export type DeviceSnapshot = {
   checkedAt: string
 }
 interface NativeLedgerPlugin {
+  getNativeClockBootstrapState(): Promise<unknown>
+  verifyNativeClockBootstrap(): Promise<unknown>
   getNativeClockRecoveryState(): Promise<unknown>
   startNativeClockRecovery(): Promise<unknown>
   retryNativeClockRecovery(input: { requestId: string }): Promise<unknown>
@@ -1549,5 +1551,36 @@ export async function retryNativeClockRecovery(input: { requestId: string }): Pr
   if (!input || !uuid(input.requestId) || Object.keys(input).length !== 1) throw new Error('invalid_native_input')
   const result = parseNativeClockRecoveryState(await ledger.retryNativeClockRecovery({ requestId: input.requestId }))
   if (result.requestId !== input.requestId) invalidCheckout()
+  return result
+}
+
+
+export type NativeClockBootstrapState = {
+  schemaVersion: 1
+  status: 'not_available' | 'ready' | 'blocked' | 'completed'
+  canVerify: boolean
+  reasonCode: string | null
+}
+export function parseNativeClockBootstrapState(value: unknown): NativeClockBootstrapState {
+  const r = record(value, ['schemaVersion', 'status', 'canVerify', 'reasonCode'])
+  if (r.schemaVersion !== 1 || typeof r.canVerify !== 'boolean' ||
+    !(
+      (r.status === 'ready' && r.canVerify && r.reasonCode === null) ||
+      (r.status === 'completed' && !r.canVerify && r.reasonCode === 'clock_bootstrap_completed') ||
+      (r.status === 'not_available' && !r.canVerify &&
+        (r.reasonCode === 'clock_healthy' || r.reasonCode === 'clock_bootstrap_not_eligible')) ||
+      (r.status === 'blocked' && !r.canVerify && typeof r.reasonCode === 'string' &&
+        ['native_storage_unavailable', 'offline_not_configured', 'clock_signal_unavailable'].includes(r.reasonCode))
+    )) invalidCheckout()
+  return r as NativeClockBootstrapState
+}
+export async function getNativeClockBootstrapState(): Promise<NativeClockBootstrapState> {
+  requireNativeAccess()
+  return parseNativeClockBootstrapState(await ledger.getNativeClockBootstrapState())
+}
+export async function verifyNativeClockBootstrap(): Promise<NativeClockBootstrapState> {
+  requireNativeAccess()
+  const result = parseNativeClockBootstrapState(await ledger.verifyNativeClockBootstrap())
+  if (result.status !== 'completed') invalidCheckout()
   return result
 }

@@ -4,7 +4,7 @@
 
 The online web release `2de794a` is deployed with SQL001–030. Operations, menu photos, stock basics and partial returns are available. The partial-return release passed a verified backup restore, unchanged original-row checks and public tests on an isolated synthetic branch. Physical counter enrollment, opening cash, a supervised first real bill and receipt printing still require customer acceptance. Earlier checkpoints below are historical and superseded by this section.
 
-The native clock-recovery server support and SQL028 are deployed, while the customer Android APK remains unreleased. Offline issuance and PayPal remain disabled; the existing AED100 manual pilot is unchanged. Clock failure before first enrollment, staff/device loss, full two-device acceptance and APK signing/printing remain pending.
+The native clock-recovery server support and SQL028 are deployed, while the customer Android APK remains unreleased. Offline issuance and PayPal remain disabled; the existing AED100 manual pilot is unchanged. The separate [pre-enrollment clock bootstrap](../contracts/20261016-native-clock-bootstrap.md) is now implemented as an unreleased candidate with signed time, intact-store admission and native confirmation. Its commissioning, staff/device loss, full two-device acceptance and APK signing/printing remain pending.
 
 ## Partial returns released
 

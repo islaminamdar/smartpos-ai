@@ -22,6 +22,7 @@ import info.internext.pos.storage.NativePaymentRecovery;
 import info.internext.pos.storage.NativeShiftClose;
 import info.internext.pos.storage.NativePinRecovery;
 import info.internext.pos.storage.NativeClockRecovery;
+import info.internext.pos.storage.NativeClockBootstrap;
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -39,6 +40,7 @@ public final class NativeLedgerPlugin extends Plugin {
     private volatile NativeShiftClose shiftClose;
     private volatile NativePinRecovery pinRecovery;
     private volatile NativeClockRecovery clockRecovery;
+    private volatile NativeClockBootstrap clockBootstrap;
     private volatile boolean foreground=true;
     private final java.util.concurrent.atomic.AtomicLong checkoutEpoch=new java.util.concurrent.atomic.AtomicLong();
     private AlertDialog credentials;
@@ -58,6 +60,7 @@ public final class NativeLedgerPlugin extends Plugin {
     private NativePaymentRecovery paymentRecovery()throws Exception{if(paymentRecovery==null)paymentRecovery=new NativePaymentRecovery(getContext(),journal,session());return paymentRecovery;}
     private NativeShiftClose shiftClose()throws Exception{if(shiftClose==null)shiftClose=new NativeShiftClose(getContext(),journal,session(),offline());return shiftClose;}
     private NativePinRecovery pinRecovery()throws Exception{if(pinRecovery==null)pinRecovery=new NativePinRecovery(getContext(),journal,session(),offline());return pinRecovery;}
+    private NativeClockBootstrap clockBootstrap()throws Exception{if(clockBootstrap==null)clockBootstrap=new NativeClockBootstrap(getContext(),journal,session(),offline());return clockBootstrap;}
     private NativeClockRecovery clockRecovery()throws Exception{if(clockRecovery==null)clockRecovery=new NativeClockRecovery(getContext(),journal,session(),offline());return clockRecovery;}
     private void requireRecoveryForeground(long epoch)throws NativeAccessError{if(destroyed||!foreground||epoch!=checkoutEpoch.get())throw new NativeAccessError("pin_recovery_interrupted");}
     @PluginMethod public void getPinRecoveryState(PluginCall call){
@@ -113,6 +116,28 @@ public final class NativeLedgerPlugin extends Plugin {
     private void lockClockRecoveryDetails(){
         invalidateCheckoutAccess();final long epoch=checkoutEpoch.get();
         getActivity().runOnUiThread(()->{if(!destroyed&&checkoutEpoch.get()==epoch)publishCheckoutLocked();});
+    }
+    @PluginMethod public void getNativeClockBootstrapState(PluginCall call){
+        if(call.getData().length()!=0){call.reject("Check device clock setup without extra fields.","clock_bootstrap_uncertain");return;}
+        final long epoch=checkoutEpoch.get();execute(call,()->{requireClockRecoveryForeground(epoch);org.json.JSONObject result=clockBootstrap().getState();requireClockRecoveryForeground(epoch);return result;},true);
+    }
+    @PluginMethod public void verifyNativeClockBootstrap(PluginCall call){
+        if(call.getData().length()!=0){call.reject("Confirm clock setup only in Android.","clock_bootstrap_uncertain");return;}
+        lockClockRecoveryDetails();final long epoch=checkoutEpoch.get();execute(call,()->{requireClockRecoveryForeground(epoch);if(!clockBootstrap().getState().getBoolean("canVerify"))throw new NativeAccessError("clock_bootstrap_not_eligible");
+            requireClockRecoveryForeground(epoch);getActivity().runOnUiThread(()->showClockBootstrapDialog(call,epoch));return null;},true);
+    }
+    private void showClockBootstrapDialog(PluginCall call,long epoch){
+        if(destroyed||!foreground||epoch!=checkoutEpoch.get()||getActivity().isFinishing()||credentials!=null){call.reject("Clock verification cancelled.","native_sign_in_cancelled");return;}
+        AlertDialog dialog=new AlertDialog.Builder(getActivity()).setTitle("Verify clock before setup")
+            .setMessage("Correct Android automatic date and time first. Android will check the time before you continue setup. Saved records, PINs and account settings stay unchanged. This does not enable offline sales.")
+            .setNegativeButton("Cancel",(d,w)->call.reject("Clock verification cancelled.","native_sign_in_cancelled")).setPositiveButton("Verify clock",null).create();
+        credentials=dialog;dialog.setOnCancelListener(d->call.reject("Clock verification cancelled.","native_sign_in_cancelled"));
+        dialog.setOnDismissListener(d->{if(credentials==dialog)credentials=null;});
+        dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            if(destroyed||!foreground||epoch!=checkoutEpoch.get()){dialog.cancel();return;}
+            dialog.dismiss();execute(call,()->{requireClockRecoveryForeground(epoch);org.json.JSONObject result=clockBootstrap().verify();requireClockRecoveryForeground(epoch);return result;},true);
+        }));
+        if(dialog.getWindow()!=null)dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);dialog.show();
     }
     @PluginMethod public void getNativeClockRecoveryState(PluginCall call){
         if(call.getData().length()!=0){call.reject("Check the original clock recovery.","clock_recovery_invalid");return;}
@@ -237,7 +262,7 @@ public final class NativeLedgerPlugin extends Plugin {
             return result;
         }catch(Exception error){throw new NativeAccessError(NativeCheckoutCoordinator.code(error));}},true);
     }
-    private void invalidateCheckoutAccess(){checkoutEpoch.incrementAndGet();if(shiftClose!=null)shiftClose.invalidateCheck();if(pinRecovery!=null)pinRecovery.invalidate();if(clockRecovery!=null)clockRecovery.invalidate();}
+    private void invalidateCheckoutAccess(){checkoutEpoch.incrementAndGet();if(shiftClose!=null)shiftClose.invalidateCheck();if(pinRecovery!=null)pinRecovery.invalidate();if(clockRecovery!=null)clockRecovery.invalidate();if(clockBootstrap!=null)clockBootstrap.invalidate();}
     private void publishCheckoutLocked(){if(!destroyed)notifyListeners("nativeCheckoutLocked",new JSObject().put("schemaVersion",1),true);}
     private void notifyCheckoutLocked(){invalidateCheckoutAccess();publishCheckoutLocked();}
     @PluginMethod public void getCheckoutState(PluginCall call){checkoutCall(call,()->checkout().getState());}
@@ -366,7 +391,7 @@ public final class NativeLedgerPlugin extends Plugin {
     @Override protected void handleOnPause(){foreground=false;notifyCheckoutLocked();if(credentials!=null)credentials.cancel();try{storage.execute(()->{if(offline!=null)offline.lock();});}catch(java.util.concurrent.RejectedExecutionException ignored){}super.handleOnPause();}
     @Override protected void handleOnResume(){foreground=true;super.handleOnResume();}
     @Override protected void handleOnDestroy() {
-        destroyed=true;checkoutEpoch.incrementAndGet();if(pinRecovery!=null)pinRecovery.invalidate();if(clockRecovery!=null)clockRecovery.invalidate();
+        destroyed=true;checkoutEpoch.incrementAndGet();if(pinRecovery!=null)pinRecovery.invalidate();if(clockRecovery!=null)clockRecovery.invalidate();if(clockBootstrap!=null)clockBootstrap.invalidate();
         if(passwordField!=null)passwordField.getText().clear();
         if(credentials!=null)credentials.dismiss();
         storage.execute(() -> {if(offline!=null)offline.close();journal.close();}); storage.shutdown(); super.handleOnDestroy();

@@ -76,6 +76,22 @@ public final class NativeJournal extends SQLiteOpenHelper {
         }
     }
     public synchronized boolean hasCustody() { return count("intents") > 0 || count("receipts") > 0 || count("offline_bundles") > 0 || count("native_shift_close_requests") > 0 || count("native_clock_holds") > 0; }
+    synchronized String storedDeviceFingerprint() {
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT fingerprint FROM device_key WHERE slot=1",null)){return c.moveToFirst()?c.getString(0):null;}
+    }
+    /** Bootstrap admission is intentionally stricter than the historical hasCustody helper. */
+    synchronized void requireBootstrapPristine(String fingerprint)throws Exception {
+        SQLiteDatabase db=getReadableDatabase();
+        String[] empty={"intents","receipts","outbox","acknowledgements","offline_bundles","offline_authority_state","offline_chain","offline_intent_context","offline_intent_cancellations","offline_intent_freezes","offline_payment_results","offline_payment_statuses","offline_payment_conflicts","offline_seal_confirmations","offline_upload_exceptions","offline_preparation_transitions","offline_preparation_shift_closures","native_shift_close_requests","native_shift_close_outcomes","native_shift_close_setup_transitions","native_clock_holds","native_clock_retirements","native_clock_completions"};
+        java.util.Set<String> expected=new java.util.HashSet<>(java.util.Arrays.asList(empty));expected.add("installation");expected.add("device_key");
+        try(Cursor c=db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name<>'android_metadata'",null)){
+            while(c.moveToNext())if(!expected.remove(c.getString(0)))throw new NativeAccessError("native_storage_unavailable");
+        }
+        if(!expected.isEmpty())throw new NativeAccessError("native_storage_unavailable");
+        for(String table:empty)try(Cursor c=db.rawQuery("SELECT 1 FROM "+table+" LIMIT 1",null)){if(c.moveToFirst())throw new NativeAccessError("clock_bootstrap_not_eligible");}
+        try(Cursor c=db.rawQuery("SELECT id FROM installation",null)){if(!c.moveToFirst()||!java.util.UUID.fromString(c.getString(0)).toString().equals(c.getString(0))||c.moveToNext())throw new NativeAccessError("native_storage_unavailable");}
+        try(Cursor c=db.rawQuery("SELECT slot,fingerprint FROM device_key",null)){if(!c.moveToFirst()||c.getInt(0)!=1||!fingerprint.equals(c.getString(1))||c.moveToNext())throw new NativeAccessError("native_storage_unavailable");}
+    }
     public synchronized void bindDeviceKey(String fingerprint) {
         if (!fingerprint.matches("[a-f0-9]{64}")) throw new IllegalArgumentException("invalid_key_fingerprint");
         SQLiteDatabase db = getWritableDatabase(); db.beginTransaction();

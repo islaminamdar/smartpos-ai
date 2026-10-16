@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  getNativeClockBootstrapState,
+  verifyNativeClockBootstrap,
+  type NativeClockBootstrapState,
   getNativeClockRecoveryState,
   startNativeClockRecovery,
   retryNativeClockRecovery,
@@ -20,6 +23,12 @@ type Props = {
   onChanged: () => void
 }
 const messages: Record<string, string> = {
+  clock_bootstrap_uncertain:
+    'The clock check was not confirmed. Check device time status before trying again. Keep this app’s data.',
+  clock_bootstrap_not_eligible:
+    'This counter needs its saved recovery process. Keep all records and check saved clock recovery.',
+  clock_bootstrap_completed:
+    'Device time checked. Continue setting up this counter. Offline selling is not enabled.',
   clock_healthy: 'Device time is verified. No clock recovery is needed.',
   clock_recovery_pending:
     'The original clock recovery is saved. Check or retry this exact request; do not create a replacement.',
@@ -57,6 +66,14 @@ const messages: Record<string, string> = {
 const errorText = (failure: unknown) =>
   messages[nativeOfflineErrorCode(failure)] ??
   'Clock recovery could not be verified. Keep this app’s data and check saved status before trying again.'
+const bootstrapErrorText = (failure: unknown) => {
+  const code = nativeOfflineErrorCode(failure)
+  if (code === 'clock_time_settings_required' || code === 'clock_signal_unavailable')
+    return 'Correct automatic date and time in Android Settings and connect to the internet. Return here, check device time status, then confirm again. Keep this app’s data.'
+  if (code === 'native_sign_in_cancelled' || code === 'clock_recovery_interrupted')
+    return 'The Android time check was cancelled or interrupted. Check device time status before confirming again.'
+  return errorText(failure)
+}
 const isPending = (value: NativeClockRecoveryState) =>
   !(
     (value.status === 'not_available' && value.reasonCode === 'clock_healthy') ||
@@ -74,6 +91,12 @@ export default function NativeClockRecovery({
   onCheckedVersion,
   onChanged,
 }: Props) {
+  const [bootstrap, setBootstrap] = useState<NativeClockBootstrapState | null>(null)
+  const [bootstrapFresh, setBootstrapFresh] = useState(false)
+  const [bootstrapScope, setBootstrapScope] = useState('')
+  const actorEpoch = useRef(0),
+    pausedEpoch = useRef(0),
+    bootstrapNotified = useRef(false)
   const [state, setState] = useState<NativeClockRecoveryState | null>(null)
   const [checked, setChecked] = useState(-1),
     [fresh, setFresh] = useState(false)
@@ -96,6 +119,11 @@ export default function NativeClockRecovery({
   useEffect(() => {
     if (previousActor.current !== actorId) {
       previousActor.current = actorId
+      actorEpoch.current++
+      epoch.current++
+      setBootstrap(null)
+      setBootstrapFresh(false)
+      bootstrapNotified.current = false
       original.current = null
       notified.current = null
       setState(null)
@@ -119,14 +147,19 @@ export default function NativeClockRecovery({
       epoch.current++
       setChecked(currentRevision.current)
       setFresh(false)
+      setBootstrapFresh(false)
       setConsent(null)
       onPendingChange(true)
     }
+    const pause = () => {
+      pausedEpoch.current++
+      invalidate()
+    }
     const visibility = () => {
-      if (document.visibilityState === 'hidden') invalidate()
+      if (document.visibilityState === 'hidden') pause()
     }
     document.addEventListener('visibilitychange', visibility)
-    window.addEventListener('pagehide', invalidate)
+    window.addEventListener('pagehide', pause)
     void subscribeNativeCheckoutLock(invalidate)
       .then((handle) => {
         if (disposed) void handle.remove()
@@ -144,7 +177,7 @@ export default function NativeClockRecovery({
     return () => {
       disposed = true
       document.removeEventListener('visibilitychange', visibility)
-      window.removeEventListener('pagehide', invalidate)
+      window.removeEventListener('pagehide', pause)
       if (remove) void remove()
     }
   }, [available, onPendingChange])
@@ -157,6 +190,7 @@ export default function NativeClockRecovery({
     setBusy(true)
     onBusyChange(true)
     setFresh(false)
+    setBootstrapFresh(false)
     setConsent(null)
     setError('')
     return true
@@ -200,7 +234,34 @@ export default function NativeClockRecovery({
     const token = ++epoch.current,
       selected = scope
     try {
-      apply(await getNativeClockRecoveryState(), token, selected, original.current)
+      // Bootstrap capability is distinct from ordinary recovery. Neither an absent
+      // account nor an unavailable capability proves the clock healthy.
+      let nextBootstrap: NativeClockBootstrapState | null = null
+      try {
+        nextBootstrap = await getNativeClockBootstrapState()
+      } catch {
+        if (current(token, selected)) setBootstrap(null)
+      }
+      if (current(token, selected) && nextBootstrap) {
+        setBootstrap(nextBootstrap)
+        setBootstrapFresh(true)
+        setBootstrapScope(selected)
+        if (nextBootstrap.status === 'ready') bootstrapNotified.current = false
+      }
+      const next = await getNativeClockRecoveryState()
+      apply(next, token, selected, original.current)
+      if (
+        current(token, selected) &&
+        nextBootstrap?.status === 'completed' &&
+        next.status === 'not_available' &&
+        next.reasonCode === 'clock_healthy' &&
+        !original.current &&
+        !bootstrapNotified.current
+      ) {
+        bootstrapNotified.current = true
+        onChanged()
+      }
+      return { clock: next, bootstrap: nextBootstrap }
     } catch (failure) {
       if (current(token, selected)) {
         setError(errorText(failure))
@@ -233,6 +294,18 @@ export default function NativeClockRecovery({
   const known = state?.reasonCode === null || !!(state?.reasonCode && messages[state.reasonCode])
   const mayStart = currentState && known && !!actorId && !!state?.canStart && !original.current
   const mayRetry = currentState && known && !!state?.canRetry && !!state.requestId
+  const bootstrapMode =
+    bootstrapScope === scope &&
+    !state?.requestId &&
+    !original.current &&
+    (bootstrap?.status === 'ready' ||
+      (bootstrap?.status === 'completed' &&
+        currentState &&
+        state?.status === 'not_available' &&
+        state.reasonCode === 'clock_healthy'))
+  const mayBootstrap =
+    bootstrapMode && bootstrapFresh && checked === revision && bootstrap?.canVerify === true
+  const bootstrapConsentKey = `bootstrap:${scope}`
   const consentKey = `${scope}:${state?.status}:${state?.requestId ?? 'new'}:${state?.passwordRequired}`
   async function run(kind: 'start' | 'retry') {
     if (consent !== consentKey || (kind === 'start' ? !mayStart : !mayRetry) || !begin()) return
@@ -259,19 +332,76 @@ export default function NativeClockRecovery({
       finish()
     }
   }
+  async function verifyBootstrap() {
+    if (!mayBootstrap || consent !== bootstrapConsentKey || !begin()) return
+    const selected = scope,
+      pause = pausedEpoch.current,
+      actor = actorEpoch.current
+    let failure: unknown = null
+    onPendingChange(true)
+    try {
+      // The native lock event invalidates the operation's UI result. Only fresh
+      // reads below can release the ordinary clock hold; this never retries a write.
+      await verifyNativeClockBootstrap()
+    } catch (error) {
+      failure = error
+    } finally {
+      finish()
+    }
+    if (
+      !mounted.current ||
+      selected !== currentScope.current ||
+      pause !== pausedEpoch.current ||
+      actor !== actorEpoch.current ||
+      document.visibilityState === 'hidden'
+    )
+      return
+    const verified = await read()
+    if (
+      failure &&
+      !(
+        verified?.bootstrap?.status === 'completed' &&
+        verified.clock.status === 'not_available' &&
+        verified.clock.reasonCode === 'clock_healthy'
+      ) &&
+      actor === actorEpoch.current &&
+      mounted.current &&
+      selected === currentScope.current &&
+      pause === pausedEpoch.current
+    )
+      setError(bootstrapErrorText(failure))
+  }
   const paused = !ready || !listening || busy
   return (
     <section className="bundle-recovery clock-recovery" aria-labelledby="clock-recovery-heading">
-      <h3 id="clock-recovery-heading">Recover device time</h3>
-      <p>
-        First correct automatic date and time in Android Settings. Connect to the internet and use
-        the original staff account. Only the Android dialog asks for your account password.
-      </p>
-      <p className="help">
-        Saved bills and payment holds are preserved. Approved recovery retires old offline
-        allowances; it does not erase records, change your PIN or reset PIN attempt limits. The
-        counter ends locked.
-      </p>
+      <h3 id="clock-recovery-heading">
+        {bootstrapMode ? 'Verify device time before setup' : 'Recover device time'}
+      </h3>
+      {bootstrapMode ? (
+        <>
+          <p>
+            Turn on automatic date and time in Android Settings, connect to the internet, then
+            return here.
+          </p>
+          <p className="help">
+            Android will check the time before you continue setup. Confirm in the Android dialog; no
+            password or PIN is needed for this check. You will still need to set up the counter
+            separately. Offline selling stays unavailable.
+          </p>
+        </>
+      ) : (
+        <>
+          <p>
+            First correct automatic date and time in Android Settings. Connect to the internet and
+            use the original staff account. Only the Android dialog asks for your account password.
+          </p>
+          <p className="help">
+            Saved bills and payment holds are preserved. Approved recovery retires old offline
+            allowances; it does not erase records, change your PIN or reset PIN attempt limits. The
+            counter ends locked.
+          </p>
+        </>
+      )}
       {!available ? (
         <p className="access-note">Open the installed Android app to recover its device time.</p>
       ) : (
@@ -283,36 +413,76 @@ export default function NativeClockRecovery({
           )}
           {!currentState && (
             <p className="help">
-              Check saved clock recovery status before starting or retrying. New payments and setup
-              changes stay paused until checked.
+              {bootstrapMode
+                ? 'Check device time status before continuing. Setup changes stay paused until checked.'
+                : 'Check saved clock recovery status before starting or retrying. New payments and setup changes stay paused until checked.'}
             </p>
           )}
           {readScope === scope && state?.requestId && (
             <p className="help recovery-reference">Recovery reference: {state.requestId}</p>
           )}
-          {currentState && state?.reasonCode && (
+          {!bootstrapMode && currentState && state?.reasonCode && (
             <p className="access-note" role="status">
               {messages[state.reasonCode] ??
                 'Recovery is unavailable. Keep saved records and contact support.'}
             </p>
           )}
-          {currentState && state?.status === 'completed' && (
+          {!bootstrapMode && currentState && state?.status === 'completed' && (
             <p className="access-note">
               Clock recovery complete. The counter remains locked. Check offline setup separately;
               old allowances cannot be reused and this confirmation does not make offline selling
               ready.
             </p>
           )}
-          {currentState && isPending(state!) && (
+          {!bootstrapMode && currentState && isPending(state!) && (
             <p className="help">
               Account changes, new sales and offline setup are paused until device time is
               recovered. Uploading saved records and reviewing existing payments remain available.
             </p>
           )}
           <button className="secondary" disabled={paused} onClick={() => void read()}>
-            {busy ? 'Checking clock recovery…' : 'Check saved clock recovery'}
+            {busy
+              ? 'Checking device time…'
+              : bootstrapMode
+                ? 'Check device time status'
+                : 'Check saved clock recovery'}
           </button>
-          {(mayStart || mayRetry) && (
+          {bootstrapMode && bootstrapFresh && bootstrap?.status === 'completed' && (
+            <p className="access-note" role="status">
+              {messages.clock_bootstrap_completed} Existing account, payment and PIN checks still
+              apply; the counter stays locked.
+            </p>
+          )}
+          {mayBootstrap && (
+            <>
+              <label className="cash-confirm">
+                <input
+                  type="checkbox"
+                  checked={consent === bootstrapConsentKey}
+                  disabled={paused}
+                  onChange={(event) =>
+                    setConsent(event.target.checked ? bootstrapConsentKey : null)
+                  }
+                />
+                <span>
+                  I have corrected Android automatic date and time. Continue to Android’s
+                  confirmation to check the time.
+                </span>
+              </label>
+              <button
+                className="primary"
+                disabled={paused || consent !== bootstrapConsentKey}
+                onClick={() => void verifyBootstrap()}
+              >
+                Verify clock in Android
+              </button>
+              <p className="help">
+                Setup stays paused until the clock is checked. Saved records and existing PIN,
+                payment and account restrictions are kept.
+              </p>
+            </>
+          )}
+          {!bootstrapMode && (mayStart || mayRetry) && (
             <>
               <label className="cash-confirm">
                 <input

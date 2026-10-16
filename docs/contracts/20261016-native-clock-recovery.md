@@ -30,9 +30,9 @@ Only `getNativeClockRecoveryState()`, `startNativeClockRecovery()` and `retryNat
 
 ## Commissioning limits
 
-Recovery currently requires a previously enrolled device key epoch. A clock fault latched before first key enrollment cannot use this protocol: the normal enrollment flow itself requires healthy clock observations. This pre-enrollment recovery path remains unfinished and fails closed. A healthy fresh install or enrolled-but-unprepared counter remains usable for normal setup. No automatic shift, store reset, invented healthy-clock result or replacement installation is used to bypass this limit.
+This recovery protocol requires a previously enrolled device key epoch. A clock fault latched before first key enrollment cannot use it: the normal enrollment flow itself requires healthy clock observations. The separate [bootstrap candidate](20261016-native-clock-bootstrap.md) addresses intact installations with no enrollment uncertainty or financial custody. A healthy fresh install or enrolled-but-unprepared counter remains usable for normal setup. No automatic shift, store reset, invented healthy-clock result or replacement installation is used to bypass these limits.
 
-Missing or corrupt custody/key stores, staff/device loss, complete two-device reconnect acceptance, physical receipt printing and signed customer APK commissioning remain separate work. SQL028 and this candidate have not been deployed; production offline issuance remains disabled.
+Missing or corrupt custody/key stores, staff/device loss, complete two-device reconnect acceptance, physical receipt printing and signed customer APK commissioning remain separate work. Server support including SQL028 was deployed with web release `2de794a`; production offline issuance remains disabled and the customer APK is unreleased. Pre-enrollment repair is specified separately in the [bootstrap contract](20261016-native-clock-bootstrap.md).
 
 ## Verification required
 

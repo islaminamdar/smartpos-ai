@@ -17,6 +17,7 @@ import java.security.PublicKey;
 import java.util.Map;
 import java.util.Collections;
 import info.internext.pos.offline.NativeClockRecoveryProof;
+import info.internext.pos.offline.NativeClockBootstrapTime;
 
 /** Native OS readings with authenticated persistent high-water marks. BOOT_COUNT is
  * an OS signal, not tamper-proof hardware time. A detected rollback is latched; neither
@@ -47,7 +48,7 @@ public final class NativeClockSource implements NativeCheckoutEngine.ClockSource
         try { store.getWritableDatabase(); } catch(Exception e) { store.close();throw e; }
     }
     private final class Store extends SQLiteOpenHelper {
-        Store(Context c,String name) { super(c,name,null,2);setWriteAheadLoggingEnabled(true); }
+        Store(Context c,String name) { super(c,name,null,3);setWriteAheadLoggingEnabled(true); }
         @Override public void onConfigure(SQLiteDatabase db) { db.execSQL("PRAGMA synchronous=FULL"); }
         @Override public void onCreate(SQLiteDatabase db) {
             db.execSQL("CREATE TABLE clock_state(slot INTEGER PRIMARY KEY CHECK(slot=1),payload TEXT NOT NULL,mac TEXT NOT NULL)");
@@ -56,12 +57,48 @@ public final class NativeClockSource implements NativeCheckoutEngine.ClockSource
             try { Observation now=checked(os.sample());JSONObject state=state(now,false,0);ContentValues row=values(state);row.put("slot",1);db.insertOrThrow("clock_state",null,row); }
             catch(Exception e) { throw failure("clock_source_unavailable"); }
             recoveryTables(db);
+            bootstrapTable(db);
         }
         @Override public void onUpgrade(SQLiteDatabase db,int oldVersion,int newVersion) {
-            if(oldVersion!=1||newVersion!=2)throw failure("clock_migration_required");
-            try { JSONObject old=load(db);old.put("schemaVersion",2).put("generation",0);if(db.update("clock_state",values(old),"slot=1",null)!=1)throw failure("clock_state_missing");recoveryTables(db); }
+            if((oldVersion!=1&&oldVersion!=2)||newVersion!=3)throw failure("clock_migration_required");
+            try { if(oldVersion==1){JSONObject old=load(db);old.put("schemaVersion",2).put("generation",0);if(db.update("clock_state",values(old),"slot=1",null)!=1)throw failure("clock_state_missing");recoveryTables(db);}bootstrapTable(db); }
             catch(Exception e){throw failure("clock_state_invalid");}
         }
+    }
+    private static void bootstrapTable(SQLiteDatabase db){
+        db.execSQL("CREATE TABLE clock_bootstrap_audits(generation INTEGER PRIMARY KEY NOT NULL,payload TEXT NOT NULL,mac TEXT NOT NULL)");
+        db.execSQL("CREATE TRIGGER clock_bootstrap_no_update BEFORE UPDATE ON clock_bootstrap_audits BEGIN SELECT RAISE(ABORT,'immutable_clock_bootstrap'); END");
+        db.execSQL("CREATE TRIGGER clock_bootstrap_no_delete BEFORE DELETE ON clock_bootstrap_audits BEGIN SELECT RAISE(ABORT,'immutable_clock_bootstrap'); END");
+        db.execSQL("CREATE TRIGGER clock_bootstrap_no_replace BEFORE INSERT ON clock_bootstrap_audits WHEN EXISTS(SELECT 1 FROM clock_bootstrap_audits WHERE generation=NEW.generation) BEGIN SELECT RAISE(ABORT,'immutable_clock_bootstrap'); END");
+    }
+    synchronized boolean bootstrapCompleted(Map<String,PublicKey> keys,String fingerprint)throws Exception{
+        SQLiteDatabase db=store.getReadableDatabase();JSONObject current=load(db);long latest=0;
+        for(String table:new String[]{"clock_recoveries","clock_recovery_audits"})try(Cursor c=db.rawQuery("SELECT 1 FROM "+table+" LIMIT 1",null)){if(c.moveToFirst())throw new NativeAccessError("clock_bootstrap_not_eligible");}
+        try(Cursor c=db.rawQuery("SELECT generation,payload,mac FROM clock_bootstrap_audits ORDER BY generation",null)){
+            while(c.moveToNext()){
+                byte[] bytes=c.getString(1).getBytes(StandardCharsets.UTF_8);if(!key.verify("clock-bootstrap-audit-v1",bytes,SignedProtocol.decode(c.getString(2),32)))throw failure("native_storage_unavailable");
+                JSONObject a=(JSONObject)CanonicalJson.parse(bytes),request=a.getJSONObject("request"),old=a.getJSONObject("previous"),next=a.getJSONObject("replacement");
+                if(c.getLong(0)!=latest+1||old.getLong("generation")!=latest||a.length()!=7||!request.getString("installationId").equals(installationId)||!request.getString("deviceKeySha256").equals(fingerprint)||!request.getString("oldClockSha256").equals(NativeJournal.hash(canonical(old)))||request.getLong("oldClockGeneration")!=old.getLong("generation")||next.getLong("generation")!=old.getLong("generation")+1||c.getLong(0)!=next.getLong("generation")||c.getLong(0)>current.getLong("generation")||!old.getBoolean("blocked")||next.getBoolean("blocked"))throw failure("native_storage_unavailable");
+                long server=NativeClockBootstrapTime.verify(a.getString("time"),keys,request);long rtt=a.getLong("elapsedEnd")-a.getLong("elapsedStart");
+                if(rtt<0||rtt>30000||a.getInt("bootCount")!=next.getInt("bootCount")||a.getLong("elapsedEnd")!=next.getLong("elapsedMs")||Math.abs(next.getLong("wallMs")-Math.addExact(server,rtt))>OfflineClock.MAX_DRIFT_MS)throw failure("native_storage_unavailable");latest=c.getLong(0);
+            }
+        }
+        if(latest!=current.getLong("generation"))throw failure("native_storage_unavailable");
+        return latest>0&&!current.getBoolean("blocked");
+    }
+    synchronized void bootstrapApply(JSONObject request,String time,Observation before,Map<String,PublicKey> keys,java.util.function.BooleanSupplier active)throws Exception{
+        SQLiteDatabase db=store.getWritableDatabase();db.beginTransaction();try{
+            bootstrapCompleted(keys,request.getString("deviceKeySha256"));JSONObject old=load(db);
+            if(!old.getBoolean("blocked")||old.getLong("generation")!=request.getLong("oldClockGeneration")||!NativeJournal.hash(canonical(old)).equals(request.getString("oldClockSha256"))||!installationId.equals(request.getString("installationId")))throw failure("clock_bootstrap_not_eligible");
+            long server=NativeClockBootstrapTime.verify(time,keys,request);Observation now=recoveryProbe();long rtt=now.elapsedMs-before.elapsedMs;
+            if(now.bootCount!=before.bootCount||rtt<0||rtt>30000)throw failure("clock_recovery_interrupted");
+            long estimate=Math.addExact(server,rtt);if(estimate>OfflineClock.MAX_TIME_MS||Math.abs(now.wallMs-estimate)>OfflineClock.MAX_DRIFT_MS)throw failure("clock_time_settings_required");
+            if(!active.getAsBoolean())throw failure("clock_recovery_interrupted");
+            JSONObject next=state(now,false,Math.addExact(old.getLong("generation"),1));
+            JSONObject audit=new JSONObject().put("request",request).put("previous",old).put("replacement",next).put("time",time).put("elapsedStart",before.elapsedMs).put("elapsedEnd",now.elapsedMs).put("bootCount",now.bootCount);
+            byte[] bytes=CanonicalJson.bytes(audit);ContentValues row=new ContentValues();row.put("generation",next.getLong("generation"));row.put("payload",new String(bytes,StandardCharsets.UTF_8));row.put("mac",SignedProtocol.encode(key.mac("clock-bootstrap-audit-v1",bytes)));db.insertOrThrow("clock_bootstrap_audits",null,row);
+            if(db.update("clock_state",values(next),"slot=1",null)!=1)throw failure("clock_state_missing");if(!active.getAsBoolean())throw failure("clock_recovery_interrupted");db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
     }
     @Override public synchronized OfflineClock.Reading read() throws Exception {
         SQLiteDatabase db=store.getWritableDatabase();db.beginTransaction();String failure=null;OfflineClock.Reading result=null;

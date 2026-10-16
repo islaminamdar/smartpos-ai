@@ -131,6 +131,10 @@ public final class NativeSession {
         if(!path.equals("/api/pos/native/clock-recovery")&&!path.equals("/api/pos/native/pin-recovery")&&!path.equals("/api/pos/native/shift-close"))recoveryGuard.check();
         return http.request(method,path,body);
     }
+    synchronized JSONObject bootstrapTimeRequest(JSONObject request)throws Exception{
+        info.internext.pos.offline.NativeClockBootstrapTime.request(request);store.read();
+        return http.request("POST","/api/pos/native/clock-bootstrap",request);
+    }
     /** Historical signed evidence remains uploadable after sign-out or access revocation. */
     synchronized JSONObject historicalRequest(String path,JSONObject envelope)throws Exception{
         if(path.equals("/api/pos/native/clock-recovery")){

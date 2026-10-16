@@ -18,6 +18,10 @@ public final class DeviceIdentity {
     public DeviceIdentity() throws Exception { this(ALIAS); }
     DeviceIdentity(String alias) throws Exception { this.alias = alias; keys = KeyStore.getInstance("AndroidKeyStore"); keys.load(null); }
     public synchronized JSONObject readOrCreate(NativeJournal journal) throws Exception {
+        // Never recreate a lost key or adopt an existing key into a recreated ledger.
+        // A commissioning crash between initial key creation and binding requires review.
+        boolean exists=keys.containsAlias(alias);String stored=journal.storedDeviceFingerprint();
+        if(exists!=(stored!=null))throw new IllegalStateException("device_key_custody_mismatch");
         if (!keys.containsAlias(alias)) {
             if (journal.hasCustody()) throw new IllegalStateException("device_key_missing");
             KeyPairGenerator generator = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore");
@@ -33,6 +37,11 @@ public final class DeviceIdentity {
         return new JSONObject().put("installationId", journal.installationId())
             .put("publicKeySpkiBase64Url", Base64.encodeToString(spki, Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING))
             .put("deviceKeySha256", sha.toString());
+    }
+    void requireExistingFingerprint(String expected)throws Exception{
+        if(!keys.containsAlias(alias)||keys.getCertificate(alias)==null||keys.getKey(alias,null)==null)throw new NativeAccessError("native_storage_unavailable");
+        String actual=info.internext.pos.offline.SignedProtocol.fingerprint(keys.getCertificate(alias).getPublicKey());
+        if(!actual.equals(expected))throw new NativeAccessError("native_storage_unavailable");
     }
     byte[] sign(byte[] exactCanonicalPayload) throws Exception {
         if (!keys.containsAlias(alias)) throw new IllegalStateException("device_key_missing");

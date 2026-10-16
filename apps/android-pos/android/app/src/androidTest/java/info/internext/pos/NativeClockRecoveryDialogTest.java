@@ -68,4 +68,16 @@ public class NativeClockRecoveryDialogTest {
             for(JSObject data:new JSObject[]{new JSObject(),new JSObject().put("requestId",123),new JSObject().put("requestId",org.json.JSONObject.NULL),new JSObject().put("requestId","not-a-uuid"),new JSObject().put("requestId",ID).put("password","synthetic"),new JSObject().put("requestId",ID).put("pin","12345678")}){Call c=new Call(data);p.retryNativeClockRecovery(c);assertEquals("clock_recovery_invalid",c.code);assertEquals(1,c.rejected);assertNull(current(p));}
         });}
     }
+    private static AlertDialog showBootstrap(MainActivity a,Call call){try{NativeLedgerPlugin p=plugin(a);Method m=NativeLedgerPlugin.class.getDeclaredMethod("showClockBootstrapDialog",PluginCall.class,long.class);m.setAccessible(true);m.invoke(p,call,epoch(p).get());return current(p);}catch(Exception e){throw new AssertionError(e);}}
+    @Test public void bootstrapConfirmationHasNoPasswordPinOrClockInputAndCancelSubmitsNothing(){
+        AtomicReference<Call> call=new AtomicReference<>();AtomicReference<AlertDialog> dialog=new AtomicReference<>();
+        try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){scenario.onActivity(a->{Call c=new Call();call.set(c);AlertDialog d=showBootstrap(a,c);dialog.set(d);secure(d);assertEquals(0,fields(d.getWindow().getDecorView()).size());assertEquals("Verify clock",d.getButton(AlertDialog.BUTTON_POSITIVE).getText().toString());assertEquals("Correct Android automatic date and time first. Android will check the time before you continue setup. Saved records, PINs and account settings stay unchanged. This does not enable offline sales.",((android.widget.TextView)d.findViewById(android.R.id.message)).getText().toString());d.getButton(AlertDialog.BUTTON_NEGATIVE).performClick();});InstrumentationRegistry.getInstrumentation().waitForIdleSync();assertEquals("native_sign_in_cancelled",call.get().code);assertEquals(1,call.get().rejected);assertFalse(dialog.get().isShowing());scenario.onActivity(a->assertNull(current(plugin(a))));}
+    }
+    @Test public void bootstrapConfirmationCancelsOnBackground(){
+        AtomicReference<Call> call=new AtomicReference<>();AtomicReference<AlertDialog> dialog=new AtomicReference<>();try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){scenario.onActivity(a->{Call c=new Call();call.set(c);dialog.set(showBootstrap(a,c));secure(dialog.get());});scenario.moveToState(Lifecycle.State.CREATED);InstrumentationRegistry.getInstrumentation().waitForIdleSync();assertFalse(dialog.get().isShowing());assertEquals("native_sign_in_cancelled",call.get().code);assertEquals(1,call.get().rejected);}
+    }
+    @Test public void bootstrapBridgeRejectsAllJavascriptArgumentsBeforeDialog(){
+        try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)){scenario.onActivity(a->{NativeLedgerPlugin p=plugin(a);for(String key:new String[]{"password","pin","challenge","serverTimeMs","installationId"})for(boolean action:new boolean[]{true,false}){Call c=new Call(new JSObject().put(key,"synthetic"));if(action)p.verifyNativeClockBootstrap(c);else p.getNativeClockBootstrapState(c);assertEquals("clock_bootstrap_uncertain",c.code);assertEquals(1,c.rejected);assertNull(current(p));}});}
+    }
+
 }

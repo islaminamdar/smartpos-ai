@@ -1,7 +1,10 @@
+import actualBootstrap from './fixtures/native-clock-bootstrap-android-output.json'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../../../apps/android-pos/node_modules/react', async () => await import('react'))
 const bridge = vi.hoisted(() => ({
+  getNativeClockBootstrapState: vi.fn(),
+  verifyNativeClockBootstrap: vi.fn(),
   getNativeClockRecoveryState: vi.fn(),
   startNativeClockRecovery: vi.fn(),
   retryNativeClockRecovery: vi.fn(),
@@ -56,6 +59,12 @@ const props = () => ({
   onChanged: vi.fn(),
 })
 beforeEach(() => {
+  bridge.getNativeClockBootstrapState.mockResolvedValue({
+    schemaVersion: 1,
+    status: 'not_available',
+    canVerify: false,
+    reasonCode: 'clock_bootstrap_not_eligible',
+  })
   bridge.getNativeClockRecoveryState.mockResolvedValue(ready)
   bridge.startNativeClockRecovery.mockResolvedValue(completed)
   bridge.retryNativeClockRecovery.mockResolvedValue(completed)
@@ -290,4 +299,115 @@ it('hides the original account reference immediately when actor changes', async 
   view.rerender(<NativeClockRecovery {...p} actorId={id(8)} revision={2} />)
   expect(screen.queryByText('Recovery reference: ' + id(1))).not.toBeInTheDocument()
   expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+})
+
+const bootstrapReady = actualBootstrap.states.ready
+const bootstrapComplete = actualBootstrap.states.completed
+const pristineBlocked = actualBootstrap.ordinaryStates.fault
+const healthyClock = actualBootstrap.ordinaryStates.completed
+async function bootstrapConsent() {
+  const button = await screen.findByRole('button', { name: 'Verify clock in Android' })
+  expect(button).toBeDisabled()
+  fireEvent.click(screen.getByRole('checkbox'))
+  fireEvent.click(button)
+}
+describe('new-install native clock verification', () => {
+  beforeEach(() => {
+    bridge.getNativeClockBootstrapState.mockResolvedValue(bootstrapReady)
+    bridge.getNativeClockRecoveryState.mockResolvedValue(pristineBlocked)
+  })
+  it('works signed out, uses no secret/time fields, and rereads clock after native lock before release', async () => {
+    const p = props()
+    bridge.verifyNativeClockBootstrap.mockImplementation(async () => {
+      bridge.subscribeNativeCheckoutLock.mock.calls[0][0]()
+      bridge.getNativeClockBootstrapState.mockResolvedValue(bootstrapComplete)
+      bridge.getNativeClockRecoveryState.mockResolvedValue(healthyClock)
+      return bootstrapComplete
+    })
+    const view = render(<NativeClockRecovery {...p} actorId={null} />)
+    await bootstrapConsent()
+    await screen.findByText(/Device time checked\. Continue setting up/)
+    expect(bridge.verifyNativeClockBootstrap).toHaveBeenCalledExactlyOnceWith()
+    expect(bridge.getNativeClockRecoveryState).toHaveBeenCalledTimes(2)
+    expect(p.onPendingChange).toHaveBeenLastCalledWith(false)
+    expect(p.onChanged).toHaveBeenCalledOnce()
+    expect(view.container.querySelectorAll('input:not([type=checkbox])')).toHaveLength(0)
+    expect(bridge.startNativeClockRecovery).not.toHaveBeenCalled()
+  })
+  it('does not treat completed action metadata as healthy without ordinary native reread', async () => {
+    bridge.verifyNativeClockBootstrap.mockResolvedValue(bootstrapComplete)
+    bridge.getNativeClockBootstrapState
+      .mockResolvedValueOnce(bootstrapReady)
+      .mockResolvedValue(bootstrapComplete)
+    const p = props()
+    render(<NativeClockRecovery {...p} actorId={null} />)
+    await bootstrapConsent()
+    await waitFor(() => expect(bridge.getNativeClockRecoveryState).toHaveBeenCalledTimes(2))
+    expect(p.onPendingChange).toHaveBeenLastCalledWith(true)
+    expect(p.onChanged).not.toHaveBeenCalled()
+    expect(screen.queryByText(/Device time checked\. Continue setting up/)).toBeNull()
+  })
+  it('never treats not-eligible as healthy or replaces a saved original recovery', async () => {
+    bridge.getNativeClockBootstrapState.mockResolvedValue({
+      schemaVersion: 1,
+      status: 'not_available',
+      canVerify: false,
+      reasonCode: 'clock_bootstrap_not_eligible',
+    })
+    const p = props(),
+      view = render(<NativeClockRecovery {...p} />)
+    await screen.findByText(/Clock recovery is not configured/)
+    expect(p.onPendingChange).toHaveBeenLastCalledWith(true)
+    expect(screen.queryByRole('button', { name: 'Verify clock in Android' })).toBeNull()
+    bridge.getNativeClockBootstrapState.mockResolvedValue(bootstrapReady)
+    bridge.getNativeClockRecoveryState.mockResolvedValue(pending)
+    view.rerender(<NativeClockRecovery {...p} revision={2} />)
+    await screen.findByRole('button', { name: 'Check / retry clock recovery' })
+    expect(screen.queryByRole('button', { name: 'Verify clock in Android' })).toBeNull()
+  })
+  it('shows time-setting correction after failure, requires fresh consent and never retries the write automatically', async () => {
+    bridge.verifyNativeClockBootstrap.mockRejectedValue(new Error('clock_time_settings_required'))
+    const p = props()
+    render(<NativeClockRecovery {...p} actorId={null} />)
+    await bootstrapConsent()
+    await screen.findByRole('alert')
+    expect(screen.getByRole('alert')).toHaveTextContent('Correct automatic date and time')
+    expect(screen.getByRole('checkbox')).not.toBeChecked()
+    expect(bridge.verifyNativeClockBootstrap).toHaveBeenCalledOnce()
+    expect(p.onPendingChange).toHaveBeenLastCalledWith(true)
+  })
+  it.each(['pagehide', 'actor-return'])('discards late verification after %s', async (kind) => {
+    let done!: (value: unknown) => void
+    bridge.verifyNativeClockBootstrap.mockReturnValue(
+      new Promise((resolve) => {
+        done = resolve
+      })
+    )
+    const p = props(),
+      view = render(<NativeClockRecovery {...p} actorId={null} />)
+    await bootstrapConsent()
+    if (kind === 'pagehide') fireEvent(window, new Event('pagehide'))
+    else {
+      view.rerender(<NativeClockRecovery {...p} actorId={id(9)} />)
+      view.rerender(<NativeClockRecovery {...p} actorId={null} />)
+    }
+    await act(async () => done(bootstrapComplete))
+    expect(p.onChanged).not.toHaveBeenCalled()
+    expect(p.onPendingChange).toHaveBeenLastCalledWith(true)
+    expect(screen.queryByText(/Device time checked\. Continue setting up/)).toBeNull()
+  })
+  it('discovers committed verification after a lost response without repeating verification', async () => {
+    bridge.verifyNativeClockBootstrap.mockImplementation(async () => {
+      bridge.getNativeClockBootstrapState.mockResolvedValue(bootstrapComplete)
+      bridge.getNativeClockRecoveryState.mockResolvedValue(healthyClock)
+      throw new Error('clock_bootstrap_uncertain')
+    })
+    const p = props()
+    render(<NativeClockRecovery {...p} actorId={null} />)
+    await bootstrapConsent()
+    await screen.findByText(/Device time checked\. Continue setting up/)
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(bridge.verifyNativeClockBootstrap).toHaveBeenCalledOnce()
+    expect(p.onPendingChange).toHaveBeenLastCalledWith(false)
+  })
 })

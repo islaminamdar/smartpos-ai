@@ -1,0 +1,18 @@
+{
+  "serverPublicKeySpki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEbn-nc723KVVSptT9wj-7aNhnLRU_nQejbZxjG2GDJwcqHiNlsHB78jyRk99_oAuKWS-zEK7xPnp1yYv32orFaQ",
+  "request": {
+    "schemaVersion": 1,
+    "installationId": "00000000-0000-4000-8000-000000000001",
+    "deviceKeySha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "oldClockGeneration": 0,
+    "oldClockSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "challenge": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "time": {
+    "format": "pos-signed-v1",
+    "alg": "ECDSA-P256-SHA256-DER",
+    "keyId": "bootstrap-interop",
+    "payloadBase64Url": "eyJjaGFsbGVuZ2UiOiJjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjIiwiZGV2aWNlS2V5U2hhMjU2IjoiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsImluc3RhbGxhdGlvbklkIjoiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxIiwia2luZCI6Im5hdGl2ZS1jbG9jay1ib290c3RyYXAtdGltZSIsIm9sZENsb2NrR2VuZXJhdGlvbiI6MCwib2xkQ2xvY2tTaGEyNTYiOiJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIiwic2NoZW1hVmVyc2lvbiI6MSwic2VydmVyVGltZU1zIjoxNzkyMTcxNjQ5NTQ3fQ",
+    "signatureBase64Url": "MEQCIHeXGkEnXJ04d7PrvZvb6of8XC4C3HoVoJuYy-lHPahKAiAym_pTWdW1L0WGKAzFLkPICigpJci8INHy7V942TK_9g"
+  }
+}
