@@ -105,6 +105,8 @@ it('allows explicit pending recovery even when sale writes are paused', () => {
 it('limits new manager and recurring billing surfaces to exact methods', () => {
   for (const [path, methods] of Object.entries({
     '/api/pos/catalogue': ['GET', 'POST'],
+    '/api/pos/offers': ['GET', 'POST'],
+    '/api/pos/offers/quote': ['POST'],
     '/api/pos/reports': ['GET'],
     '/api/billing/paypal/status': ['GET'],
     '/api/billing/paypal/checkout': ['POST'],

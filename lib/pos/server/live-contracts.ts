@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { syncOrderSchema } from './contracts'
 import { merchantProfileSchema, receiptCustomerSchema } from './documents'
+import { offerSelectionSchema } from './offers'
 
 export const liveOrderSchema = z
   .object({
@@ -14,6 +15,7 @@ export const liveOrderSchema = z
           )
           .min(1)
           .max(200),
+        offerSelection: offerSelectionSchema.optional(),
         profileId: z.string().uuid(),
         customer: receiptCustomerSchema.nullable(),
         cashTenderedFils: z.number().int().min(0).max(100_000_000),
@@ -29,7 +31,20 @@ export const liveOrderSchema = z
           .min(1)
           .max(2),
       })
-      .strict(),
+      .strict()
+      .superRefine((order, ctx) => {
+        if (
+          order.offerSelection &&
+          (order.lines.some((line) => line.expectedRevision === undefined) ||
+            new Set(order.lines.map((line) => line.productId.toLowerCase())).size !==
+              order.lines.length)
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Offer sales require current unique menu lines.',
+          })
+        }
+      }),
   })
   .strict()
 const uuid = z.string().uuid()

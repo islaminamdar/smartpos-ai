@@ -47,6 +47,17 @@ export default function FiscalReceipt({ document: bill }: { document: FiscalDocu
           </p>
         </section>
       )}
+      {bill.schemaVersion === 2 && (
+        <section className="lc-receipt-offer">
+          <strong>
+            {credit ? 'Original offer' : 'Offer'}: {bill.appliedOffer.offerName}
+          </strong>
+          {bill.appliedOffer.benefit.kind === 'percentage' && (
+            <span> · {bill.appliedOffer.benefit.basisPoints / 100}%</span>
+          )}
+          <p>Discounts are included in the line amounts below.</p>
+        </section>
+      )}
       <table>
         <thead>
           <tr>
@@ -63,6 +74,13 @@ export default function FiscalReceipt({ document: bill }: { document: FiscalDocu
                   {line.quantityMilli / 1000}
                   {line.unit === 'kg' ? ' kg' : ` ${line.unit}`} × {formatFils(line.unitPriceFils)}
                   <br />
+                  {'discountFils' in line && line.discountFils > 0 && (
+                    <>
+                      Before offer: {formatFils(line.beforeDiscountFils)} · Discount: −
+                      {formatFils(line.discountFils)}
+                      <br />
+                    </>
+                  )}
                   VAT {line.taxRateBps / 100}%: {formatFils(line.taxFils)}
                   <br />
                   Line excluding VAT: {formatFils(line.netFils)}
@@ -74,6 +92,18 @@ export default function FiscalReceipt({ document: bill }: { document: FiscalDocu
         </tbody>
       </table>
       <dl>
+        {bill.schemaVersion === 2 && (
+          <>
+            <div>
+              <dt>{credit ? 'Original amount before offer' : 'Before offer, incl. VAT'}</dt>
+              <dd>{formatFils(bill.totals.beforeDiscountFils)}</dd>
+            </div>
+            <div>
+              <dt>{credit ? 'Original offer discount' : 'Offer discount'}</dt>
+              <dd>−{formatFils(bill.totals.discountFils)}</dd>
+            </div>
+          </>
+        )}
         <div>
           <dt>{credit ? 'Net amount reversed' : 'Subtotal excluding VAT'}</dt>
           <dd>{formatFils(bill.totals.netFils)}</dd>

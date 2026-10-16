@@ -13,13 +13,22 @@ For the online pilot at [pos.internext.info/counter](https://pos.internext.info/
 
 1. Under **Sell**, choose the order type and add the customer's items. Check quantities and the total.
 2. For items explicitly priced by kilogram, enter the actual weight in grams. Use the restaurant's verified scale reading.
-3. Enter the cash received and/or the card amount. Recording a card payment here does not charge the customer's card; confirm payment separately on the card terminal.
-4. Select **Save sale** and wait for confirmation. If confirmation is interrupted, use the saved-request recovery controls. Do not create another bill for the same payment until its status is resolved.
-5. Open the confirmed receipt under **Receipts** and choose **Print / save PDF**. Check the actual paper output; a browser print dialog does not confirm delivery to a physical printer.
+3. If an offer applies, select **Check offers**, enter a coupon if needed, and choose one eligible offer. Check the displayed discount and final total. Changing items, quantities, order type or coupon clears the selection; check it again.
+4. Enter the cash received and/or the card amount. Recording a card payment here does not charge the customer's card; confirm payment separately on the card terminal.
+5. Select **Save sale** and wait for confirmation. If confirmation is interrupted, use the saved-request recovery controls. Do not create another bill for the same payment until its status is resolved.
+6. Open the confirmed receipt under **Receipts** and choose **Print / save PDF**. Check the actual paper output; a browser print dialog does not confirm delivery to a physical printer.
 
 ## Update the menu
 
 In **Menu**, a manager can add an item or edit its price, unit and availability. Enter a reason and wait for the saved confirmation. For weight sales, enter the full kilogram price. Keep an item unavailable until its price is approved. Cashiers must refresh an older basket when its menu details change; issued bills retain their original details.
+
+## Set up offers
+
+In **Offers**, a manager can create or edit a percentage discount, fixed AED discount, exact-item bundle, or buy-X-get-Y offer. Choose its items/categories, order types, minimum spend, coupon and any manager restriction. Date and weekly time windows use Dubai time; an overnight window belongs to its starting weekday. Enter a reason and wait for confirmation before leaving. An interrupted save keeps the same request for retry.
+
+Only one offer applies per order. For buy-X-get-Y, add all paid and reward items to the basket; the cheapest eligible whole pieces or packs become free. Bundles require every specified item, and extra quantities stay at normal price. Weight items support percentage and fixed discounts; bundles and buy-X-get-Y use whole pieces/packs. Completely free orders and per-customer limits are not supported yet.
+
+The usage limit counts completed orders, not the number of bundles. Editing, disabling or fully refunding an offer does not restore its previous uses. The server checks current prices, rules, schedule and remaining uses again when saving the sale. If that check fails after money was collected, resolve the saved request and reconcile the payment before creating a replacement. Issued receipts and credit notes retain the original offer and discounted amounts.
 
 ## Review branch reports
 

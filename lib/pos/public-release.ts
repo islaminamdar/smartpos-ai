@@ -23,6 +23,8 @@ export function publicReleaseAccess(
       '/api/billing/paypal/webhook': ['POST'],
       '/api/pos/session': ['GET', 'POST', 'DELETE'],
       '/api/pos/catalogue': ['GET', 'POST'],
+      '/api/pos/offers': ['GET', 'POST'],
+      '/api/pos/offers/quote': ['POST'],
       '/api/pos/bootstrap': ['GET'],
       '/api/pos/receipts': ['GET'],
       '/api/pos/reports': ['GET'],

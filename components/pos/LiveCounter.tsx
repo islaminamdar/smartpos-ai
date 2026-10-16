@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import Link from 'next/link'
 import { formatFils, parseMoney } from '@/lib/pos/money'
 import { catalogueLineTotals } from '@/lib/pos/server/contracts'
@@ -22,10 +22,14 @@ import {
 import FiscalReceipt from './FiscalReceipt'
 import CatalogueManager from './CatalogueManager'
 import BranchReports from './reports/BranchReports'
+import OfferManager from './offers/OfferManager'
+import OfferPicker from './offers/OfferPicker'
+import type { OfferSelection, EligibleOfferQuote } from '@/lib/pos/server/offers'
+import { invoiceMatchesSale } from '@/lib/pos/server/sale-ack'
 
 type Product = LiveBootstrap['catalogue'][number]
 type BasketLine = { product: Product; quantityMilli: number }
-type View = 'sell' | 'receipts' | 'shift' | 'branch' | 'menu' | 'reports'
+type View = 'sell' | 'receipts' | 'shift' | 'branch' | 'menu' | 'offers' | 'reports'
 class ApiError extends Error {
   constructor(
     public status: number,
@@ -45,6 +49,8 @@ const humanError = (error: unknown) => {
       return 'Too many attempts. Please wait a few minutes before trying again.'
     if (error.code.includes('PRICE') || error.code.includes('PROFILE'))
       return 'The menu or business details changed. This request needs review before you take another payment.'
+    if (error.code.includes('OFFER'))
+      return 'This offer could not be confirmed. Resolve the saved request, reconcile any payment, then check offers again.'
     if (error.status === 403) return 'This account or device is not authorised for that action.'
     if (error.status === 503) return 'The counter service is not ready. Please retry shortly.'
     return 'The request could not be confirmed. Review the pending request before taking another payment.'
@@ -98,6 +104,11 @@ export default function LiveCounter() {
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'split'>('cash')
   const [cashInput, setCashInput] = useState('')
   const [cardInput, setCardInput] = useState('')
+  const [chosenOffer, setChosenOffer] = useState<{
+    scope: string
+    selection: OfferSelection
+    quote: EligibleOfferQuote
+  } | null>(null)
   const [buyerName, setBuyerName] = useState('')
   const [buyerAddress, setBuyerAddress] = useState('')
   const [buyerTrn, setBuyerTrn] = useState('')
@@ -125,19 +136,42 @@ export default function LiveCounter() {
       item.name.toLowerCase().includes(search.toLowerCase().trim())
   )
   const categories = Array.from(new Set(products.map((item) => item.category)))
-  const total = basket.reduce(
+  const beforeDiscount = basket.reduce(
     (sum, line) =>
       sum +
       catalogueLineTotals(line.product.unitPriceFils, line.quantityMilli, line.product.taxRateBps)
         .grossFils,
     0
   )
-  const tax = basket.reduce(
+  const originalTax = basket.reduce(
     (sum, line) =>
       sum +
       catalogueLineTotals(line.product.unitPriceFils, line.quantityMilli, line.product.taxRateBps)
         .taxFils,
     0
+  )
+  const offerLines = useMemo(
+    () =>
+      basket.map(({ product, quantityMilli }) => ({
+        productId: product.id,
+        quantityMilli,
+        expectedUnitPriceFils: product.unitPriceFils,
+        expectedTaxRateBps: product.taxRateBps,
+        expectedRevision: product.revision,
+      })),
+    [basket]
+  )
+  const offerScope = JSON.stringify({ branchId, serviceType, lines: offerLines })
+  const activeOffer = chosenOffer?.scope === offerScope ? chosenOffer : null
+  const total = activeOffer?.quote.grossFils ?? beforeDiscount
+  const tax = activeOffer?.quote.taxFils ?? originalTax
+  const chooseOffer = useCallback(
+    (selection: OfferSelection | null, quote: EligibleOfferQuote | null) => {
+      setChosenOffer(selection && quote ? { scope: offerScope, selection, quote } : null)
+      setCashInput('')
+      setCardInput('')
+    },
+    [offerScope]
   )
   const mayWrite = !!(
     boot?.capabilities.onlineSales &&
@@ -158,6 +192,7 @@ export default function LiveCounter() {
       setNextCursor(null)
       setSelected(null)
       setBasket([])
+      setChosenOffer(null)
       setCashInput('')
       setCardInput('')
       setBuyerName('')
@@ -282,6 +317,7 @@ export default function LiveCounter() {
       await acknowledgePendingRequest(request.actorId, request.id)
       setPending(null)
       setBasket([])
+      setChosenOffer(null)
       setCashInput('')
       setCardInput('')
       setSelected(null)
@@ -310,11 +346,7 @@ export default function LiveCounter() {
       if (receipt.kind !== 'tax_invoice' || receipt.orderId !== request.id)
         throw new Error('Invoice confirmation did not match the saved sale.')
       const input = liveOrderSchema.parse(request.body).order
-      if (
-        receipt.totals.grossFils !== input.expectedTotalFils ||
-        receipt.cashTenderedFils !== input.cashTenderedFils ||
-        receipt.merchant.id !== input.profileId
-      )
+      if (!invoiceMatchesSale(input, receipt))
         throw new Error('Invoice amounts did not match the saved sale.')
     } else {
       if (
@@ -345,6 +377,7 @@ export default function LiveCounter() {
     setPending(null)
     if (request.endpoint === '/api/pos/sync') {
       setBasket([])
+      setChosenOffer(null)
       setCashInput('')
       setCardInput('')
       setBuyerName('')
@@ -446,13 +479,8 @@ export default function LiveCounter() {
           : null,
         cashTenderedFils,
         expectedTotalFils: total,
-        lines: basket.map((line) => ({
-          productId: line.product.id,
-          quantityMilli: line.quantityMilli,
-          expectedUnitPriceFils: line.product.unitPriceFils,
-          expectedTaxRateBps: line.product.taxRateBps,
-          expectedRevision: line.product.revision,
-        })),
+        lines: offerLines,
+        ...(activeOffer ? { offerSelection: activeOffer.selection } : {}),
         payments: [
           ...(cashApplied ? [{ method: 'cash' as const, amountFils: cashApplied }] : []),
           ...(card ? [{ method: 'card' as const, amountFils: card }] : []),
@@ -578,6 +606,7 @@ export default function LiveCounter() {
               setDocuments([])
               setSelected(null)
               setBasket([])
+              setChosenOffer(null)
               setNeedsLogin(true)
             })
           }
@@ -682,7 +711,7 @@ export default function LiveCounter() {
                 'sell',
                 'receipts',
                 'shift',
-                ...(manager ? ['menu', 'reports'] : []),
+                ...(manager ? ['menu', 'offers', 'reports'] : []),
                 'branch',
               ] as View[]
             ).map((item) => (
@@ -698,6 +727,7 @@ export default function LiveCounter() {
                     shift: 'Shift',
                     branch: 'Branch',
                     menu: 'Menu',
+                    offers: 'Offers',
                     reports: 'Reports',
                   }[item]
                 }
@@ -713,6 +743,19 @@ export default function LiveCounter() {
                 branchName={branch.name}
               />
             )}
+            {view === 'offers' && manager && (
+              <OfferManager
+                key={`${boot.userId}:${branchId}`}
+                branchId={branchId}
+                deviceId={boot.device.id}
+                disabled={busy || !!pending || !online}
+                onChanged={async () => {
+                  setChosenOffer(null)
+                  setCashInput('')
+                  setCardInput('')
+                }}
+              />
+            )}
             {view === 'menu' && manager && (
               <CatalogueManager
                 key={`${boot.userId}:${branchId}`}
@@ -722,6 +765,7 @@ export default function LiveCounter() {
                 onChanged={async () => {
                   await refresh()
                   setBasket([])
+                  setChosenOffer(null)
                   setCashInput('')
                   setCardInput('')
                 }}
@@ -867,7 +911,29 @@ export default function LiveCounter() {
                       </button>
                     </div>
                   ))}
+                  {basket.length > 0 && (
+                    <OfferPicker
+                      key={`${boot.userId}:${branchId}`}
+                      branchId={branchId}
+                      serviceType={serviceType}
+                      lines={offerLines}
+                      disabled={busy || !!pending || !online}
+                      onSelection={chooseOffer}
+                    />
+                  )}
                   <dl className="lc-totals">
+                    {activeOffer && (
+                      <>
+                        <div>
+                          <dt>Before offer</dt>
+                          <dd>{currency(beforeDiscount)}</dd>
+                        </div>
+                        <div>
+                          <dt>{activeOffer.quote.offerName}</dt>
+                          <dd>−{currency(activeOffer.quote.discountFils)}</dd>
+                        </div>
+                      </>
+                    )}
                     <div>
                       <dt>VAT included</dt>
                       <dd>{currency(tax)}</dd>
@@ -1267,8 +1333,8 @@ export default function LiveCounter() {
                 <h2>Current live pilot</h2>
                 <p>
                   Online sales, recorded cash/card payments, weighted items, invoice reprints, shift
-                  closing and full refunds. Shared tables, kitchen dispatch, discounts, partial
-                  refunds and offline live sales are still being prepared.
+                  closing, offers and full refunds. Shared tables, kitchen dispatch, partial refunds
+                  and offline live sales are still being prepared.
                 </p>
                 <Link href="/pos">Open separate training workspace</Link>
               </section>

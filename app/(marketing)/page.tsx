@@ -62,8 +62,9 @@ const availability = [
     ready: true,
   },
   {
-    title: 'Sales, receipts & cash control',
-    detail: 'Cash and recorded card payments, VAT receipts, full refunds and shift closing.',
+    title: 'Sales, offers & cash control',
+    detail:
+      'Cash and recorded card payments, offers, VAT receipts, full refunds and shift closing.',
     status: 'Online pilot',
     ready: true,
   },
@@ -74,9 +75,8 @@ const availability = [
     ready: false,
   },
   {
-    title: 'Offers, offline APK & subscriptions',
-    detail:
-      'Offer controls, offline sales on Android and recurring PayPal billing are being developed.',
+    title: 'Offline APK & subscriptions',
+    detail: 'Offline sales on Android and recurring PayPal billing are being developed.',
     status: 'In development',
     ready: false,
   },
@@ -275,14 +275,15 @@ export default function Landing() {
               And your next branch.
             </h2>
             <p>
-              Part of the product roadmap. Included in the branch plan as each feature is released.
+              Offers are available in the online pilot. Android and subscriptions follow as each
+              feature is released.
             </p>
           </div>
           <div className="ip-roadmap-grid">
             <article className="ip-offer-card">
               <div className="ip-roadmap-top">
                 <Tag size={27} strokeWidth={1.6} aria-hidden="true" />
-                <span>Planned</span>
+                <span>Online pilot</span>
               </div>
               <h3>Offers with clear rules.</h3>
               <p>
@@ -298,7 +299,7 @@ export default function Landing() {
                   <span>When is it available?</span>
                   <span>Who can apply it?</span>
                 </div>
-                <small>Planned workflow illustration</small>
+                <small>Choose eligible items, schedules and staff permissions</small>
               </div>
             </article>
             <div className="ip-roadmap-stack">

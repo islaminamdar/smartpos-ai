@@ -1,0 +1,1295 @@
+{
+  "receipts": [
+    {
+      "id": "f4732c47-a2f1-4244-9f9a-4c5ce5520597",
+      "kind": "tax_invoice",
+      "lines": [
+        {
+          "name": "Original item",
+          "unit": "piece",
+          "netFils": 857,
+          "taxFils": 43,
+          "grossFils": 900,
+          "productId": "1b9842b5-4e7f-4d1c-a18c-53c7004785cc",
+          "lineNumber": 1,
+          "taxRateBps": 500,
+          "discountFils": 100,
+          "quantityMilli": 1000,
+          "unitPriceFils": 1000,
+          "beforeDiscountFils": 1000,
+          "bundleQuantityMilli": 0,
+          "rewardQuantityMilli": 0,
+          "eligibleQuantityMilli": 1000
+        }
+      ],
+      "totals": {
+        "netFils": 857,
+        "taxFils": 43,
+        "grossFils": 900,
+        "discountFils": 100,
+        "beforeDiscountFils": 1000
+      },
+      "actorId": "aff51675-9075-4c31-895f-b2ed2dd3d783",
+      "orderId": "35fe0fad-52b6-4a54-ad2a-e0bc9f2b4ae4",
+      "shiftId": "f0f09b16-3d77-42b4-bee2-167f1ce2454c",
+      "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+      "customer": null,
+      "deviceId": "038c5c7d-d54f-4992-8cf8-56ddf158c821",
+      "issuedAt": "2026-10-16T06:05:18.549+04:00",
+      "merchant": {
+        "id": "c0c5df2a-a4a5-42a5-a109-c637e26937b3",
+        "trn": "100000000000001",
+        "phone": "Test contact",
+        "address": "Test address",
+        "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+        "currency": "AED",
+        "timezone": "Asia/Dubai",
+        "legalName": "Synthetic",
+        "branchName": "Test",
+        "confirmedAt": "2026-10-16T06:05:18.487+04:00",
+        "confirmedBy": "aff51675-9075-4c31-895f-b2ed2dd3d783",
+        "taxInclusive": true,
+        "taxRegistered": true,
+        "organizationId": "2a92f775-8836-491e-942b-7dbd40cfedef",
+        "calculationVersion": "line-v2"
+      },
+      "payments": [
+        {
+          "method": "cash",
+          "amountFils": 900
+        }
+      ],
+      "changeFils": 100,
+      "serviceType": "takeaway",
+      "appliedOffer": {
+        "lines": [
+          {
+            "netFils": 857,
+            "taxFils": 43,
+            "grossFils": 900,
+            "productId": "1b9842b5-4e7f-4d1c-a18c-53c7004785cc",
+            "discountFils": 100,
+            "beforeDiscountFils": 1000,
+            "bundleQuantityMilli": 0,
+            "rewardQuantityMilli": 0,
+            "eligibleQuantityMilli": 1000
+          }
+        ],
+        "benefit": {
+          "kind": "percentage",
+          "basisPoints": 1000,
+          "eligibility": {
+            "scope": "all"
+          },
+          "maximumDiscountFils": null
+        },
+        "netFils": 857,
+        "offerId": "c5a8ab06-5a28-431e-98a8-0481aaf07fb0",
+        "taxFils": 43,
+        "eligible": true,
+        "grossFils": 900,
+        "offerName": "Synthetic offer",
+        "applications": 1,
+        "discountFils": 100,
+        "offerRevision": 1,
+        "appliedDefinition": {
+          "id": "c5a8ab06-5a28-431e-98a8-0481aaf07fb0",
+          "name": "Synthetic offer",
+          "active": true,
+          "benefit": {
+            "kind": "percentage",
+            "basisPoints": 1000,
+            "eligibility": {
+              "scope": "all"
+            },
+            "maximumDiscountFils": null
+          },
+          "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+          "revision": 1,
+          "schedule": {
+            "endsAt": null,
+            "windows": [],
+            "startsAt": null,
+            "timezone": "Asia/Dubai"
+          },
+          "managerOnly": false,
+          "serviceTypes": [
+            "dine_in",
+            "takeaway",
+            "delivery"
+          ],
+          "couponRequired": false,
+          "minimumSpendFils": 0,
+          "perCustomerLimit": null,
+          "totalRedemptionsLimit": null
+        },
+        "beforeDiscountFils": 1000,
+        "calculationVersion": "offer-v1"
+      },
+      "schemaVersion": 2,
+      "documentNumber": "TEST-INV-0000000001",
+      "cashTenderedFils": 1000,
+      "paymentSettlement": "recorded"
+    },
+    {
+      "id": "df0e4214-d420-48d2-b752-8780e2cb6a86",
+      "kind": "tax_invoice",
+      "lines": [
+        {
+          "name": "Original item",
+          "unit": "piece",
+          "netFils": 857,
+          "taxFils": 43,
+          "grossFils": 900,
+          "productId": "1b9842b5-4e7f-4d1c-a18c-53c7004785cc",
+          "lineNumber": 1,
+          "taxRateBps": 500,
+          "discountFils": 100,
+          "quantityMilli": 1000,
+          "unitPriceFils": 1000,
+          "beforeDiscountFils": 1000,
+          "bundleQuantityMilli": 0,
+          "rewardQuantityMilli": 0,
+          "eligibleQuantityMilli": 1000
+        }
+      ],
+      "totals": {
+        "netFils": 857,
+        "taxFils": 43,
+        "grossFils": 900,
+        "discountFils": 100,
+        "beforeDiscountFils": 1000
+      },
+      "actorId": "aff51675-9075-4c31-895f-b2ed2dd3d783",
+      "orderId": "ae3bfd05-4a6f-4b86-a2f9-b4c0e6b7bfa9",
+      "shiftId": "f0f09b16-3d77-42b4-bee2-167f1ce2454c",
+      "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+      "customer": null,
+      "deviceId": "038c5c7d-d54f-4992-8cf8-56ddf158c821",
+      "issuedAt": "2026-10-16T06:05:18.888+04:00",
+      "merchant": {
+        "id": "c0c5df2a-a4a5-42a5-a109-c637e26937b3",
+        "trn": "100000000000001",
+        "phone": "Test contact",
+        "address": "Test address",
+        "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+        "currency": "AED",
+        "timezone": "Asia/Dubai",
+        "legalName": "Synthetic",
+        "branchName": "Test",
+        "confirmedAt": "2026-10-16T06:05:18.487+04:00",
+        "confirmedBy": "aff51675-9075-4c31-895f-b2ed2dd3d783",
+        "taxInclusive": true,
+        "taxRegistered": true,
+        "organizationId": "2a92f775-8836-491e-942b-7dbd40cfedef",
+        "calculationVersion": "line-v2"
+      },
+      "payments": [
+        {
+          "method": "cash",
+          "amountFils": 900
+        }
+      ],
+      "changeFils": 100,
+      "serviceType": "takeaway",
+      "appliedOffer": {
+        "lines": [
+          {
+            "netFils": 857,
+            "taxFils": 43,
+            "grossFils": 900,
+            "productId": "1b9842b5-4e7f-4d1c-a18c-53c7004785cc",
+            "discountFils": 100,
+            "beforeDiscountFils": 1000,
+            "bundleQuantityMilli": 0,
+            "rewardQuantityMilli": 0,
+            "eligibleQuantityMilli": 1000
+          }
+        ],
+        "benefit": {
+          "kind": "percentage",
+          "basisPoints": 1000,
+          "eligibility": {
+            "scope": "all"
+          },
+          "maximumDiscountFils": null
+        },
+        "netFils": 857,
+        "offerId": "034202bb-ac96-4f1f-b00e-5621933b02d8",
+        "taxFils": 43,
+        "eligible": true,
+        "grossFils": 900,
+        "offerName": "Synthetic offer",
+        "applications": 1,
+        "discountFils": 100,
+        "offerRevision": 1,
+        "appliedDefinition": {
+          "id": "034202bb-ac96-4f1f-b00e-5621933b02d8",
+          "name": "Synthetic offer",
+          "active": true,
+          "benefit": {
+            "kind": "percentage",
+            "basisPoints": 1000,
+            "eligibility": {
+              "scope": "all"
+            },
+            "maximumDiscountFils": null
+          },
+          "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+          "revision": 1,
+          "schedule": {
+            "endsAt": null,
+            "windows": [],
+            "startsAt": null,
+            "timezone": "Asia/Dubai"
+          },
+          "managerOnly": false,
+          "serviceTypes": [
+            "dine_in",
+            "takeaway",
+            "delivery"
+          ],
+          "couponRequired": true,
+          "minimumSpendFils": 0,
+          "perCustomerLimit": null,
+          "totalRedemptionsLimit": 1
+        },
+        "beforeDiscountFils": 1000,
+        "calculationVersion": "offer-v1"
+      },
+      "schemaVersion": 2,
+      "documentNumber": "TEST-INV-0000000002",
+      "cashTenderedFils": 1000,
+      "paymentSettlement": "recorded"
+    },
+    {
+      "id": "159096cd-e678-49cf-927d-3f3e22b08bc9",
+      "kind": "tax_invoice",
+      "lines": [
+        {
+          "name": "Original item",
+          "unit": "piece",
+          "netFils": 2763,
+          "taxFils": 138,
+          "grossFils": 2901,
+          "productId": "1b9842b5-4e7f-4d1c-a18c-53c7004785cc",
+          "lineNumber": 1,
+          "taxRateBps": 500,
+          "discountFils": 99,
+          "quantityMilli": 3000,
+          "unitPriceFils": 1000,
+          "beforeDiscountFils": 3000,
+          "bundleQuantityMilli": 0,
+          "rewardQuantityMilli": 0,
+          "eligibleQuantityMilli": 3000
+        },
+        {
+          "name": "Second item",
+          "unit": "piece",
+          "netFils": 1429,
+          "taxFils": 71,
+          "grossFils": 1500,
+          "productId": "366972e9-ba92-42e8-9035-7f7ccd13779c",
+          "lineNumber": 2,
+          "taxRateBps": 500,
+          "discountFils": 0,
+          "quantityMilli": 3000,
+          "unitPriceFils": 500,
+          "beforeDiscountFils": 1500,
+          "bundleQuantityMilli": 0,
+          "rewardQuantityMilli": 0,
+          "eligibleQuantityMilli": 0
+        }
+      ],
+      "totals": {
+        "netFils": 4192,
+        "taxFils": 209,
+        "grossFils": 4401,
+        "discountFils": 99,
+        "beforeDiscountFils": 4500
+      },
+      "actorId": "aff51675-9075-4c31-895f-b2ed2dd3d783",
+      "orderId": "08dcdeda-5e68-4781-a34c-e90bdfcac9fd",
+      "shiftId": "f0f09b16-3d77-42b4-bee2-167f1ce2454c",
+      "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+      "customer": null,
+      "deviceId": "038c5c7d-d54f-4992-8cf8-56ddf158c821",
+      "issuedAt": "2026-10-16T06:05:18.917+04:00",
+      "merchant": {
+        "id": "c0c5df2a-a4a5-42a5-a109-c637e26937b3",
+        "trn": "100000000000001",
+        "phone": "Test contact",
+        "address": "Test address",
+        "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+        "currency": "AED",
+        "timezone": "Asia/Dubai",
+        "legalName": "Synthetic",
+        "branchName": "Test",
+        "confirmedAt": "2026-10-16T06:05:18.487+04:00",
+        "confirmedBy": "aff51675-9075-4c31-895f-b2ed2dd3d783",
+        "taxInclusive": true,
+        "taxRegistered": true,
+        "organizationId": "2a92f775-8836-491e-942b-7dbd40cfedef",
+        "calculationVersion": "line-v2"
+      },
+      "payments": [
+        {
+          "method": "card",
+          "amountFils": 4401
+        }
+      ],
+      "changeFils": 0,
+      "serviceType": "takeaway",
+      "appliedOffer": {
+        "lines": [
+          {
+            "netFils": 2763,
+            "taxFils": 138,
+            "grossFils": 2901,
+            "productId": "1b9842b5-4e7f-4d1c-a18c-53c7004785cc",
+            "discountFils": 99,
+            "beforeDiscountFils": 3000,
+            "bundleQuantityMilli": 0,
+            "rewardQuantityMilli": 0,
+            "eligibleQuantityMilli": 3000
+          },
+          {
+            "netFils": 1429,
+            "taxFils": 71,
+            "grossFils": 1500,
+            "productId": "366972e9-ba92-42e8-9035-7f7ccd13779c",
+            "discountFils": 0,
+            "beforeDiscountFils": 1500,
+            "bundleQuantityMilli": 0,
+            "rewardQuantityMilli": 0,
+            "eligibleQuantityMilli": 0
+          }
+        ],
+        "benefit": {
+          "kind": "percentage",
+          "basisPoints": 3333,
+          "eligibility": {
+            "scope": "products",
+            "productIds": [
+              "1b9842b5-4e7f-4d1c-a18c-53c7004785cc"
+            ]
+          },
+          "maximumDiscountFils": 99
+        },
+        "netFils": 4192,
+        "offerId": "1111efc1-a2b7-4b7d-9ef2-14a51b5a5594",
+        "taxFils": 209,
+        "eligible": true,
+        "grossFils": 4401,
+        "offerName": "Synthetic offer",
+        "applications": 1,
+        "discountFils": 99,
+        "offerRevision": 1,
+        "appliedDefinition": {
+          "id": "1111efc1-a2b7-4b7d-9ef2-14a51b5a5594",
+          "name": "Synthetic offer",
+          "active": true,
+          "benefit": {
+            "kind": "percentage",
+            "basisPoints": 3333,
+            "eligibility": {
+              "scope": "products",
+              "productIds": [
+                "1b9842b5-4e7f-4d1c-a18c-53c7004785cc"
+              ]
+            },
+            "maximumDiscountFils": 99
+          },
+          "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+          "revision": 1,
+          "schedule": {
+            "endsAt": null,
+            "windows": [],
+            "startsAt": null,
+            "timezone": "Asia/Dubai"
+          },
+          "managerOnly": false,
+          "serviceTypes": [
+            "dine_in",
+            "takeaway",
+            "delivery"
+          ],
+          "couponRequired": false,
+          "minimumSpendFils": 0,
+          "perCustomerLimit": null,
+          "totalRedemptionsLimit": null
+        },
+        "beforeDiscountFils": 4500,
+        "calculationVersion": "offer-v1"
+      },
+      "schemaVersion": 2,
+      "documentNumber": "TEST-INV-0000000003",
+      "cashTenderedFils": 0,
+      "paymentSettlement": "recorded"
+    },
+    {
+      "id": "e58232d2-657f-4e20-bbd2-82b59482d0e8",
+      "kind": "tax_invoice",
+      "lines": [
+        {
+          "name": "Original item",
+          "unit": "piece",
+          "netFils": 2856,
+          "taxFils": 143,
+          "grossFils": 2999,
+          "productId": "1b9842b5-4e7f-4d1c-a18c-53c7004785cc",
+          "lineNumber": 1,
+          "taxRateBps": 500,
+          "discountFils": 1,
+          "quantityMilli": 3000,
+          "unitPriceFils": 1000,
+          "beforeDiscountFils": 3000,
+          "bundleQuantityMilli": 0,
+          "rewardQuantityMilli": 0,
+          "eligibleQuantityMilli": 3000
+        },
+        {
+          "name": "Second item",
+          "unit": "piece",
+          "netFils": 1429,
+          "taxFils": 71,
+          "grossFils": 1500,
+          "productId": "366972e9-ba92-42e8-9035-7f7ccd13779c",
+          "lineNumber": 2,
+          "taxRateBps": 500,
+          "discountFils": 0,
+          "quantityMilli": 3000,
+          "unitPriceFils": 500,
+          "beforeDiscountFils": 1500,
+          "bundleQuantityMilli": 0,
+          "rewardQuantityMilli": 0,
+          "eligibleQuantityMilli": 3000
+        }
+      ],
+      "totals": {
+        "netFils": 4285,
+        "taxFils": 214,
+        "grossFils": 4499,
+        "discountFils": 1,
+        "beforeDiscountFils": 4500
+      },
+      "actorId": "aff51675-9075-4c31-895f-b2ed2dd3d783",
+      "orderId": "b002ab06-fe82-4bfd-9980-9836ba83081e",
+      "shiftId": "f0f09b16-3d77-42b4-bee2-167f1ce2454c",
+      "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+      "customer": null,
+      "deviceId": "038c5c7d-d54f-4992-8cf8-56ddf158c821",
+      "issuedAt": "2026-10-16T06:05:18.923+04:00",
+      "merchant": {
+        "id": "c0c5df2a-a4a5-42a5-a109-c637e26937b3",
+        "trn": "100000000000001",
+        "phone": "Test contact",
+        "address": "Test address",
+        "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+        "currency": "AED",
+        "timezone": "Asia/Dubai",
+        "legalName": "Synthetic",
+        "branchName": "Test",
+        "confirmedAt": "2026-10-16T06:05:18.487+04:00",
+        "confirmedBy": "aff51675-9075-4c31-895f-b2ed2dd3d783",
+        "taxInclusive": true,
+        "taxRegistered": true,
+        "organizationId": "2a92f775-8836-491e-942b-7dbd40cfedef",
+        "calculationVersion": "line-v2"
+      },
+      "payments": [
+        {
+          "method": "card",
+          "amountFils": 4499
+        }
+      ],
+      "changeFils": 0,
+      "serviceType": "takeaway",
+      "appliedOffer": {
+        "lines": [
+          {
+            "netFils": 2856,
+            "taxFils": 143,
+            "grossFils": 2999,
+            "productId": "1b9842b5-4e7f-4d1c-a18c-53c7004785cc",
+            "discountFils": 1,
+            "beforeDiscountFils": 3000,
+            "bundleQuantityMilli": 0,
+            "rewardQuantityMilli": 0,
+            "eligibleQuantityMilli": 3000
+          },
+          {
+            "netFils": 1429,
+            "taxFils": 71,
+            "grossFils": 1500,
+            "productId": "366972e9-ba92-42e8-9035-7f7ccd13779c",
+            "discountFils": 0,
+            "beforeDiscountFils": 1500,
+            "bundleQuantityMilli": 0,
+            "rewardQuantityMilli": 0,
+            "eligibleQuantityMilli": 3000
+          }
+        ],
+        "benefit": {
+          "kind": "fixed",
+          "amountFils": 1,
+          "eligibility": {
+            "scope": "all"
+          }
+        },
+        "netFils": 4285,
+        "offerId": "13c64b65-c4c2-4f37-896d-b41a0e27201b",
+        "taxFils": 214,
+        "eligible": true,
+        "grossFils": 4499,
+        "offerName": "Synthetic offer",
+        "applications": 1,
+        "discountFils": 1,
+        "offerRevision": 1,
+        "appliedDefinition": {
+          "id": "13c64b65-c4c2-4f37-896d-b41a0e27201b",
+          "name": "Synthetic offer",
+          "active": true,
+          "benefit": {
+            "kind": "fixed",
+            "amountFils": 1,
+            "eligibility": {
+              "scope": "all"
+            }
+          },
+          "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+          "revision": 1,
+          "schedule": {
+            "endsAt": null,
+            "windows": [],
+            "startsAt": null,
+            "timezone": "Asia/Dubai"
+          },
+          "managerOnly": false,
+          "serviceTypes": [
+            "dine_in",
+            "takeaway",
+            "delivery"
+          ],
+          "couponRequired": false,
+          "minimumSpendFils": 0,
+          "perCustomerLimit": null,
+          "totalRedemptionsLimit": null
+        },
+        "beforeDiscountFils": 4500,
+        "calculationVersion": "offer-v1"
+      },
+      "schemaVersion": 2,
+      "documentNumber": "TEST-INV-0000000004",
+      "cashTenderedFils": 0,
+      "paymentSettlement": "recorded"
+    },
+    {
+      "id": "1ffda89a-6070-4ac2-a19f-8e1e3f881842",
+      "kind": "tax_invoice",
+      "lines": [
+        {
+          "name": "Original item",
+          "unit": "piece",
+          "netFils": 2857,
+          "taxFils": 143,
+          "grossFils": 3000,
+          "productId": "1b9842b5-4e7f-4d1c-a18c-53c7004785cc",
+          "lineNumber": 1,
+          "taxRateBps": 500,
+          "discountFils": 0,
+          "quantityMilli": 3000,
+          "unitPriceFils": 1000,
+          "beforeDiscountFils": 3000,
+          "bundleQuantityMilli": 0,
+          "rewardQuantityMilli": 0,
+          "eligibleQuantityMilli": 3000
+        },
+        {
+          "name": "Second item",
+          "unit": "piece",
+          "netFils": 476,
+          "taxFils": 24,
+          "grossFils": 500,
+          "productId": "366972e9-ba92-42e8-9035-7f7ccd13779c",
+          "lineNumber": 2,
+          "taxRateBps": 500,
+          "discountFils": 1000,
+          "quantityMilli": 3000,
+          "unitPriceFils": 500,
+          "beforeDiscountFils": 1500,
+          "bundleQuantityMilli": 0,
+          "rewardQuantityMilli": 2000,
+          "eligibleQuantityMilli": 3000
+        }
+      ],
+      "totals": {
+        "netFils": 3333,
+        "taxFils": 167,
+        "grossFils": 3500,
+        "discountFils": 1000,
+        "beforeDiscountFils": 4500
+      },
+      "actorId": "aff51675-9075-4c31-895f-b2ed2dd3d783",
+      "orderId": "64db6676-18dc-444c-898b-21c88a78b01e",
+      "shiftId": "f0f09b16-3d77-42b4-bee2-167f1ce2454c",
+      "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+      "customer": null,
+      "deviceId": "038c5c7d-d54f-4992-8cf8-56ddf158c821",
+      "issuedAt": "2026-10-16T06:05:18.93+04:00",
+      "merchant": {
+        "id": "c0c5df2a-a4a5-42a5-a109-c637e26937b3",
+        "trn": "100000000000001",
+        "phone": "Test contact",
+        "address": "Test address",
+        "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+        "currency": "AED",
+        "timezone": "Asia/Dubai",
+        "legalName": "Synthetic",
+        "branchName": "Test",
+        "confirmedAt": "2026-10-16T06:05:18.487+04:00",
+        "confirmedBy": "aff51675-9075-4c31-895f-b2ed2dd3d783",
+        "taxInclusive": true,
+        "taxRegistered": true,
+        "organizationId": "2a92f775-8836-491e-942b-7dbd40cfedef",
+        "calculationVersion": "line-v2"
+      },
+      "payments": [
+        {
+          "method": "card",
+          "amountFils": 3500
+        }
+      ],
+      "changeFils": 0,
+      "serviceType": "takeaway",
+      "appliedOffer": {
+        "lines": [
+          {
+            "netFils": 2857,
+            "taxFils": 143,
+            "grossFils": 3000,
+            "productId": "1b9842b5-4e7f-4d1c-a18c-53c7004785cc",
+            "discountFils": 0,
+            "beforeDiscountFils": 3000,
+            "bundleQuantityMilli": 0,
+            "rewardQuantityMilli": 0,
+            "eligibleQuantityMilli": 3000
+          },
+          {
+            "netFils": 476,
+            "taxFils": 24,
+            "grossFils": 500,
+            "productId": "366972e9-ba92-42e8-9035-7f7ccd13779c",
+            "discountFils": 1000,
+            "beforeDiscountFils": 1500,
+            "bundleQuantityMilli": 0,
+            "rewardQuantityMilli": 2000,
+            "eligibleQuantityMilli": 3000
+          }
+        ],
+        "benefit": {
+          "kind": "buy_x_get_y",
+          "buyUnits": 2,
+          "freeUnits": 1,
+          "eligibility": {
+            "scope": "all"
+          }
+        },
+        "netFils": 3333,
+        "offerId": "96d35ed5-dab8-493b-921e-1dde2ce20234",
+        "taxFils": 167,
+        "eligible": true,
+        "grossFils": 3500,
+        "offerName": "Synthetic offer",
+        "applications": 2,
+        "discountFils": 1000,
+        "offerRevision": 1,
+        "appliedDefinition": {
+          "id": "96d35ed5-dab8-493b-921e-1dde2ce20234",
+          "name": "Synthetic offer",
+          "active": true,
+          "benefit": {
+            "kind": "buy_x_get_y",
+            "buyUnits": 2,
+            "freeUnits": 1,
+            "eligibility": {
+              "scope": "all"
+            }
+          },
+          "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+          "revision": 1,
+          "schedule": {
+            "endsAt": null,
+            "windows": [],
+            "startsAt": null,
+            "timezone": "Asia/Dubai"
+          },
+          "managerOnly": false,
+          "serviceTypes": [
+            "dine_in",
+            "takeaway",
+            "delivery"
+          ],
+          "couponRequired": false,
+          "minimumSpendFils": 0,
+          "perCustomerLimit": null,
+          "totalRedemptionsLimit": null
+        },
+        "beforeDiscountFils": 4500,
+        "calculationVersion": "offer-v1"
+      },
+      "schemaVersion": 2,
+      "documentNumber": "TEST-INV-0000000005",
+      "cashTenderedFils": 0,
+      "paymentSettlement": "recorded"
+    },
+    {
+      "id": "6af02e00-3ae1-4b4d-9e38-cf7b4b55522a",
+      "kind": "tax_invoice",
+      "lines": [
+        {
+          "name": "Original item",
+          "unit": "piece",
+          "netFils": 1867,
+          "taxFils": 93,
+          "grossFils": 1960,
+          "productId": "1b9842b5-4e7f-4d1c-a18c-53c7004785cc",
+          "lineNumber": 1,
+          "taxRateBps": 500,
+          "discountFils": 1040,
+          "quantityMilli": 3000,
+          "unitPriceFils": 1000,
+          "beforeDiscountFils": 3000,
+          "bundleQuantityMilli": 2000,
+          "rewardQuantityMilli": 0,
+          "eligibleQuantityMilli": 3000
+        },
+        {
+          "name": "Second item",
+          "unit": "piece",
+          "netFils": 1181,
+          "taxFils": 59,
+          "grossFils": 1240,
+          "productId": "366972e9-ba92-42e8-9035-7f7ccd13779c",
+          "lineNumber": 2,
+          "taxRateBps": 500,
+          "discountFils": 260,
+          "quantityMilli": 3000,
+          "unitPriceFils": 500,
+          "beforeDiscountFils": 1500,
+          "bundleQuantityMilli": 1000,
+          "rewardQuantityMilli": 0,
+          "eligibleQuantityMilli": 3000
+        }
+      ],
+      "totals": {
+        "netFils": 3048,
+        "taxFils": 152,
+        "grossFils": 3200,
+        "discountFils": 1300,
+        "beforeDiscountFils": 4500
+      },
+      "actorId": "aff51675-9075-4c31-895f-b2ed2dd3d783",
+      "orderId": "8f7d2446-42e9-4da8-9f5a-4c7d7f24cf12",
+      "shiftId": "f0f09b16-3d77-42b4-bee2-167f1ce2454c",
+      "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+      "customer": null,
+      "deviceId": "038c5c7d-d54f-4992-8cf8-56ddf158c821",
+      "issuedAt": "2026-10-16T06:05:18.938+04:00",
+      "merchant": {
+        "id": "c0c5df2a-a4a5-42a5-a109-c637e26937b3",
+        "trn": "100000000000001",
+        "phone": "Test contact",
+        "address": "Test address",
+        "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+        "currency": "AED",
+        "timezone": "Asia/Dubai",
+        "legalName": "Synthetic",
+        "branchName": "Test",
+        "confirmedAt": "2026-10-16T06:05:18.487+04:00",
+        "confirmedBy": "aff51675-9075-4c31-895f-b2ed2dd3d783",
+        "taxInclusive": true,
+        "taxRegistered": true,
+        "organizationId": "2a92f775-8836-491e-942b-7dbd40cfedef",
+        "calculationVersion": "line-v2"
+      },
+      "payments": [
+        {
+          "method": "card",
+          "amountFils": 3200
+        }
+      ],
+      "changeFils": 0,
+      "serviceType": "takeaway",
+      "appliedOffer": {
+        "lines": [
+          {
+            "netFils": 1867,
+            "taxFils": 93,
+            "grossFils": 1960,
+            "productId": "1b9842b5-4e7f-4d1c-a18c-53c7004785cc",
+            "discountFils": 1040,
+            "beforeDiscountFils": 3000,
+            "bundleQuantityMilli": 2000,
+            "rewardQuantityMilli": 0,
+            "eligibleQuantityMilli": 3000
+          },
+          {
+            "netFils": 1181,
+            "taxFils": 59,
+            "grossFils": 1240,
+            "productId": "366972e9-ba92-42e8-9035-7f7ccd13779c",
+            "discountFils": 260,
+            "beforeDiscountFils": 1500,
+            "bundleQuantityMilli": 1000,
+            "rewardQuantityMilli": 0,
+            "eligibleQuantityMilli": 3000
+          }
+        ],
+        "benefit": {
+          "kind": "bundle",
+          "priceFils": 1200,
+          "components": [
+            {
+              "units": 2,
+              "productId": "1b9842b5-4e7f-4d1c-a18c-53c7004785cc"
+            },
+            {
+              "units": 1,
+              "productId": "366972e9-ba92-42e8-9035-7f7ccd13779c"
+            }
+          ]
+        },
+        "netFils": 3048,
+        "offerId": "d8c4d46a-960d-4f28-b285-22a52a936259",
+        "taxFils": 152,
+        "eligible": true,
+        "grossFils": 3200,
+        "offerName": "Synthetic offer",
+        "applications": 1,
+        "discountFils": 1300,
+        "offerRevision": 1,
+        "appliedDefinition": {
+          "id": "d8c4d46a-960d-4f28-b285-22a52a936259",
+          "name": "Synthetic offer",
+          "active": true,
+          "benefit": {
+            "kind": "bundle",
+            "priceFils": 1200,
+            "components": [
+              {
+                "units": 2,
+                "productId": "1b9842b5-4e7f-4d1c-a18c-53c7004785cc"
+              },
+              {
+                "units": 1,
+                "productId": "366972e9-ba92-42e8-9035-7f7ccd13779c"
+              }
+            ]
+          },
+          "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+          "revision": 1,
+          "schedule": {
+            "endsAt": null,
+            "windows": [],
+            "startsAt": null,
+            "timezone": "Asia/Dubai"
+          },
+          "managerOnly": false,
+          "serviceTypes": [
+            "dine_in",
+            "takeaway",
+            "delivery"
+          ],
+          "couponRequired": false,
+          "minimumSpendFils": 0,
+          "perCustomerLimit": null,
+          "totalRedemptionsLimit": null
+        },
+        "beforeDiscountFils": 4500,
+        "calculationVersion": "offer-v1"
+      },
+      "schemaVersion": 2,
+      "documentNumber": "TEST-INV-0000000006",
+      "cashTenderedFils": 0,
+      "paymentSettlement": "recorded"
+    },
+    {
+      "id": "9efd4627-3372-49fa-881f-23680721e2ef",
+      "kind": "tax_invoice",
+      "lines": [
+        {
+          "name": "Original item",
+          "unit": "piece",
+          "netFils": 0,
+          "taxFils": 0,
+          "grossFils": 0,
+          "productId": "1b9842b5-4e7f-4d1c-a18c-53c7004785cc",
+          "lineNumber": 1,
+          "taxRateBps": 500,
+          "discountFils": 1000,
+          "quantityMilli": 1000,
+          "unitPriceFils": 1000,
+          "beforeDiscountFils": 1000,
+          "bundleQuantityMilli": 0,
+          "rewardQuantityMilli": 0,
+          "eligibleQuantityMilli": 1000
+        },
+        {
+          "name": "Second item",
+          "unit": "piece",
+          "netFils": 476,
+          "taxFils": 24,
+          "grossFils": 500,
+          "productId": "366972e9-ba92-42e8-9035-7f7ccd13779c",
+          "lineNumber": 2,
+          "taxRateBps": 500,
+          "discountFils": 0,
+          "quantityMilli": 1000,
+          "unitPriceFils": 500,
+          "beforeDiscountFils": 500,
+          "bundleQuantityMilli": 0,
+          "rewardQuantityMilli": 0,
+          "eligibleQuantityMilli": 0
+        }
+      ],
+      "totals": {
+        "netFils": 476,
+        "taxFils": 24,
+        "grossFils": 500,
+        "discountFils": 1000,
+        "beforeDiscountFils": 1500
+      },
+      "actorId": "aff51675-9075-4c31-895f-b2ed2dd3d783",
+      "orderId": "c64eac92-313e-41de-83e4-aae85001a49e",
+      "shiftId": "f0f09b16-3d77-42b4-bee2-167f1ce2454c",
+      "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+      "customer": null,
+      "deviceId": "038c5c7d-d54f-4992-8cf8-56ddf158c821",
+      "issuedAt": "2026-10-16T06:05:18.942+04:00",
+      "merchant": {
+        "id": "c0c5df2a-a4a5-42a5-a109-c637e26937b3",
+        "trn": "100000000000001",
+        "phone": "Test contact",
+        "address": "Test address",
+        "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+        "currency": "AED",
+        "timezone": "Asia/Dubai",
+        "legalName": "Synthetic",
+        "branchName": "Test",
+        "confirmedAt": "2026-10-16T06:05:18.487+04:00",
+        "confirmedBy": "aff51675-9075-4c31-895f-b2ed2dd3d783",
+        "taxInclusive": true,
+        "taxRegistered": true,
+        "organizationId": "2a92f775-8836-491e-942b-7dbd40cfedef",
+        "calculationVersion": "line-v2"
+      },
+      "payments": [
+        {
+          "method": "cash",
+          "amountFils": 500
+        }
+      ],
+      "changeFils": 0,
+      "serviceType": "takeaway",
+      "appliedOffer": {
+        "lines": [
+          {
+            "netFils": 0,
+            "taxFils": 0,
+            "grossFils": 0,
+            "productId": "1b9842b5-4e7f-4d1c-a18c-53c7004785cc",
+            "discountFils": 1000,
+            "beforeDiscountFils": 1000,
+            "bundleQuantityMilli": 0,
+            "rewardQuantityMilli": 0,
+            "eligibleQuantityMilli": 1000
+          },
+          {
+            "netFils": 476,
+            "taxFils": 24,
+            "grossFils": 500,
+            "productId": "366972e9-ba92-42e8-9035-7f7ccd13779c",
+            "discountFils": 0,
+            "beforeDiscountFils": 500,
+            "bundleQuantityMilli": 0,
+            "rewardQuantityMilli": 0,
+            "eligibleQuantityMilli": 0
+          }
+        ],
+        "benefit": {
+          "kind": "fixed",
+          "amountFils": 1000,
+          "eligibility": {
+            "scope": "products",
+            "productIds": [
+              "1b9842b5-4e7f-4d1c-a18c-53c7004785cc"
+            ]
+          }
+        },
+        "netFils": 476,
+        "offerId": "df63fd2f-2b1f-4a24-90e7-89e77445a46e",
+        "taxFils": 24,
+        "eligible": true,
+        "grossFils": 500,
+        "offerName": "Synthetic offer",
+        "applications": 1,
+        "discountFils": 1000,
+        "offerRevision": 1,
+        "appliedDefinition": {
+          "id": "df63fd2f-2b1f-4a24-90e7-89e77445a46e",
+          "name": "Synthetic offer",
+          "active": true,
+          "benefit": {
+            "kind": "fixed",
+            "amountFils": 1000,
+            "eligibility": {
+              "scope": "products",
+              "productIds": [
+                "1b9842b5-4e7f-4d1c-a18c-53c7004785cc"
+              ]
+            }
+          },
+          "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+          "revision": 1,
+          "schedule": {
+            "endsAt": null,
+            "windows": [],
+            "startsAt": null,
+            "timezone": "Asia/Dubai"
+          },
+          "managerOnly": false,
+          "serviceTypes": [
+            "dine_in",
+            "takeaway",
+            "delivery"
+          ],
+          "couponRequired": false,
+          "minimumSpendFils": 0,
+          "perCustomerLimit": null,
+          "totalRedemptionsLimit": null
+        },
+        "beforeDiscountFils": 1500,
+        "calculationVersion": "offer-v1"
+      },
+      "schemaVersion": 2,
+      "documentNumber": "TEST-INV-0000000007",
+      "cashTenderedFils": 500,
+      "paymentSettlement": "recorded"
+    }
+  ],
+  "credit": {
+    "id": "ec50b325-d171-46ac-9269-c28ee44ac02e",
+    "kind": "tax_credit_note",
+    "lines": [
+      {
+        "name": "Original item",
+        "unit": "piece",
+        "netFils": 857,
+        "taxFils": 43,
+        "grossFils": 900,
+        "productId": "1b9842b5-4e7f-4d1c-a18c-53c7004785cc",
+        "lineNumber": 1,
+        "taxRateBps": 500,
+        "discountFils": 100,
+        "quantityMilli": 1000,
+        "unitPriceFils": 1000,
+        "beforeDiscountFils": 1000,
+        "bundleQuantityMilli": 0,
+        "rewardQuantityMilli": 0,
+        "eligibleQuantityMilli": 1000
+      }
+    ],
+    "reason": "Synthetic return",
+    "totals": {
+      "netFils": 857,
+      "taxFils": 43,
+      "grossFils": 900,
+      "discountFils": 100,
+      "beforeDiscountFils": 1000
+    },
+    "actorId": "aff51675-9075-4c31-895f-b2ed2dd3d783",
+    "orderId": "ae3bfd05-4a6f-4b86-a2f9-b4c0e6b7bfa9",
+    "shiftId": "f0f09b16-3d77-42b4-bee2-167f1ce2454c",
+    "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+    "customer": null,
+    "deviceId": "038c5c7d-d54f-4992-8cf8-56ddf158c821",
+    "issuedAt": "2026-10-16T06:05:18.906+04:00",
+    "merchant": {
+      "id": "c0c5df2a-a4a5-42a5-a109-c637e26937b3",
+      "trn": "100000000000001",
+      "phone": "Test contact",
+      "address": "Test address",
+      "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+      "currency": "AED",
+      "timezone": "Asia/Dubai",
+      "legalName": "Synthetic",
+      "branchName": "Test",
+      "confirmedAt": "2026-10-16T06:05:18.487+04:00",
+      "confirmedBy": "aff51675-9075-4c31-895f-b2ed2dd3d783",
+      "taxInclusive": true,
+      "taxRegistered": true,
+      "organizationId": "2a92f775-8836-491e-942b-7dbd40cfedef",
+      "calculationVersion": "line-v2"
+    },
+    "payments": [
+      {
+        "method": "cash",
+        "amountFils": 900
+      }
+    ],
+    "serviceType": "takeaway",
+    "appliedOffer": {
+      "lines": [
+        {
+          "netFils": 857,
+          "taxFils": 43,
+          "grossFils": 900,
+          "productId": "1b9842b5-4e7f-4d1c-a18c-53c7004785cc",
+          "discountFils": 100,
+          "beforeDiscountFils": 1000,
+          "bundleQuantityMilli": 0,
+          "rewardQuantityMilli": 0,
+          "eligibleQuantityMilli": 1000
+        }
+      ],
+      "benefit": {
+        "kind": "percentage",
+        "basisPoints": 1000,
+        "eligibility": {
+          "scope": "all"
+        },
+        "maximumDiscountFils": null
+      },
+      "netFils": 857,
+      "offerId": "034202bb-ac96-4f1f-b00e-5621933b02d8",
+      "taxFils": 43,
+      "eligible": true,
+      "grossFils": 900,
+      "offerName": "Synthetic offer",
+      "applications": 1,
+      "discountFils": 100,
+      "offerRevision": 1,
+      "appliedDefinition": {
+        "id": "034202bb-ac96-4f1f-b00e-5621933b02d8",
+        "name": "Synthetic offer",
+        "active": true,
+        "benefit": {
+          "kind": "percentage",
+          "basisPoints": 1000,
+          "eligibility": {
+            "scope": "all"
+          },
+          "maximumDiscountFils": null
+        },
+        "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+        "revision": 1,
+        "schedule": {
+          "endsAt": null,
+          "windows": [],
+          "startsAt": null,
+          "timezone": "Asia/Dubai"
+        },
+        "managerOnly": false,
+        "serviceTypes": [
+          "dine_in",
+          "takeaway",
+          "delivery"
+        ],
+        "couponRequired": true,
+        "minimumSpendFils": 0,
+        "perCustomerLimit": null,
+        "totalRedemptionsLimit": 1
+      },
+      "beforeDiscountFils": 1000,
+      "calculationVersion": "offer-v1"
+    },
+    "schemaVersion": 2,
+    "adjustedTotals": {
+      "netFils": 0,
+      "taxFils": 0,
+      "grossFils": 0
+    },
+    "documentNumber": "TEST-CN-0000000001",
+    "originalInvoice": {
+      "taxFils": 43,
+      "issuedAt": "2026-10-16T06:05:18.888+04:00",
+      "totalFils": 900,
+      "documentId": "df0e4214-d420-48d2-b752-8780e2cb6a86",
+      "documentNumber": "TEST-INV-0000000002"
+    },
+    "paymentSettlement": "recorded"
+  },
+  "quoted": {
+    "quotes": [
+      {
+        "lines": [
+          {
+            "netFils": 857,
+            "taxFils": 43,
+            "grossFils": 900,
+            "productId": "1b9842b5-4e7f-4d1c-a18c-53c7004785cc",
+            "discountFils": 100,
+            "beforeDiscountFils": 1000,
+            "bundleQuantityMilli": 0,
+            "rewardQuantityMilli": 0,
+            "eligibleQuantityMilli": 1000
+          }
+        ],
+        "benefit": {
+          "kind": "percentage",
+          "basisPoints": 1000,
+          "eligibility": {
+            "scope": "all"
+          },
+          "maximumDiscountFils": null
+        },
+        "netFils": 857,
+        "offerId": "c5a8ab06-5a28-431e-98a8-0481aaf07fb0",
+        "taxFils": 43,
+        "eligible": true,
+        "grossFils": 900,
+        "offerName": "Synthetic offer",
+        "applications": 1,
+        "discountFils": 100,
+        "offerRevision": 1,
+        "appliedDefinition": {
+          "id": "c5a8ab06-5a28-431e-98a8-0481aaf07fb0",
+          "name": "Synthetic offer",
+          "active": true,
+          "benefit": {
+            "kind": "percentage",
+            "basisPoints": 1000,
+            "eligibility": {
+              "scope": "all"
+            },
+            "maximumDiscountFils": null
+          },
+          "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+          "revision": 1,
+          "schedule": {
+            "endsAt": null,
+            "windows": [],
+            "startsAt": null,
+            "timezone": "Asia/Dubai"
+          },
+          "managerOnly": false,
+          "serviceTypes": [
+            "dine_in",
+            "takeaway",
+            "delivery"
+          ],
+          "couponRequired": false,
+          "minimumSpendFils": 0,
+          "perCustomerLimit": null,
+          "totalRedemptionsLimit": null
+        },
+        "beforeDiscountFils": 1000,
+        "calculationVersion": "offer-v1"
+      }
+    ],
+    "status": "ready",
+    "branchId": "0b42ecad-183a-40d7-bf13-34fa0d1678a1",
+    "evaluatedAt": "2026-10-16T06:05:18.526+04:00"
+  }
+}
