@@ -95,6 +95,23 @@ public final class NativeLedgerPlugin extends Plugin {
         paymentRecovery().recover(id);return checkout().getPaymentIntent(id);
     },"intentId");}
     @PluginMethod public void getReceipt(PluginCall call){checkoutCall(call,()->checkout().getReceipt(call.getData().getString("id")),"id");}
+    @PluginMethod public void getNextAllocationState(PluginCall call){
+        if(call.getData().length()!=0){call.reject("Check the original allocation.","offline_context_changed");return;}
+        final long epoch=checkoutEpoch.get();
+        execute(call,()->{if(!foreground||epoch!=checkoutEpoch.get())throw new NativeAccessError("offline_continuation_uncertain");
+            org.json.JSONObject result=offline().getNextAllocationState();
+            if(!foreground||epoch!=checkoutEpoch.get())throw new NativeAccessError("offline_continuation_uncertain");return result;},true);
+    }
+    @PluginMethod public void continueAfterAllocation(PluginCall call){
+        String id=call.getString("previousAuthorityId");
+        if(call.getData().length()!=1||id==null||!id.matches("[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}")){call.reject("Select the original finished allocation.","offline_context_changed");return;}
+        showPinDialog(call,false,false,null,id,null);
+    }
+    @PluginMethod public void unlockHistoricalPayment(PluginCall call){
+        String id=call.getString("intentId");
+        if(call.getData().length()!=1||id==null||!id.matches("[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}")){call.reject("Select the original saved payment.","offline_context_changed");return;}
+        showPinDialog(call,false,false,null,null,id);
+    }
     @PluginMethod public void getReconciliationState(PluginCall call){execute(call,()->reconciliation().getState(),true);}
     @PluginMethod public void reconcileOffline(PluginCall call){execute(call,()->reconciliation().reconcile(),true);}
     @PluginMethod public void finishOfflineAuthority(PluginCall call){
@@ -142,20 +159,25 @@ public final class NativeLedgerPlugin extends Plugin {
     @PluginMethod public void unlockOffline(PluginCall call){showPinDialog(call,false,true);}
     @PluginMethod public void lockOffline(PluginCall call){notifyCheckoutLocked();execute(call,()->{offline().lock();return offline().getState();},true);}
     private void showPinDialog(PluginCall call,boolean create,boolean unlockOnly){showPinDialog(call,create,unlockOnly,null);}
-    private void showPinDialog(PluginCall call,boolean create,boolean unlockOnly,String finishAuthorityId){
+    private void showPinDialog(PluginCall call,boolean create,boolean unlockOnly,String finishAuthorityId){showPinDialog(call,create,unlockOnly,finishAuthorityId,null,null);}
+    private void showPinDialog(PluginCall call,boolean create,boolean unlockOnly,String finishAuthorityId,String continueAuthorityId,String historicalIntentId){
+        final long operationEpoch=checkoutEpoch.get();
+        final boolean guarded=continueAuthorityId!=null||historicalIntentId!=null;
         getActivity().runOnUiThread(()->{
-            if(destroyed||!foreground||getActivity().isFinishing()||credentials!=null){call.reject("PIN entry is unavailable right now.","native_pin_cancelled");return;}
+            if(destroyed||!foreground||(guarded&&operationEpoch!=checkoutEpoch.get())||getActivity().isFinishing()||credentials!=null){call.reject("PIN entry is unavailable right now.","native_pin_cancelled");return;}
             LinearLayout layout=new LinearLayout(getActivity());layout.setOrientation(LinearLayout.VERTICAL);int padding=(int)(24*getContext().getResources().getDisplayMetrics().density);layout.setPadding(padding,8,padding,8);
             EditText pin=pinField(create?"Choose an 8–12 digit PIN":"Enter your PIN"),confirm=create?pinField("Confirm your PIN"):null;layout.addView(pin);if(confirm!=null)layout.addView(confirm);passwordField=pin;
-            AlertDialog dialog=new AlertDialog.Builder(getActivity()).setTitle(finishAuthorityId!=null?"Finish offline allocation":create?"Set this counter PIN":"Unlock this counter").setMessage(finishAuthorityId!=null?"This permanently stops use of this saved allocation. Your records are kept. This does not close the cash shift.":create?"Use a PIN for this staff account on this device. It is separate from your account password.":"Your PIN is checked on this device.").setView(layout).setNegativeButton("Cancel",(d,w)->call.reject("PIN entry cancelled.","native_pin_cancelled")).setPositiveButton(finishAuthorityId!=null?"Finish allocation":create?"Set PIN":"Unlock",null).create();
+            AlertDialog dialog=new AlertDialog.Builder(getActivity()).setTitle(continueAuthorityId!=null?"Continue counter setup":historicalIntentId!=null?"Unlock original payment":finishAuthorityId!=null?"Finish offline allocation":create?"Set this counter PIN":"Unlock this counter").setMessage(continueAuthorityId!=null?"The previous allocation and all its records are kept. This does not close a cash shift or issue a new allocation.":historicalIntentId!=null?"Your PIN unlocks this payment under its original staff and shift scope.":finishAuthorityId!=null?"This permanently stops use of this saved allocation. Your records are kept. This does not close the cash shift.":create?"Use a PIN for this staff account on this device. It is separate from your account password.":"Your PIN is checked on this device.").setView(layout).setNegativeButton("Cancel",(d,w)->call.reject("PIN entry cancelled.","native_pin_cancelled")).setPositiveButton(continueAuthorityId!=null?"Continue setup":finishAuthorityId!=null?"Finish allocation":create?"Set PIN":"Unlock",null).create();
             credentials=dialog;dialog.setOnCancelListener(d->call.reject("PIN entry cancelled.","native_pin_cancelled"));dialog.setOnDismissListener(d->{pin.getText().clear();if(confirm!=null)confirm.getText().clear();if(credentials==dialog){credentials=null;passwordField=null;}});
             dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
                 if(pin.length()<8||pin.length()>12){pin.setError("Use 8–12 digits");return;}
                 char[] secret=new char[pin.length()],repeat=confirm==null?null:new char[confirm.length()];android.text.TextUtils.getChars(pin.getText(),0,pin.length(),secret,0);if(confirm!=null)android.text.TextUtils.getChars(confirm.getText(),0,confirm.length(),repeat,0);
                 if(create&&!Arrays.equals(secret,repeat)){Arrays.fill(secret,'\0');Arrays.fill(repeat,'\0');confirm.setError("PINs must match");return;}
-                dialog.dismiss();if(!execute(call,()->{try{if(!foreground)throw new NativeAccessError("native_pin_cancelled");org.json.JSONObject result;
-                    if(finishAuthorityId!=null){offline().finishAuthorityWithPin(finishAuthorityId,secret);result=foreground?reconciliation().reconcile():reconciliation().getState();}
-                    else result=unlockOnly?offline().unlockWithPin(secret):offline().prepareWithPin(secret,repeat);if(!foreground){offline().lock();return finishAuthorityId!=null?reconciliation().getState():offline().getState();}return result;}finally{Arrays.fill(secret,'\0');if(repeat!=null)Arrays.fill(repeat,'\0');}},true)){Arrays.fill(secret,'\0');if(repeat!=null)Arrays.fill(repeat,'\0');}
+                dialog.dismiss();if(!execute(call,()->{try{if(!foreground||(guarded&&operationEpoch!=checkoutEpoch.get()))throw new NativeAccessError("native_pin_cancelled");org.json.JSONObject result;
+                    if(continueAuthorityId!=null)result=offline().continueAfterAllocationWithPin(continueAuthorityId,secret);
+                    else if(historicalIntentId!=null){offline().unlockHistoricalIntentWithPin(historicalIntentId,secret);result=checkout().getPaymentIntent(historicalIntentId);}
+                    else if(finishAuthorityId!=null){offline().finishAuthorityWithPin(finishAuthorityId,secret);result=foreground?reconciliation().reconcile():reconciliation().getState();}
+                    else result=unlockOnly?offline().unlockWithPin(secret):offline().prepareWithPin(secret,repeat);if(guarded&&(!foreground||operationEpoch!=checkoutEpoch.get())){offline().lock();throw new NativeAccessError("native_pin_cancelled");}if(!foreground){offline().lock();return finishAuthorityId!=null?reconciliation().getState():offline().getState();}return result;}finally{Arrays.fill(secret,'\0');if(repeat!=null)Arrays.fill(repeat,'\0');}},true)){Arrays.fill(secret,'\0');if(repeat!=null)Arrays.fill(repeat,'\0');}
             }));if(dialog.getWindow()!=null)dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);dialog.show();
         });
     }

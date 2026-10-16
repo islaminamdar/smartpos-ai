@@ -1,0 +1,88 @@
+{
+  "nextAllocationStates": {
+    "unprepared": {
+      "schemaVersion": 1,
+      "status": "not_available",
+      "previousAuthorityId": null,
+      "shiftId": null,
+      "nextShiftId": null,
+      "reasonCode": null,
+      "canContinue": false
+    },
+    "active": {
+      "schemaVersion": 1,
+      "status": "blocked",
+      "previousAuthorityId": "59c4e8e2-a1ea-4010-8053-2c0ea1999600",
+      "shiftId": "28782c5d-76e7-4bc0-8fba-8a143846a699",
+      "nextShiftId": null,
+      "reasonCode": "offline_allocation_active",
+      "canContinue": false
+    },
+    "uploadPending": {
+      "schemaVersion": 1,
+      "status": "pending",
+      "previousAuthorityId": "59c4e8e2-a1ea-4010-8053-2c0ea1999600",
+      "shiftId": "28782c5d-76e7-4bc0-8fba-8a143846a699",
+      "nextShiftId": null,
+      "reasonCode": "offline_upload_required",
+      "canContinue": false
+    },
+    "ready": {
+      "schemaVersion": 1,
+      "status": "ready",
+      "previousAuthorityId": "59c4e8e2-a1ea-4010-8053-2c0ea1999600",
+      "shiftId": "28782c5d-76e7-4bc0-8fba-8a143846a699",
+      "nextShiftId": null,
+      "reasonCode": null,
+      "canContinue": true
+    },
+    "completed": {
+      "schemaVersion": 1,
+      "status": "completed",
+      "previousAuthorityId": "59c4e8e2-a1ea-4010-8053-2c0ea1999600",
+      "shiftId": "28782c5d-76e7-4bc0-8fba-8a143846a699",
+      "nextShiftId": "28782c5d-76e7-4bc0-8fba-8a143846a699",
+      "reasonCode": null,
+      "canContinue": false
+    },
+    "archivePending": {
+      "schemaVersion": 1,
+      "status": "pending",
+      "previousAuthorityId": "59c4e8e2-a1ea-4010-8053-2c0ea1999600",
+      "shiftId": "28782c5d-76e7-4bc0-8fba-8a143846a699",
+      "nextShiftId": "28782c5d-76e7-4bc0-8fba-8a143846a699",
+      "reasonCode": "offline_continuation_uncertain",
+      "canContinue": true
+    },
+    "closedCompleted": {
+      "schemaVersion": 1,
+      "status": "completed",
+      "previousAuthorityId": "59c4e8e2-a1ea-4010-8053-2c0ea1999600",
+      "shiftId": "28782c5d-76e7-4bc0-8fba-8a143846a699",
+      "nextShiftId": null,
+      "reasonCode": null,
+      "canContinue": false
+    },
+    "signedOut": {
+      "schemaVersion": 1,
+      "status": "blocked",
+      "previousAuthorityId": null,
+      "shiftId": null,
+      "nextShiftId": null,
+      "reasonCode": "native_session_expired",
+      "canContinue": false
+    }
+  },
+  "closedPreparation": {
+    "schemaVersion": 1,
+    "status": "not_prepared",
+    "stage": "open_shift",
+    "canIssue": false,
+    "shiftId": null,
+    "authority": null,
+    "pinProvisioned": false,
+    "noticeCode": "offline_shift_required",
+    "pendingAction": null,
+    "pendingOpeningCashFils": null
+  }
+}

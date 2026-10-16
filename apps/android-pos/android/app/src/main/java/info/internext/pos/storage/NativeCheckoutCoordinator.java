@@ -9,7 +9,12 @@ import org.json.JSONObject;
 /** Scope/PIN boundary for the counter. Browser values never grant permission to issue.
  * Production remains disabled until payment-expiry recovery and device acceptance are complete. */
 public final class NativeCheckoutCoordinator {
-    interface ContextSource { CheckoutContext load(boolean requireUnlocked) throws Exception; }
+    interface ContextSource {
+        CheckoutContext load(boolean requireUnlocked)throws Exception;
+        default CheckoutContext historical(String authorityId,boolean requireUnlocked)throws Exception{
+            CheckoutContext current=load(requireUnlocked);requireAuthority(current,authorityId);return current;
+        }
+    }
     static final class CheckoutContext {
         final OfflineBundle bundle; final NativeCheckoutEngine engine;
         CheckoutContext(OfflineBundle bundle,NativeCheckoutEngine engine){this.bundle=bundle;this.engine=engine;}
@@ -17,7 +22,10 @@ public final class NativeCheckoutCoordinator {
     private final NativeJournal journal;
     private final ContextSource source;
     private final boolean releaseEnabled;
-    public NativeCheckoutCoordinator(NativeJournal journal,NativeOfflineCoordinator offline){this(journal,offline::checkoutContext,false);}
+    public NativeCheckoutCoordinator(NativeJournal journal,NativeOfflineCoordinator offline){this(journal,new ContextSource(){
+        public CheckoutContext load(boolean requireUnlocked)throws Exception{return offline.checkoutContext(requireUnlocked);}
+        public CheckoutContext historical(String authorityId,boolean requireUnlocked)throws Exception{return offline.historicalCheckoutContext(authorityId,requireUnlocked);}
+    },false);}
     // This constructor is only accessible to native package tests, never a PluginCall/config flag.
     NativeCheckoutCoordinator(NativeJournal journal,ContextSource source,boolean releaseEnabled){this.journal=journal;this.source=source;this.releaseEnabled=releaseEnabled;}
 
@@ -32,7 +40,12 @@ public final class NativeCheckoutCoordinator {
             .put("lastResolvedIntentId",JSONObject.NULL).put("lastResolvedIntent",JSONObject.NULL);
         try{
             // Never acquire the session source while holding the journal monitor.
-            CheckoutContext visible=source.load(false);state.put("context",context(visible.bundle));
+            CheckoutContext visible;
+            try{visible=source.load(false);}catch(Exception unavailable){
+                if(pending==null)throw unavailable;
+                visible=source.historical(authorityForIntent(pending),false);
+            }
+            state.put("context",context(visible.bundle));
             synchronized(journal){
                 pending=null;
                 try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT i.id FROM intents i LEFT JOIN offline_intent_cancellations c ON c.intent_id=i.id WHERE i.receipt_id IS NULL AND c.intent_id IS NULL ORDER BY i.rowid",null)){
@@ -42,6 +55,15 @@ public final class NativeCheckoutCoordinator {
                     last=c.moveToFirst()?c.getString(0):null;
                 }
                 state.put("pendingIntentId",nullable(pending)).put("lastReceiptId",nullable(last));
+            }
+            if(pending!=null){
+                CheckoutContext original=source.historical(authorityForIntent(pending),true);
+                synchronized(journal){
+                    JSONObject saved=intent(original,pending);
+                    if("manager_resolved".equals(saved.getString("state"))){state.put("reasonCode","payment_reconciliation_required");return state;}
+                    state.put("unresolvedIntent",saved);
+                    return state.put("reasonCode","frozen_for_manager".equals(saved.getString("state"))?"payment_frozen":"payment_reconciliation_required");
+                }
             }
             CheckoutContext unlocked=source.load(true);state.put("context",context(unlocked.bundle));
             synchronized(journal){
@@ -61,9 +83,13 @@ public final class NativeCheckoutCoordinator {
                 if(last!=null)state.put("lastReceipt",receipt(unlocked,last));
                 if(resolved!=null)state.put("lastResolvedIntentId",resolved).put("lastResolvedIntent",intent(unlocked,resolved));
                 if(pending!=null)return state.put("reasonCode","frozen_for_manager".equals(state.getJSONObject("unresolvedIntent").getString("state"))?"payment_frozen":"payment_reconciliation_required");
-                requireReleased();unlocked.engine.requireReady(unlocked.bundle.authorityId,null);state.put("canIssue",true);
+                if(!releaseEnabled)return state.put("reasonCode","native_checkout_not_enabled");
+                unlocked.engine.requireReady(unlocked.bundle.authorityId,null);state.put("canIssue",true);
             }
-        }catch(Exception error){state.put("reasonCode",code(error));}
+        }catch(Exception error){
+            // Any late authorization/integrity failure clears accumulated private details.
+            state.put("unresolvedIntent",JSONObject.NULL).put("lastReceipt",JSONObject.NULL).put("lastResolvedIntentId",JSONObject.NULL).put("lastResolvedIntent",JSONObject.NULL).put("reasonCode",code(error));
+        }
         return state;
     }
     public synchronized JSONObject quoteBasket(JSONObject input)throws Exception{
@@ -83,7 +109,7 @@ public final class NativeCheckoutCoordinator {
         }
     }
     public synchronized JSONObject getPaymentIntent(String id)throws Exception{
-        CheckoutContext context=source.load(true);synchronized(journal){return intent(context,id);}
+        CheckoutContext context=source.historical(authorityForIntent(id),true);synchronized(journal){return intent(context,id);}
     }
     public synchronized JSONObject confirmPaymentIntent(String id)throws Exception{
         CheckoutContext context=source.load(true);
@@ -104,7 +130,11 @@ public final class NativeCheckoutCoordinator {
         synchronized(journal){requireIntentScope(context,id);context.engine.freezePaymentIntentForManager(id);return intent(context,id);}
     }
     public synchronized JSONObject getReceipt(String id)throws Exception{
-        CheckoutContext context=source.load(true);synchronized(journal){return receipt(context,id);}
+        String intentId;synchronized(journal){try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT intent_id FROM receipts WHERE id=?",new String[]{id})){if(!c.moveToFirst())throw fail("receipt_missing");intentId=c.getString(0);}}
+        CheckoutContext context=source.historical(authorityForIntent(intentId),true);synchronized(journal){return receipt(context,id);}
+    }
+    private String authorityForIntent(String id)throws Exception{
+        synchronized(journal){try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT authority_id FROM offline_intent_context WHERE intent_id=?",new String[]{id})){if(!c.moveToFirst())throw fail("intent_missing");return c.getString(0);}}
     }
     private JSONObject intent(CheckoutContext context,String id)throws Exception{
         requireIntentScope(context,id);JSONObject saved=context.engine.getIntent(id),request=saved.getJSONObject("request");

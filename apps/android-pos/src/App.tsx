@@ -28,6 +28,7 @@ import {
 } from './native'
 import NativeCounter from './NativeCounter'
 import NativeBundleRecovery from './NativeBundleRecovery'
+import NativeNextAllocation from './NativeNextAllocation'
 import './app.css'
 
 const date = (value: string) =>
@@ -694,6 +695,8 @@ function NativeAccess({
   const [offlineBusy, setOfflineBusy] = useState(false)
   const [reconciliationBusy, setReconciliationBusy] = useState(false)
   const [recoveryBusy, setRecoveryBusy] = useState(false)
+  const [nextAllocationBusy, setNextAllocationBusy] = useState(false)
+  const [nextAllocationPending, setNextAllocationPending] = useState(false)
   const [reconciliationCheckedVersion, setReconciliationCheckedVersion] = useState(-1)
   const [preparation, setPreparation] = useState<NativeOfflineState | null>(null)
   const [accessInitialized, setAccessInitialized] = useState(false)
@@ -760,7 +763,7 @@ function NativeAccess({
       reconciliationCheckedVersion !== accessVersion
     )
       return
-    if (kind !== 'signin' && financialHold) return
+    if (kind !== 'signin' && (financialHold || nextAllocationPending)) return
     if (kind === 'signin' && (access.status !== 'signed_out' || pendingLogout)) return
     if (
       kind !== 'signin' &&
@@ -835,6 +838,7 @@ function NativeAccess({
     !offlineBusy &&
     !reconciliationBusy &&
     !recoveryBusy &&
+    !nextAllocationBusy &&
     offlineCheckedVersion === accessVersion &&
     reconciliationCheckedVersion === accessVersion
   useEffect(() => {
@@ -846,6 +850,7 @@ function NativeAccess({
     offlineBusy ||
     reconciliationBusy ||
     recoveryBusy ||
+    nextAllocationBusy ||
     !fresh ||
     offlineCheckedVersion !== accessVersion ||
     reconciliationCheckedVersion !== accessVersion
@@ -944,7 +949,7 @@ function NativeAccess({
                     <select
                       value={branchId}
                       onChange={(event) => setBranchId(event.target.value)}
-                      disabled={paused || financialHold}
+                      disabled={paused || nextAllocationPending || financialHold}
                     >
                       <option value="">Select your branch</option>
                       {access.branches.map((item) => (
@@ -975,12 +980,18 @@ function NativeAccess({
                           maxLength={80}
                           autoComplete="off"
                           placeholder="For example, Front counter"
-                          disabled={paused || financialHold || !branch}
+                          disabled={paused || nextAllocationPending || financialHold || !branch}
                         />
                       </label>
                       <button
                         className="primary"
-                        disabled={paused || financialHold || !branch || !name.trim()}
+                        disabled={
+                          paused ||
+                          nextAllocationPending ||
+                          financialHold ||
+                          !branch ||
+                          !name.trim()
+                        }
                         onClick={() => void change('enroll')}
                       >
                         Enroll this counter
@@ -995,7 +1006,7 @@ function NativeAccess({
               )}
               <button
                 className="secondary signout"
-                disabled={paused || financialHold}
+                disabled={paused || nextAllocationPending || financialHold}
                 onClick={() => void change('signout')}
               >
                 Sign out of this app
@@ -1007,7 +1018,7 @@ function NativeAccess({
               <p>New sign-in is paused until server sign-out is confirmed.</p>
               <button
                 className="secondary"
-                disabled={paused || financialHold || !access}
+                disabled={paused || nextAllocationPending || financialHold || !access}
                 onClick={() => void change('signout')}
               >
                 Finish sign-out
@@ -1016,7 +1027,14 @@ function NativeAccess({
           )}
           <button
             className="secondary access-refresh"
-            disabled={externalBusy || recoveryBusy || !!busy || offlineBusy || reconciliationBusy}
+            disabled={
+              externalBusy ||
+              nextAllocationBusy ||
+              recoveryBusy ||
+              !!busy ||
+              offlineBusy ||
+              reconciliationBusy
+            }
             onClick={() => void check()}
           >
             {busy === 'check' ? 'Checking access…' : 'Check access'}
@@ -1031,14 +1049,19 @@ function NativeAccess({
       )}
       <OfflinePreparation
         available={available}
-        accessBusy={!!busy || !accessInitialized || reconciliationBusy || recoveryBusy}
+        accessBusy={
+          !!busy || !accessInitialized || reconciliationBusy || recoveryBusy || nextAllocationBusy
+        }
         accessVersion={accessVersion}
         operationLock={locked}
         onBusyChange={setOfflineBusy}
         onCheckedVersion={setOfflineCheckedVersion}
         onStateRead={setPreparation}
         actionsBlocked={
-          financialHold || externalBusy || reconciliationCheckedVersion !== accessVersion
+          financialHold ||
+          nextAllocationPending ||
+          externalBusy ||
+          reconciliationCheckedVersion !== accessVersion
         }
       />
       <ReconciliationPanel
@@ -1048,12 +1071,13 @@ function NativeAccess({
           !busy &&
           !offlineBusy &&
           !recoveryBusy &&
+          !nextAllocationBusy &&
           offlineCheckedVersion === accessVersion
         }
         revision={accessVersion}
         operationLock={locked}
         actorId={fresh && access?.status === 'signed_in' ? access.actorId : null}
-        finishBlocked={financialHold || externalBusy}
+        finishBlocked={financialHold || nextAllocationPending || externalBusy}
         authority={
           preparation?.noticeCode === 'offline_allocation_finished'
             ? null
@@ -1063,11 +1087,31 @@ function NativeAccess({
         onCheckedVersion={setReconciliationCheckedVersion}
         onChanged={refreshPreparation}
       />
+      <NativeNextAllocation
+        available={available}
+        ready={
+          accessInitialized &&
+          !busy &&
+          !offlineBusy &&
+          !reconciliationBusy &&
+          !recoveryBusy &&
+          !externalBusy &&
+          offlineCheckedVersion === accessVersion &&
+          reconciliationCheckedVersion === accessVersion
+        }
+        revision={accessVersion}
+        actorId={fresh && access?.status === 'signed_in' ? access.actorId : null}
+        actionsBlocked={financialHold || !!preparation?.pendingAction}
+        operationLock={locked}
+        onBusyChange={setNextAllocationBusy}
+        onPendingChange={setNextAllocationPending}
+        onChanged={refreshPreparation}
+      />
       <NativeBundleRecovery
         available={available}
         ready={setupReady && !externalBusy}
         revision={accessVersion}
-        actionsBlocked={financialHold}
+        actionsBlocked={financialHold || nextAllocationPending}
         operationLock={locked}
         onBusyChange={setRecoveryBusy}
         onChanged={refreshPreparation}

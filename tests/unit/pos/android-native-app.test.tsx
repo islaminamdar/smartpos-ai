@@ -2,6 +2,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../../../apps/android-pos/node_modules/react', async () => await import('react'))
 const bridge = vi.hoisted(() => ({
+  getNativeNextAllocationState: vi.fn(),
+  continueNativeAfterAllocation: vi.fn(),
   readNativeBundleRecovery: vi.fn(),
   recoverNativeMissingBundle: vi.fn(),
   subscribeNativeCheckoutLock: vi.fn(),
@@ -104,6 +106,15 @@ const reconciliation = {
   noticeCode: null,
 }
 beforeEach(() => {
+  bridge.getNativeNextAllocationState.mockResolvedValue({
+    schemaVersion: 1,
+    status: 'not_available',
+    previousAuthorityId: null,
+    shiftId: null,
+    nextShiftId: null,
+    reasonCode: null,
+    canContinue: false,
+  })
   bridge.readNativeBundleRecovery.mockResolvedValue({
     schemaVersion: 1,
     status: 'not_needed',
@@ -652,7 +663,7 @@ describe('Native historical reconciliation', () => {
     render(<App />)
     const finish = await screen.findByRole('button', { name: 'Finish offline allocation' })
     await waitFor(() => expect(screen.getByRole('checkbox')).toBeEnabled())
-    expect(screen.getByText(/does not close the cash shift/)).toBeTruthy()
+    expect(screen.getByText(/It keeps records, does not close the cash shift/)).toBeTruthy()
     fireEvent.click(screen.getByRole('checkbox'))
     fireEvent.click(finish)
     await waitFor(() =>
@@ -731,8 +742,8 @@ describe('Native payment custody across app navigation', () => {
       context: null,
       pendingIntentId: '10000000-0000-4000-8000-000000000008',
       lastReceiptId: null,
-    lastResolvedIntentId: null,
-    lastResolvedIntent: null,
+      lastResolvedIntentId: null,
+      lastResolvedIntent: null,
       unresolvedIntent: null,
       lastReceipt: null,
     })
@@ -805,8 +816,8 @@ describe('Missing allocation recovery integration', () => {
       context: null,
       pendingIntentId: branchId,
       lastReceiptId: null,
-    lastResolvedIntentId: null,
-    lastResolvedIntent: null,
+      lastResolvedIntentId: null,
+      lastResolvedIntent: null,
       unresolvedIntent: null,
       lastReceipt: null,
     })
@@ -820,5 +831,73 @@ describe('Missing allocation recovery integration', () => {
     expect(consent).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Recover missing allocation' })).toBeDisabled()
     expect(bridge.recoverNativeMissingBundle).not.toHaveBeenCalled()
+  })
+})
+
+describe('integrated next allocation setup', () => {
+  const nextReady = {
+    schemaVersion: 1,
+    status: 'ready',
+    previousAuthorityId: branchId,
+    shiftId: branchId,
+    nextShiftId: null,
+    reasonCode: null,
+    canContinue: true,
+  }
+  it('reads and continues exact setup, refreshes preparation and keeps sales paused', async () => {
+    bridge.readAccessState.mockResolvedValue(enrolled)
+    bridge.readOfflineState.mockResolvedValue({
+      ...offlinePrepared,
+      status: 'blocked',
+      stage: 'recover',
+      noticeCode: 'offline_allocation_finished',
+    })
+    bridge.getNativeNextAllocationState.mockResolvedValue(nextReady)
+    bridge.continueNativeAfterAllocation.mockImplementation(async () => {
+      bridge.readOfflineState.mockResolvedValue({ ...offline, stage: 'prepare', shiftId: branchId })
+      return { ...nextReady, status: 'completed', nextShiftId: branchId, canContinue: false }
+    })
+    render(<App />)
+    const check = await screen.findByRole('button', { name: 'Check next setup' })
+    await waitFor(() => expect(check).toBeEnabled())
+    fireEvent.click(check)
+    await screen.findByText('Ready to continue setup')
+    await waitFor(() => expect(screen.getByRole('checkbox')).toBeEnabled())
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue setup' }))
+    await waitFor(() =>
+      expect(bridge.continueNativeAfterAllocation).toHaveBeenCalledExactlyOnceWith(branchId)
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Prepare this counter' })).toBeEnabled()
+    )
+    expect(screen.getByText('New sales paused')).toBeVisible()
+    expect(screen.getByText('Original setup handoff completed')).toBeVisible()
+    expect(screen.getByText(/Last confirmed status: the original shift is open/)).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Check shift status' })).toBeDisabled()
+    expect(bridge.prepareNativeOffline).not.toHaveBeenCalled()
+    expect(bridge.openNativeOfflineShift).not.toHaveBeenCalled()
+  })
+  it('retains uncertain handoff and blocks account and preparation mutations', async () => {
+    bridge.readAccessState.mockResolvedValue(enrolled)
+    bridge.readOfflineState.mockResolvedValue({ ...offline, stage: 'prepare', shiftId: branchId })
+    bridge.getNativeNextAllocationState.mockResolvedValue(nextReady)
+    bridge.continueNativeAfterAllocation.mockRejectedValue(
+      new Error('offline_continuation_uncertain')
+    )
+    render(<App />)
+    const check = await screen.findByRole('button', { name: 'Check next setup' })
+    await waitFor(() => expect(check).toBeEnabled())
+    fireEvent.click(check)
+    await screen.findByText('Ready to continue setup')
+    await waitFor(() => expect(screen.getByRole('checkbox')).toBeEnabled())
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue setup' }))
+    await screen.findByText(/The setup handoff was not confirmed/)
+    expect(screen.getByRole('button', { name: 'Sign out of this app' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Prepare this counter' })).toBeDisabled()
+    expect(screen.getByRole('checkbox')).not.toBeChecked()
+    expect(bridge.getNativeNextAllocationState).toHaveBeenCalledTimes(2)
+    expect(bridge.continueNativeAfterAllocation).toHaveBeenCalledTimes(1)
   })
 })

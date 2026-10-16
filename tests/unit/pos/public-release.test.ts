@@ -93,6 +93,7 @@ describe('online pilot route isolation', () => {
       ['/api/pos/commands', 'POST'],
       ['/api/pos/receipts', 'GET'],
       ['/api/pos/devices', 'POST'],
+      ['/api/pos/native/continuation', 'POST'],
     ])
       expect(publicReleaseAccess(path, method, true)).toBe('allow')
     for (const path of [

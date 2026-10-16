@@ -6,8 +6,11 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { readFile, readdir } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
-const m=vi.hoisted(()=>({rpc:vi.fn(),auth:vi.fn(),password:vi.fn(),revoke:vi.fn()}))
+const m=vi.hoisted(()=>({rpc:vi.fn(),auth:vi.fn(),password:vi.fn(),revoke:vi.fn(),nativeAccess:vi.fn(),device:vi.fn()}))
 vi.mock('@/lib/pos/server/client',async original=>({...await original<typeof import('@/lib/pos/server/client')>(),authenticatedPosClient:m.auth,posClient:()=>({rpc:m.rpc,auth:{signInWithPassword:m.password,admin:{signOut:m.revoke}}})}))
+vi.mock('@/lib/pos/server/native-access',()=>({nativeAccess:m.nativeAccess}))
+vi.mock('@/lib/pos/server/live-access',async original=>({...await original<typeof import('@/lib/pos/server/live-access')>(),requireDevice:m.device}))
+import { nativeOfflineContinuation, nativeContinuationSchema } from '@/lib/pos/offline/native-continuation'
 import { OfflineEnrollmentProofExpired, enrollOfflineDevice, reserveOfflineAuthority, importOfflineReceipt, sealOfflineAuthority } from '@/lib/pos/offline/server'
 import { encodeBase64Url, decodeBase64Url, parseCanonicalPayload, sha256Hex, canonicalBytes } from '@/lib/pos/offline/canonical'
 import { publicKeyFingerprint, signEnvelope, verifyOfflineBundle, verifySignedEnvelope, p1363ToDer } from '@/lib/pos/offline/authority'
@@ -92,7 +95,7 @@ async function enrollmentFixture(ageMs=0) {
   const serverNow=Number(await scalar('select extract(epoch from clock_timestamp())*1000'))
   const payload={kind:'offline-enrollment',schemaVersion:1,requestId,branchId:ids.branch,deviceId,actorId:ids.actor,deviceKeySha256:fingerprint,issuedAt:new Date(serverNow-ageMs).toISOString()}
   const request={requestId,branchId:ids.branch,deviceId,deviceKeySha256:fingerprint,publicKeySpki,proof:await signEnvelope(payload,fingerprint,pair.privateKey)}
-  return {pair,fingerprint,payload,request}
+  return {pair,fingerprint,payload,request,server}
 }
 
 it('maps the actual SQL P0001 pre-insert expiry and safely refreshes the same request ID',async()=>{
@@ -393,4 +396,43 @@ it('registers signed freezes, verifies invoice collisions, and retains unsupport
   expect(await admin(()=>scalar('select count(*)::int from public.pos_orders where branch_id=$1',[branch]))).toBe(1)
   expect(await admin(()=>scalar('select count(*)::int from public.pos_payments where branch_id=$1',[branch]))).toBe(1)
   expect(await admin(()=>scalar('select count(*)::int from public.pos_kitchen_tickets where branch_id=$1',[branch]))).toBe(0)
+})
+
+
+it('verifies real signed continuation for the same open or exact closed drawer and rejects obsolete custody', async()=>{
+  for(const flag of ['POS_ONLINE_PILOT','POS_LIVE_SALES_ENABLED','POS_OFFLINE_ISSUANCE_ENABLED'])vi.stubEnv(flag,'true')
+  // Earlier historical-custody tests intentionally revoke this synthetic tenant.
+  // Restore only its fixture prerequisites for a current-authorized continuation.
+  await admin(()=>db.exec(`update public.pos_staff set active=true where user_id='${ids.actor}';update public.pos_products set active=true where id='${ids.product}';update public.pos_offline_branch_policy set enabled=true where branch_id='${ids.branch}';`))
+  m.auth.mockResolvedValue({user:{id:ids.actor},client:{}})
+  const f=await enrollmentFixture(),deviceId=f.request.deviceId,shiftId=randomUUID()
+  await admin(()=>db.query('insert into public.pos_shifts(id,organization_id,branch_id,device_id,opened_by,opening_cash_fils) values($1,$2,$3,$4,$5,0)',[shiftId,ids.org,ids.branch,deviceId,ids.actor]))
+  const enrolled=await enrollOfflineDevice(f.request)
+  const reservation={requestId:randomUUID(),branchId:ids.branch,deviceId,shiftId,count:3,lifetimeSeconds:3600,maxInvoiceTotalFils:100000,maxGrossFils:300000,permissions:{cash:true,recordedCard:true,mixedTender:true}}
+  await reserveOfflineAuthority(reservation)
+  const seal={kind:'offline-seal',schemaVersion:1,id:randomUUID(),authorityId:reservation.requestId,keyEpoch:enrolled.keyEpoch,deviceId,finalSequence:0,finalEventSha256:null}
+  const envelope=await signEnvelope(seal,f.fingerprint,f.pair.privateKey)
+  await sealOfflineAuthority(envelope)
+  m.nativeAccess.mockResolvedValue({actorId:ids.actor,branches:[{id:ids.branch,organizationId:ids.org}],device:{id:deviceId,branchId:ids.branch}})
+  m.device.mockResolvedValue('synthetic-cookie-binding')
+  const request={challenge:'a'.repeat(64),authorityId:reservation.requestId,sealSha256:await sha256Hex(canonicalBytes(seal))}
+  const counts=()=>admin(async()=>({authorities:await scalar('select count(*)::int from public.pos_offline_authorities'),documents:await scalar('select count(*)::int from public.pos_documents'),numbers:await scalar("select last_number from public.pos_document_counters where branch_id=$1 and kind='tax_invoice'",[ids.branch])}))
+  const before=await counts()
+  const current=await nativeOfflineContinuation(request)
+  expect((await verifySignedEnvelope(current.handoff,nativeContinuationSchema,{'synthetic-server':f.server.publicKey})).payload).toMatchObject({priorAuthorityId:reservation.requestId,nextShiftId:shiftId,shiftId,purpose:'prepare-next'})
+  expect(await counts()).toEqual(before)
+  await admin(()=>db.query("update public.pos_shifts set status='closed',closed_at=clock_timestamp() where id=$1",[shiftId]))
+  const closed=await nativeOfflineContinuation({...request,challenge:'b'.repeat(64)})
+  expect((await verifySignedEnvelope(closed.handoff,nativeContinuationSchema,{'synthetic-server':f.server.publicKey})).payload).toMatchObject({nextShiftId:null,shiftId,challenge:'b'.repeat(64)})
+  expect(await counts()).toEqual(before)
+  const nextShift=randomUUID()
+  await admin(()=>db.query('insert into public.pos_shifts(id,organization_id,branch_id,device_id,opened_by,opening_cash_fils) values($1,$2,$3,$4,$5,0)',[nextShift,ids.org,ids.branch,deviceId,ids.actor]))
+  await expect(nativeOfflineContinuation(request)).rejects.toMatchObject({code:'offline_continuation_blocked'})
+  const next={...reservation,requestId:randomUUID(),shiftId:nextShift}
+  const nextBundle=await reserveOfflineAuthority(next)
+  expect((await verifyOfflineBundle(nextBundle.snapshotEnvelope,nextBundle.authorityEnvelope,{'synthetic-server':f.server.publicKey})).authority.id).toBe(next.requestId)
+  await sealOfflineAuthority(await signEnvelope({...seal,id:randomUUID(),authorityId:next.requestId},f.fingerprint,f.pair.privateKey))
+  await admin(()=>db.query("update public.pos_shifts set status='closed',closed_at=clock_timestamp() where id=$1",[nextShift]))
+  await expect(nativeOfflineContinuation(request)).rejects.toMatchObject({code:'offline_continuation_blocked'})
+  expect(await admin(()=>scalar('select seal_evidence from public.pos_offline_authorities where id=$1',[reservation.requestId]))).toEqual(envelope)
 })

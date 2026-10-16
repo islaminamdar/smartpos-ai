@@ -12,6 +12,7 @@ const bridge = vi.hoisted(() => ({
   freezeNativePaymentForManager: vi.fn(),
   syncNativeFrozenPayment: vi.fn(),
   unlockNativeOffline: vi.fn(),
+  unlockNativeHistoricalPayment: vi.fn(),
 }))
 vi.mock('../../../apps/android-pos/src/native', async () => ({
   ...(await vi.importActual('../../../apps/android-pos/src/native')),
@@ -50,6 +51,10 @@ beforeEach(() => {
     receipt,
   }))
   bridge.unlockNativeOffline.mockResolvedValue({})
+  bridge.unlockNativeHistoricalPayment.mockImplementation(async (intentId) => ({
+    ...intent,
+    intentId,
+  }))
 })
 afterEach(() => {
   cleanup()
@@ -127,7 +132,8 @@ describe('real native counter UI flow', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Unlock payment review' }))
     await screen.findByRole('heading', { name: 'Review the saved payment' })
-    expect(bridge.unlockNativeOffline).toHaveBeenCalledTimes(1)
+    expect(bridge.unlockNativeHistoricalPayment).toHaveBeenCalledExactlyOnceWith(id(8))
+    expect(bridge.unlockNativeOffline).not.toHaveBeenCalled()
   })
   it('recovers lost commit acknowledgement by reading the original intent without collecting twice', async () => {
     bridge.confirmNativePaymentIntent.mockRejectedValue(new Error('native_storage_unavailable'))
@@ -768,7 +774,10 @@ it('locked accepted metadata never exposes basket, proof or result and offers na
   bridge.readNativeCheckout.mockResolvedValue(resolvedState())
   fireEvent.click(screen.getByRole('button', { name: 'Unlock saved manager result' }))
   await screen.findByRole('heading', { name: 'Manager decision saved on this device' })
-  expect(bridge.unlockNativeOffline).toHaveBeenCalledTimes(1)
+  expect(bridge.unlockNativeHistoricalPayment).toHaveBeenCalledExactlyOnceWith(
+    acceptedReview().intentId
+  )
+  expect(bridge.unlockNativeOffline).not.toHaveBeenCalled()
 })
 it('native lock wipes an accepted result immediately, including collapsed support references', async () => {
   bridge.readNativeCheckout.mockResolvedValue(resolvedState())
@@ -813,4 +822,54 @@ it('a result for another freeze never clears the original frozen payment', async
     screen.queryByRole('heading', { name: 'Manager decision saved on this device' })
   ).toBeNull()
   expect(p.onHoldChange).toHaveBeenLastCalledWith(true)
+})
+
+it('does not expose historical payment details from a delayed unlock after native lock', async () => {
+  let resolve!: (value: unknown) => void
+  bridge.readNativeCheckout.mockResolvedValue({
+    ...state,
+    canIssue: false,
+    pendingIntentId: id(8),
+    reasonCode: 'pin_unlock_required',
+  })
+  bridge.unlockNativeHistoricalPayment.mockReturnValue(
+    new Promise((done) => {
+      resolve = done
+    })
+  )
+  render(<NativeCounter {...props()} />)
+  await screen.findByText(id(8))
+  fireEvent.click(screen.getByRole('button', { name: 'Unlock payment review' }))
+  await waitFor(() => expect(resolve).toBeTypeOf('function'))
+  const reads = bridge.readNativeCheckout.mock.calls.length
+  act(() => bridge.subscribeNativeCheckoutLock.mock.calls[0][0]())
+  await act(async () => resolve(intent))
+  expect(bridge.readNativeCheckout).toHaveBeenCalledTimes(reads)
+  expect(screen.queryByText('QA Milk cake')).toBeNull()
+  expect(bridge.unlockNativeOffline).not.toHaveBeenCalled()
+})
+it('rejects a mismatched original payment returned by historical unlock', async () => {
+  bridge.readNativeCheckout.mockResolvedValue({
+    ...state,
+    canIssue: false,
+    pendingIntentId: id(8),
+    reasonCode: 'pin_unlock_required',
+  })
+  bridge.unlockNativeHistoricalPayment.mockResolvedValue({ ...intent, intentId: id(20) })
+  render(<NativeCounter {...props()} />)
+  await screen.findByText(id(8))
+  fireEvent.click(screen.getByRole('button', { name: 'Unlock payment review' }))
+  await screen.findByText(/The saved payment does not match this request/)
+  expect(bridge.readNativeCheckout).toHaveBeenCalledTimes(1)
+  expect(screen.queryByText('QA Milk cake')).toBeNull()
+})
+
+it('keeps unlock disabled until the original payment metadata is known', async () => {
+  bridge.readNativeCheckout.mockReturnValue(new Promise(() => {}))
+  render(<NativeCounter {...props()} />)
+  const unlock = await screen.findByRole('button', { name: 'Unlock payment review' })
+  expect(unlock).toBeDisabled()
+  fireEvent.click(unlock)
+  expect(bridge.unlockNativeOffline).not.toHaveBeenCalled()
+  expect(bridge.unlockNativeHistoricalPayment).not.toHaveBeenCalled()
 })

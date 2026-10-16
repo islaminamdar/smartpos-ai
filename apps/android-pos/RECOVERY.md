@@ -18,7 +18,7 @@ The original encrypted reservation is checked again before the network request a
 
 ## Confirmation and operator limits
 
-Recovery does not upload its seal automatically. The screen reports local retention and directs the operator to **Upload saved records**. Existing reconciliation uploads outstanding receipts first, then the exact stored seal, and requires the server's signed acknowledgement before reporting confirmation. A local retained result is not proof of server acceptance or shift closure.
+Recovery does not upload its seal automatically. The screen reports local retention and directs the operator to **Upload saved records**. Existing reconciliation uploads outstanding receipts first, then the exact stored seal, and requires the exact HTTPS seal response matching the original authority, final sequence and hash before reporting seal confirmation; this seal response is not a signed receipt acknowledgement. A local retained result is not proof of server acceptance or shift closure.
 
 Unknown responses and reasons fail closed. The UI binds consent to the exact allocation and requires another status check/confirmation after uncertainty. It does not reset the app, replace device identity, clear a pending payment, or begin a new allocation. Missing device keys, lost app data, staff/PIN recovery and collected-payment expiry remain separate unresolved workflows.
 

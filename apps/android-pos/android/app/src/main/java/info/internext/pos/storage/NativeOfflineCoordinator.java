@@ -2,8 +2,10 @@ package info.internext.pos.storage;
 
 import android.content.Context;
 import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
 import info.internext.pos.offline.CanonicalJson;
 import info.internext.pos.offline.NativeHandoff;
+import info.internext.pos.offline.NativeContinuation;
 import info.internext.pos.offline.OfflineBundle;
 import info.internext.pos.offline.OfflineClock;
 import info.internext.pos.offline.SignedProtocol;
@@ -41,7 +43,7 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
         checkStoredScope(state,offline);display.put("shiftId",offline.get("shiftId"));
         JSONObject shiftRequest=offline.optJSONObject("shiftRequest");
         if(shiftRequest!=null&&!offline.getBoolean("shiftAcknowledged"))return display.put("stage","recover").put("pendingAction","open_shift").put("pendingOpeningCashFils",shiftRequest.getLong("openingCashFils")).put("noticeCode","offline_preparation_uncertain");
-        if(!offline.isNull("keyEpoch"))display.put("pinProvisioned",unlock.isProvisioned(binding(offline)));
+        if(!offline.isNull("keyEpoch")&&!offline.isNull("shiftId"))display.put("pinProvisioned",unlock.isProvisioned(binding(offline)));
         JSONObject reservation=offline.optJSONObject("reservation");
         if(reservation!=null){
             String authorityId=reservation.getString("requestId");OfflineBundle bundle=storedBundle(offline,authorityId);
@@ -150,6 +152,160 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
             unlock.unlock(binding(offline),pin);pin=null;engine(binding(offline)).sealAuthority(authorityId);
         }finally{unlock.lock();if(pin!=null)Arrays.fill(pin,'\0');}
     }
+    /** Local metadata only. Reading this state never repairs a pointer or allocates numbers. */
+    public synchronized JSONObject getNextAllocationState()throws Exception{
+        String prior=null,shift=null;
+        try{
+            JSONObject state=session.nativeState(),offline=state.optJSONObject("offline");
+            if(state.isNull("actorId")||state.getBoolean("logoutPending"))return nextState("blocked",null,null,null,"native_session_expired",false);
+            if(keys.isEmpty())return nextState("blocked",null,null,null,"offline_not_configured",false);
+            if(offline==null)return nextState("not_available",null,null,null,null,false);checkStoredScope(state,offline);
+            JSONObject reservation=offline.optJSONObject("reservation");
+            if(reservation==null){
+                if(offline.has("preparationTransitionId")){
+                    synchronized(journal){NativePreparationTransition t=transitionForMarker(offline);checkTransitionScope(state,t);NativePreparationTransition.Closure closure=NativePreparationTransition.readClosure(journal,lifecycle(),keys,t);
+                        if(offline.has("preparationClosureId")&&(closure==null||!t.id.equals(offline.getString("preparationClosureId"))))throw fail("offline_context_changed");
+                        if(closure!=null&&!offline.has("preparationClosureId")){if(!NativePreparationTransition.canonical(closure.previous).equals(NativePreparationTransition.canonical(offline)))throw fail("offline_context_changed");lifecycle().requireCandidate(t.priorAuthorityId);return nextState("pending",t.priorAuthorityId,t.previous.getString("shiftId"),null,"offline_continuation_uncertain",true);}
+                        return completed(t);}
+                }
+                return nextState("not_available",null,null,null,null,false);
+            }
+            prior=reservation.getString("requestId");shift=offline.getString("shiftId");
+            synchronized(journal){
+                NativeAllocationLifecycle lifecycle=lifecycle();OfflineBundle b=lifecycle.bundle(prior);requireScope(offline,b);
+                NativePreparationTransition t=NativePreparationTransition.read(journal,lifecycle,keys,prior);
+                if(t!=null){
+                    checkTransitionScope(state,t);
+                    if(!NativePreparationTransition.canonical(offline).equals(NativePreparationTransition.canonical(t.previous)))throw fail("offline_context_changed");
+                    lifecycle.requireCandidate(prior);
+                    return nextState("pending",prior,shift,t.nextShiftId,"offline_continuation_uncertain",true);
+                }
+                lifecycle.requireCandidate(prior);return nextState("ready",prior,shift,null,null,true);
+            }
+        }catch(Exception error){String code=continuationCode(error);return nextState("offline_seal_confirmation_required".equals(code)||"offline_upload_required".equals(code)?"pending":"blocked",prior,shift,null,code,false);}
+    }
+
+    /** Explicit current-staff/PIN transition. Journal archive commits before the encrypted pointer. */
+    public synchronized JSONObject continueAfterAllocationWithPin(String prior,char[] pin)throws Exception{
+        try{
+            uuid(prior);JSONObject access=requireAccess();JSONObject current=session.nativeState(),offline=current.optJSONObject("offline");
+            if(offline==null)throw fail("offline_context_changed");checkStoredScope(current,offline);
+            NativePreparationTransition saved;OfflineBundle b;
+            synchronized(journal){b=lifecycle().bundle(prior);requireScope(offline,b);saved=NativePreparationTransition.read(journal,lifecycle(),keys,prior);}
+            unlock.unlock(NativeAllocationLifecycle.binding(b),pin);pin=null;
+            if(saved!=null){
+                synchronized(session){
+                    current=session.nativeState();checkStoredScope(current,current.getJSONObject("offline"));checkTransitionScope(current,saved);
+                    JSONObject now=current.getJSONObject("offline");
+                    if(isTransitionDescendant(now,saved)){
+                        if(saved.nextShiftId!=null&&now.isNull("reservation")&&saved.id.equals(now.optString("preparationTransitionId"))&&saved.nextShiftId.equals(now.optString("shiftId"))&&!now.has("preparationClosureId"))return recheckClosedShift(saved,b,now);
+                        return completed(saved);
+                    }
+                    if(!NativePreparationTransition.canonical(now).equals(NativePreparationTransition.canonical(saved.previous)))throw fail("offline_context_changed");
+                    synchronized(journal){lifecycle().requireCandidate(prior);unlock.requireUnlocked(NativeAllocationLifecycle.binding(b));
+                        if(!session.compareAndSetOffline(saved.previous,saved.next))throw fail("offline_context_changed");}
+                    return completed(saved);
+                }
+            }
+            JSONObject reservation=offline.optJSONObject("reservation");if(reservation==null||!prior.equals(reservation.getString("requestId")))throw fail("offline_context_changed");
+            String seal; synchronized(journal){lifecycle().requireCandidate(prior);seal=lifecycle().sealHash(prior,true);}
+            String nonce=challenge();OfflineClock.Reading before=clock.read();JSONObject response;
+            try{response=session.nativeRequest("POST","/api/pos/native/continuation",new JSONObject().put("challenge",nonce).put("authorityId",prior).put("sealSha256",seal));}
+            catch(Exception uncertain){throw fail("offline_continuation_uncertain");}
+            OfflineClock.Reading after=clock.read();fields(response,"handoff");String envelope=response.getJSONObject("handoff").toString();
+            NativeContinuation.verify(envelope,keys,nonce,NativeAllocationLifecycle.binding(b),prior,seal,before,after);
+            synchronized(session){
+                current=session.nativeState();JSONObject now=current.getJSONObject("offline");checkStoredScope(current,now);
+                if(!NativePreparationTransition.canonical(now).equals(NativePreparationTransition.canonical(offline)))throw fail("offline_context_changed");
+                synchronized(journal){
+                    SQLiteDatabase db=journal.getWritableDatabase();db.beginTransaction();
+                    try{
+                        lifecycle().requireCandidate(prior);unlock.requireUnlocked(NativeAllocationLifecycle.binding(b));
+                        saved=NativePreparationTransition.read(journal,lifecycle(),keys,prior);
+                        if(saved==null)saved=NativePreparationTransition.insert(journal,lifecycle(),keys,offline,envelope,nonce,before,after);
+                        db.setTransactionSuccessful();
+                    }finally{db.endTransaction();}
+                    // A storage failure here deliberately leaves the immutable archive for explicit retry.
+                    if(!session.compareAndSetOffline(offline,saved.next))throw fail("offline_context_changed");
+                }
+                return completed(saved);
+            }
+        }finally{unlock.lock();if(pin!=null)Arrays.fill(pin,'\0');}
+    }
+    private JSONObject recheckClosedShift(NativePreparationTransition t,OfflineBundle b,JSONObject previous)throws Exception{
+        NativePreparationTransition.Closure saved;
+        synchronized(journal){lifecycle().requireCandidate(t.priorAuthorityId);saved=NativePreparationTransition.readClosure(journal,lifecycle(),keys,t);}
+        if(saved!=null){
+            synchronized(journal){unlock.requireUnlocked(NativeAllocationLifecycle.binding(b));if(!session.compareAndSetOffline(saved.previous,saved.next))throw fail("offline_context_changed");}
+            return completed(t);
+        }
+        String nonce=challenge(),seal; synchronized(journal){seal=lifecycle().sealHash(t.priorAuthorityId,true);}
+        OfflineClock.Reading before=clock.read();JSONObject response;
+        try{response=session.nativeRequest("POST","/api/pos/native/continuation",new JSONObject().put("challenge",nonce).put("authorityId",t.priorAuthorityId).put("sealSha256",seal));}
+        catch(Exception uncertain){throw fail("offline_continuation_uncertain");}
+        OfflineClock.Reading after=clock.read();fields(response,"handoff");String envelope=response.getJSONObject("handoff").toString();
+        NativeContinuation.Verified proof=NativeContinuation.verify(envelope,keys,nonce,NativeAllocationLifecycle.binding(b),t.priorAuthorityId,seal,before,after);
+        synchronized(journal){
+            lifecycle().requireCandidate(t.priorAuthorityId);unlock.requireUnlocked(NativeAllocationLifecycle.binding(b));
+            JSONObject now=session.nativeState().getJSONObject("offline");if(!NativePreparationTransition.canonical(now).equals(NativePreparationTransition.canonical(previous)))throw fail("offline_context_changed");
+            if(proof.nextShiftId!=null)return completed(t);
+            SQLiteDatabase db=journal.getWritableDatabase();db.beginTransaction();
+            try{saved=NativePreparationTransition.readClosure(journal,lifecycle(),keys,t);if(saved==null)saved=NativePreparationTransition.insertClosure(journal,lifecycle(),keys,t,previous,envelope,nonce,before,after);db.setTransactionSuccessful();}finally{db.endTransaction();}
+            if(!session.compareAndSetOffline(previous,saved.next))throw fail("offline_context_changed");
+        }
+        return completed(t);
+    }
+    /** Viewing old payment details uses that original shift's PIN binding, never a new shift's unlock. */
+    public synchronized void unlockHistoricalIntentWithPin(String intentId,char[] pin)throws Exception{
+        try{CheckoutContextPair pair=historicalContext(intentId,false);unlock.unlock(pair.binding,pin);pin=null;}
+        finally{if(pin!=null)Arrays.fill(pin,'\0');}
+    }
+    synchronized NativeCheckoutCoordinator.CheckoutContext historicalCheckoutContext(String authorityId,boolean requireUnlocked)throws Exception{
+        JSONObject state=session.nativeState(),offline=state.optJSONObject("offline");
+        if(state.isNull("actorId")||state.getBoolean("logoutPending"))throw fail("native_session_expired");
+        if(offline==null)throw fail("offline_context_changed");checkStoredScope(state,offline);
+        OfflineBundle b;synchronized(journal){b=lifecycle().bundle(authorityId);requireScope(offline,b);}
+        OfflineBundle.Binding original=NativeAllocationLifecycle.binding(b);if(requireUnlocked)unlock.requireUnlocked(original);
+        return new NativeCheckoutCoordinator.CheckoutContext(b,engine(original));
+    }
+    private static final class CheckoutContextPair {final OfflineBundle.Binding binding;CheckoutContextPair(OfflineBundle.Binding b){binding=b;}}
+    private CheckoutContextPair historicalContext(String intentId,boolean requireUnlocked)throws Exception{
+        uuid(intentId);String authority;
+        synchronized(journal){try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT authority_id FROM offline_intent_context WHERE intent_id=?",new String[]{intentId})){if(!c.moveToFirst())throw fail("intent_missing");authority=c.getString(0);}}
+        return new CheckoutContextPair(NativeAllocationLifecycle.binding(historicalCheckoutContext(authority,requireUnlocked).bundle));
+    }
+    private NativeAllocationLifecycle lifecycle(){return new NativeAllocationLifecycle(journal,keys,publicKey);}
+    private static void requireScope(JSONObject offline,OfflineBundle b)throws Exception{
+        JSONObject s=offline.getJSONObject("scope");
+        if(!b.organizationId.equals(s.getString("organizationId"))||!b.branchId.equals(s.getString("branchId"))||!b.deviceId.equals(s.getString("deviceId"))||!b.actorId.equals(s.getString("actorId"))||!b.keyEpoch.equals(offline.getString("keyEpoch")))throw fail("offline_context_changed");
+    }
+    private NativePreparationTransition transitionForMarker(JSONObject offline)throws Exception{
+        String prior=NativePreparationTransition.priorForMarker(journal,offline.getString("preparationTransitionId"));NativePreparationTransition t=NativePreparationTransition.read(journal,lifecycle(),keys,prior);if(t==null)throw fail("native_storage_unavailable");return t;
+    }
+    private void checkTransitionScope(JSONObject state,NativePreparationTransition t)throws Exception{
+        checkStoredScope(state,t.previous);requireScope(state.getJSONObject("offline"),lifecycle().bundle(t.priorAuthorityId));
+    }
+    private boolean isTransitionDescendant(JSONObject offline,NativePreparationTransition t)throws Exception{
+        JSONObject cursor=offline;
+        // Follow only immutable verified archives; never infer completion merely from a supplied marker.
+        for(int depth=0;depth<1000&&cursor.has("preparationTransitionId");depth++){
+            NativePreparationTransition link=transitionForMarker(cursor);
+            if(link.id.equals(t.id))return true;
+            cursor=link.previous;
+        }
+        return false;
+    }
+    private JSONObject completed(NativePreparationTransition t)throws Exception{
+        synchronized(journal){boolean closed=NativePreparationTransition.readClosure(journal,lifecycle(),keys,t)!=null;return nextState("completed",t.priorAuthorityId,t.previous.getString("shiftId"),closed?null:t.nextShiftId,null,false);}
+    }
+    private static JSONObject nextState(String status,String prior,String shift,String next,String reason,boolean allowed)throws Exception{
+        return new JSONObject().put("schemaVersion",1).put("status",status).put("previousAuthorityId",prior==null?JSONObject.NULL:prior).put("shiftId",shift==null?JSONObject.NULL:shift).put("nextShiftId",next==null?JSONObject.NULL:next).put("reasonCode",reason==null?JSONObject.NULL:reason).put("canContinue",allowed);
+    }
+    private static String continuationCode(Exception error){
+        String code=error instanceof NativeAccessError?((NativeAccessError)error).code:error.getMessage();
+        return Arrays.asList("offline_allocation_active","offline_seal_confirmation_required","offline_upload_required","payment_reconciliation_required","previous_authority_unresolved","offline_continuation_uncertain","offline_context_changed","pin_unlock_required","native_session_expired","native_storage_unavailable","offline_not_configured","offline_preparation_uncertain").contains(code)?code:"native_storage_unavailable";
+    }
+
     public synchronized void lock(){unlock.lock();}
     /** Local-only counter boundary. Retained custody alone never authenticates a reader. */
     synchronized NativeCheckoutCoordinator.CheckoutContext checkoutContext(boolean requireUnlocked)throws Exception{
@@ -183,6 +339,7 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
     private void reconcileShift(JSONObject offline,String shift)throws Exception{
         String prior=offline.isNull("shiftId")?null:offline.getString("shiftId");
         if(prior!=null&&!prior.equals(shift))throw fail("offline_context_changed");
+        if(prior==null&&shift!=null&&offline.has("preparationTransitionId")&&offline.isNull("shiftRequest"))throw fail("offline_context_changed");
         JSONObject pending=offline.optJSONObject("shiftRequest");if(pending!=null&&!offline.getBoolean("shiftAcknowledged")){if(shift!=null&&!shift.equals(pending.getString("shiftId")))throw fail("offline_context_changed");throw fail("offline_preparation_uncertain");}
         offline.put("shiftId",shift==null?JSONObject.NULL:shift);
     }

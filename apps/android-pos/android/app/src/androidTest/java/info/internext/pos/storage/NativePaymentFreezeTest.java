@@ -217,7 +217,12 @@ public class NativePaymentFreezeTest {
             journal.getWritableDatabase().execSQL("INSERT INTO offline_seal_confirmations(authority_id,seal_payload_hash,response_json) VALUES(?,?,?)",new Object[]{oldAuthority,NativeJournal.payloadHash(seal),canonical(confirmation)});
             journal.getWritableDatabase().execSQL("INSERT INTO offline_upload_exceptions(receipt_id,exception_id,payload_hash,code) VALUES(?,?,?,?)",new Object[]{payload(second).getString("id"),id(),NativeJournal.payloadHash(second),"chain"});
         }
-        authority.put("id",id());authority.getJSONObject("invoiceRange").put("first",4).put("last",6);rebuild();engine.installVerifiedBundle(snapshotEnvelope,authorityEnvelope,start);currentBundle=verifiedBundle();String pending=begin();
+        authority.put("id",id());authority.getJSONObject("invoiceRange").put("first",4).put("last",6);rebuild();currentBundle=verifiedBundle();
+        // Reconstruct the old v2/v3 state directly: those versions allowed another grant
+        // while the second receipt remained unacknowledged. The v6 installer rightly refuses it.
+        journal.getWritableDatabase().execSQL("INSERT INTO offline_bundles(id,snapshot_envelope,authority_envelope) VALUES(?,?,?)",new Object[]{currentBundle.authorityId,snapshotEnvelope,authorityEnvelope});
+        journal.getWritableDatabase().execSQL("INSERT INTO offline_authority_state(authority_id,next_number,gross_fils,clock_json) VALUES(?,?,?,?)",new Object[]{currentBundle.authorityId,4,0,OfflineClock.anchor(start,new OfflineClock.Reading(boot,elapsed,wall)).toJson()});
+        String pending=begin();
         List<String> tables=new ArrayList<>(java.util.Arrays.asList("installation","device_key","intents","receipts","outbox","acknowledgements"));
         if(version>=2)tables.addAll(java.util.Arrays.asList("offline_bundles","offline_authority_state","offline_chain","offline_intent_context","offline_intent_cancellations"));
         if(version>=3)tables.addAll(java.util.Arrays.asList("offline_seal_confirmations","offline_upload_exceptions"));
@@ -231,7 +236,7 @@ public class NativePaymentFreezeTest {
             try(Cursor c=old.rawQuery("SELECT count(*) FROM sqlite_master WHERE name='offline_intent_freezes'",null)){assertTrue(c.moveToFirst());assertEquals(0,c.getInt(0));}
         }
         try(NativeJournal upgraded=new NativeJournal(context,migratedName,()->{})){
-            assertEquals(5,upgraded.getReadableDatabase().getVersion());assertEquals(journal.installationId(),upgraded.installationId());
+            assertEquals(6,upgraded.getReadableDatabase().getVersion());assertEquals(journal.installationId(),upgraded.installationId());
             assertEquals(binding.deviceKeySha256,identity.readOrCreate(upgraded).getString("deviceKeySha256"));
             for(String table:tables)assertEquals("Preserved v"+version+" "+table,expected.get(table),exactRows(upgraded.getReadableDatabase(),table));
             assertEquals("[]",exactRows(upgraded.getReadableDatabase(),"offline_intent_freezes"));

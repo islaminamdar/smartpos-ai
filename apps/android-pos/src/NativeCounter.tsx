@@ -16,6 +16,7 @@ import {
   freezeNativePaymentForManager,
   syncNativeFrozenPayment,
   unlockNativeOffline,
+  unlockNativeHistoricalPayment,
   checkoutRequestKey,
   quoteInputKey,
   quantityToMilli,
@@ -768,16 +769,28 @@ export default function NativeCounter({
     }
   }
   async function unlock() {
+    if (!state && !uncertain) return
     if (!start('Complete payment review unlock in the Android PIN dialog.')) return
     setFresh(false)
     const operationEpoch = epoch.current
     const operationRevision = revision
     try {
-      await unlockNativeOffline()
+      const originalId =
+        uncertain?.intentId ?? state?.pendingIntentId ?? state?.lastResolvedIntentId
+      if (originalId) {
+        const original = await unlockNativeHistoricalPayment(originalId)
+        if (original.intentId !== originalId) throw new Error('intent_conflict')
+      } else await unlockNativeOffline()
+      if (operationEpoch !== epoch.current || operationRevision !== currentRevision.current) return
       const next = await readNativeCheckout()
       if (operationEpoch === epoch.current) applyState(next, operationRevision)
     } catch (failure) {
-      if (mounted.current) setError(nativeCheckoutError(failure))
+      if (
+        mounted.current &&
+        operationEpoch === epoch.current &&
+        operationRevision === currentRevision.current
+      )
+        setError(nativeCheckoutError(failure))
     } finally {
       finish()
     }
@@ -854,7 +867,7 @@ export default function NativeCounter({
                   )}
                   <button
                     className="secondary"
-                    disabled={!!busy || !ready}
+                    disabled={!!busy || !ready || (!state && !uncertain)}
                     onClick={() => void unlock()}
                   >
                     Unlock payment review

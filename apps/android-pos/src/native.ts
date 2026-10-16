@@ -28,6 +28,9 @@ export type DeviceSnapshot = {
   checkedAt: string
 }
 interface NativeLedgerPlugin {
+  getNextAllocationState(): Promise<unknown>
+  continueAfterAllocation(input: { previousAuthorityId: string }): Promise<unknown>
+  unlockHistoricalPayment(input: { intentId: string }): Promise<unknown>
   getBundleRecoveryState(): Promise<unknown>
   recoverMissingOfflineBundle(input: { authorityId: string }): Promise<unknown>
   addListener(
@@ -1300,5 +1303,51 @@ export async function syncNativeFrozenPayment(intentId: string): Promise<NativeI
   if (!uuid(intentId)) throw new Error('invalid_native_input')
   const result = parseNativeIntent(await ledger.syncFrozenPayment({ intentId }))
   if (result.intentId !== intentId || !['frozen_for_manager', 'manager_resolved'].includes(result.state)) invalidCheckout()
+  return result
+}
+
+export type NativeNextAllocationState = {
+  schemaVersion: 1
+  status: 'not_available' | 'ready' | 'pending' | 'completed' | 'blocked'
+  previousAuthorityId: string | null
+  shiftId: string | null
+  nextShiftId: string | null
+  reasonCode: string | null
+  canContinue: boolean
+}
+const continuationReasons = new Set(['offline_allocation_active', 'offline_seal_confirmation_required',
+  'offline_upload_required', 'payment_reconciliation_required', 'previous_authority_unresolved',
+  'offline_continuation_uncertain', 'offline_context_changed', 'pin_unlock_required',
+  'native_session_expired', 'native_storage_unavailable', 'offline_not_configured', 'offline_preparation_uncertain'])
+export function parseNativeNextAllocationState(value: unknown): NativeNextAllocationState {
+  const r = record(value, ['schemaVersion', 'status', 'previousAuthorityId', 'shiftId', 'nextShiftId', 'reasonCode', 'canContinue'])
+  if (r.schemaVersion !== 1 || !['not_available', 'ready', 'pending', 'completed', 'blocked'].includes(String(r.status)) ||
+    typeof r.canContinue !== 'boolean' || (r.reasonCode !== null && !continuationReasons.has(String(r.reasonCode))) ||
+    ['previousAuthorityId', 'shiftId', 'nextShiftId'].some(key => r[key] !== null && !uuid(r[key]))) invalidCheckout()
+  if ((r.previousAuthorityId === null) !== (r.shiftId === null) ||
+    (r.nextShiftId !== null && r.nextShiftId !== r.shiftId) ||
+    (r.canContinue && (!['ready', 'pending'].includes(String(r.status)) || r.previousAuthorityId === null)) ||
+    (r.status === 'ready' && (!r.canContinue || r.reasonCode !== null)) ||
+    (r.status === 'completed' && (r.canContinue || r.reasonCode !== null || r.previousAuthorityId === null)) ||
+    (r.status === 'blocked' && r.reasonCode === null) ||
+    (!['pending', 'completed'].includes(String(r.status)) && r.nextShiftId !== null)) invalidCheckout()
+  return r as NativeNextAllocationState
+}
+export async function getNativeNextAllocationState(): Promise<NativeNextAllocationState> {
+  requireNativeAccess()
+  return parseNativeNextAllocationState(await ledger.getNextAllocationState())
+}
+export async function continueNativeAfterAllocation(previousAuthorityId: string): Promise<NativeNextAllocationState> {
+  requireNativeAccess()
+  if (!uuid(previousAuthorityId)) throw new Error('invalid_native_input')
+  const result = parseNativeNextAllocationState(await ledger.continueAfterAllocation({ previousAuthorityId }))
+  if (result.previousAuthorityId !== previousAuthorityId || result.status !== 'completed') invalidCheckout()
+  return result
+}
+export async function unlockNativeHistoricalPayment(intentId: string): Promise<NativeIntent> {
+  requireNativeAccess()
+  if (!uuid(intentId)) throw new Error('invalid_native_input')
+  const result = parseNativeIntent(await ledger.unlockHistoricalPayment({ intentId }))
+  if (result.intentId !== intentId) invalidCheckout()
   return result
 }

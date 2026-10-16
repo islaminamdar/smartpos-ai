@@ -98,7 +98,7 @@ public class NativeCheckoutEngineTest {
     }
     @Test public void authorityCountAndAggregateBudgetPreventExtraPayments()throws Exception{sell();sell();sell();assertThrows(IllegalStateException.class,()->engine.beginPaymentIntent(id(),input()));assertEquals(3,count("intents"));assertEquals(3,count("receipts"));}
     @Test public void aggregateBudgetAndTenderPermissionsAreCheckedBeforeCollectingMoney()throws Exception{
-        engine.sealAuthority(authority.getString("id"));authority.put("id",id()).put("maxGrossFils",1500);authority.getJSONObject("invoiceRange").put("first",4).put("last",6);
+        engine.sealAuthority(authority.getString("id"));reconcilePrior();authority.put("id",id()).put("maxGrossFils",1500);authority.getJSONObject("invoiceRange").put("first",4).put("last",6);
         authority.getJSONObject("permissions").put("recordedCard",false).put("mixedTender",false);rebuild();engine.installVerifiedBundle(snapshotEnvelope,authorityEnvelope,start);
         assertThrows(IllegalStateException.class,()->engine.beginPaymentIntent(id(),input().put("cashTenderedFils",0).put("recordedCardFils",1000)));assertEquals(0,count("intents"));sell();
         assertThrows(IllegalStateException.class,()->engine.beginPaymentIntent(id(),input()));assertEquals(1,count("intents"));assertEquals(1,count("receipts"));
@@ -106,14 +106,14 @@ public class NativeCheckoutEngineTest {
     @Test public void localUnlockIsRequiredAgainAtCommitAndBuyerDetailsAreEnforced()throws Exception{
         locked=true;assertThrows(IllegalStateException.class,()->engine.beginPaymentIntent(id(),input()));assertEquals(0,count("intents"));locked=false;
         String pending=id();engine.beginPaymentIntent(pending,input());locked=true;assertThrows(IllegalStateException.class,()->engine.commitPaymentIntent(pending));assertEquals(0,count("receipts"));locked=false;engine.cancelUncollectedIntent(pending,"No payment collected");
-        engine.sealAuthority(authority.getString("id"));authority.put("id",id()).put("maxInvoiceTotalFils",2_000_000).put("maxGrossFils",6_000_000);authority.getJSONObject("invoiceRange").put("first",4).put("last",6);
+        engine.sealAuthority(authority.getString("id"));reconcilePrior();authority.put("id",id()).put("maxInvoiceTotalFils",2_000_000).put("maxGrossFils",6_000_000);authority.getJSONObject("invoiceRange").put("first",4).put("last",6);
         snapshot.put("id",id());authority.put("snapshotId",snapshot.getString("id"));snapshot.getJSONArray("products").getJSONObject(0).put("unitPriceFils",2_000_000);rebuild();engine.installVerifiedBundle(snapshotEnvelope,authorityEnvelope,start);
         JSONObject large=input().put("cashTenderedFils",2_000_000).put("presentedTotalFils",2_000_000);assertThrows(IllegalStateException.class,()->engine.beginPaymentIntent(id(),large));assertEquals(1,count("intents"));
         large.put("customer",new JSONObject().put("name","Synthetic buyer").put("address","Synthetic buyer address").put("trn",JSONObject.NULL));String intent=id();engine.beginPaymentIntent(intent,large);assertEquals(2_000_000,payload(engine.commitPaymentIntent(intent)).getJSONObject("document").getJSONObject("totals").getLong("grossFils"));
     }
     @Test public void sealedAuthorityStopsIssuanceAndNextGrantContinuesEpochChain()throws Exception{
         String first=sell();String seal=engine.sealAuthority(authority.getString("id"));assertEquals(seal,engine.sealAuthority(authority.getString("id")));assertEquals(1,payload(seal).getLong("finalSequence"));assertThrows(IllegalStateException.class,()->engine.beginPaymentIntent(id(),input()));
-        authority.put("id",id());authority.getJSONObject("invoiceRange").put("first",4).put("last",6);rebuild();engine.installVerifiedBundle(snapshotEnvelope,authorityEnvelope,start);JSONObject next=payload(sell());assertEquals(2,next.getLong("deviceSequence"));assertEquals("TEST-INV-0000000004",next.getJSONObject("document").getString("documentNumber"));assertEquals(SignedProtocol.verify(first,Collections.singletonMap(SignedProtocol.fingerprint(device),device)).payloadSha256,next.getString("previousEventSha256"));
+        reconcilePrior();authority.put("id",id());authority.getJSONObject("invoiceRange").put("first",4).put("last",6);rebuild();engine.installVerifiedBundle(snapshotEnvelope,authorityEnvelope,start);JSONObject next=payload(sell());assertEquals(2,next.getLong("deviceSequence"));assertEquals("TEST-INV-0000000004",next.getJSONObject("document").getString("documentNumber"));assertEquals(SignedProtocol.verify(first,Collections.singletonMap(SignedProtocol.fingerprint(device),device)).payloadSha256,next.getString("previousEventSha256"));
     }
     @Test public void validExactServerAckRemovesOnlyMatchingOutboxAndPreservesFirstBytes()throws Exception{
         String receipt=sell();JSONObject p=payload(receipt);JSONObject ack=new JSONObject().put("kind","offline-ack").put("schemaVersion",1).put("id",id()).put("issuanceId",p.getString("id")).put("payloadSha256",SignedProtocol.verify(receipt,Collections.singletonMap(SignedProtocol.fingerprint(device),device)).payloadSha256).put("authorityId",authority.getString("id")).put("keyEpoch",authority.getString("keyEpoch")).put("deviceSequence",1).put("receivedAt",NativeCheckoutEngine.iso(start));
@@ -145,8 +145,18 @@ public class NativeCheckoutEngineTest {
         String id=id();engine.beginPaymentIntent(id,input());assertThrows(SQLiteException.class,()->journal.getWritableDatabase().execSQL("UPDATE offline_bundles SET authority_envelope='{}'"));assertThrows(SQLiteException.class,()->journal.getWritableDatabase().execSQL("DELETE FROM offline_intent_context"));assertThrows(SQLiteException.class,()->journal.getWritableDatabase().execSQL("DELETE FROM offline_authority_state"));
         sellAfterCancellation(id);assertThrows(SQLiteException.class,()->journal.getWritableDatabase().execSQL("UPDATE offline_authority_state SET next_number=1"));assertThrows(SQLiteException.class,()->journal.getWritableDatabase().execSQL("UPDATE offline_chain SET sequence=0"));
     }
+    private void reconcilePrior()throws Exception{
+        NativeReconciliation reconciliation=new NativeReconciliation(journal,identity,Collections.singletonMap("synthetic-server",server.getPublic()),(path,envelope)->{
+            JSONObject p=payload(envelope.toString());
+            if(path.equals("/api/pos/offline/seal"))return new JSONObject().put("status","sealed").put("authorityId",p.getString("authorityId")).put("finalSequence",p.getLong("finalSequence")).put("finalEventSha256",p.get("finalEventSha256"));
+            assertEquals("/api/pos/offline/import",path);JSONObject ack=new JSONObject().put("kind","offline-ack").put("schemaVersion",1).put("id",id()).put("issuanceId",p.getString("id"))
+                .put("payloadSha256",NativeJournal.payloadHash(envelope.toString())).put("authorityId",p.getString("authorityId")).put("keyEpoch",binding.keyEpoch).put("deviceSequence",p.getLong("deviceSequence")).put("receivedAt",NativeCheckoutEngine.iso(wall));
+            return new JSONObject().put("status","accepted").put("acknowledgement",new JSONObject(SignedProtocol.sign(ack,"synthetic-server",server.getPrivate(),server.getPublic()))).put("receipt",p.getJSONObject("document")).put("replayed",false);
+        });
+        JSONObject state=reconciliation.reconcile();assertEquals(0,state.getLong("pendingReceipts"));assertEquals(0,state.getLong("pendingSeals"));assertEquals("idle",state.getString("status"));
+    }
     private void prepareNextGrant()throws Exception{
-        engine.sealAuthority(authority.getString("id"));authority.put("id",id());authority.getJSONObject("invoiceRange").put("first",4).put("last",6);rebuild();
+        engine.sealAuthority(authority.getString("id"));reconcilePrior();authority.put("id",id());authority.getJSONObject("invoiceRange").put("first",4).put("last",6);rebuild();
     }
     private String currentGrantClock()throws Exception{
         try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT clock_json FROM offline_authority_state WHERE authority_id=?",new String[]{authority.getString("id")})){assertTrue(c.moveToFirst());return c.getString(0);}
@@ -183,12 +193,20 @@ public class NativeCheckoutEngineTest {
         try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT seal_envelope FROM offline_authority_state WHERE authority_id=?",new String[]{authority.getString("id")})){assertTrue(c.moveToFirst());return c.getString(0);}
     }
     @Test public void expiredUnusedGrantRetainsNonzeroHeadAndCannotIssueOrResetOnReplay()throws Exception{
-        String first=sell();String hash=SignedProtocol.verify(first,Collections.singletonMap(SignedProtocol.fingerprint(device),device)).payloadSha256;prepareNextGrant();
+        String first=sell();String hash=SignedProtocol.verify(first,Collections.singletonMap(SignedProtocol.fingerprint(device),device)).payloadSha256;
+        String priorId=authority.getString("id"),priorClock=currentGrantClock(),priorSeal=engine.sealAuthority(priorId);
+        authority.put("id",id());authority.getJSONObject("invoiceRange").put("first",4).put("last",6);rebuild();
+        // Active issuance cannot skip uploads, but terminal-only expired retention must
+        // keep the original unacknowledged receipt and its exact outbox entry recoverable.
+        assertThrows(IllegalStateException.class,()->engine.installVerifiedBundle(snapshotEnvelope,authorityEnvelope,start,new OfflineClock.Reading(boot,elapsed,wall)));
+        assertEquals(1,count("offline_bundles"));assertEquals(1,count("outbox"));assertEquals(0,count("acknowledgements"));assertEquals(0,count("offline_seal_confirmations"));
         OfflineClock.Reading reference=expireNow();engine.retainExpiredUnusedBundle(snapshotEnvelope,authorityEnvelope,wall,reference);
         String seal=currentSeal(),savedClock=currentGrantClock();JSONObject p=payload(seal);assertEquals(1,p.getLong("finalSequence"));assertEquals(hash,p.getString("finalEventSha256"));assertEquals(0,value("SELECT sum(blocked) FROM offline_authority_state"));assertEquals(0,value("SELECT gross_fils FROM offline_authority_state WHERE next_number=4"));
-        assertThrows(IllegalStateException.class,()->engine.beginPaymentIntent(id(),input()));assertEquals(1,count("receipts"));assertEquals(1,count("outbox"));int signed=signatures.get();
+        assertThrows(IllegalStateException.class,()->engine.beginPaymentIntent(id(),input()));assertEquals(1,count("receipts"));assertEquals(1,count("outbox"));assertEquals(0,count("acknowledgements"));int signed=signatures.get();
+        try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT clock_json,seal_envelope FROM offline_authority_state WHERE authority_id=?",new String[]{priorId})){assertTrue(c.moveToFirst());assertEquals(priorClock,c.getString(0));assertEquals(priorSeal,c.getString(1));}
+        try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT r.envelope_json FROM receipts r JOIN outbox o ON o.receipt_id=r.id",null)){assertTrue(c.moveToFirst());assertEquals(first,c.getString(0));assertFalse(c.moveToNext());}
         locked=true;wall+=9999;elapsed+=9999;engine.retainExpiredUnusedBundle(snapshotEnvelope,authorityEnvelope,wall,new OfflineClock.Reading(boot,elapsed,wall));assertEquals(seal,currentSeal());assertEquals(savedClock,currentGrantClock());assertEquals(signed,signatures.get());
-        locked=false;authority.put("id",id()).put("issuedAt",NativeCheckoutEngine.iso(wall)).put("notBefore",NativeCheckoutEngine.iso(wall)).put("expiresAt",NativeCheckoutEngine.iso(wall+3_600_000));authority.getJSONObject("invoiceRange").put("first",7).put("last",9);rebuild();engine.installVerifiedBundle(snapshotEnvelope,authorityEnvelope,wall,new OfflineClock.Reading(boot,elapsed,wall));assertEquals(2,payload(sell()).getLong("deviceSequence"));
+        locked=false;reconcilePrior();authority.put("id",id()).put("issuedAt",NativeCheckoutEngine.iso(wall)).put("notBefore",NativeCheckoutEngine.iso(wall)).put("expiresAt",NativeCheckoutEngine.iso(wall+3_600_000));authority.getJSONObject("invoiceRange").put("first",7).put("last",9);rebuild();engine.installVerifiedBundle(snapshotEnvelope,authorityEnvelope,wall,new OfflineClock.Reading(boot,elapsed,wall));assertEquals(2,payload(sell()).getLong("deviceSequence"));
     }
     @Test public void existingExpiredActiveGrantIsNeverSealedOrReanchoredByRetentionReplay()throws Exception{
         String saved=currentGrantClock();int signed=signatures.get();OfflineClock.Reading reference=expireNow();locked=true;engine.retainExpiredUnusedBundle(snapshotEnvelope,authorityEnvelope,wall,reference);

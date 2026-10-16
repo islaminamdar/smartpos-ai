@@ -20,7 +20,7 @@ public final class NativeJournal extends SQLiteOpenHelper {
     private final CommitProbe probe;
     public NativeJournal(Context context) { this(context, DATABASE, () -> {}); }
     NativeJournal(Context context, String name, CommitProbe probe) {
-        super(context, name, null, 5);
+        super(context, name, null, 6);
         this.probe = probe;
         setWriteAheadLoggingEnabled(true);
     }
@@ -53,13 +53,15 @@ public final class NativeJournal extends SQLiteOpenHelper {
         NativeReconciliation.createTables(db);
         NativeCheckoutEngine.createFreezeTables(db);
         NativeCheckoutEngine.createResolutionTables(db);
+        NativePreparationTransition.createTables(db);
     }
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        if (oldVersion >= 1 && oldVersion <= 4 && newVersion == 5) {
+        if (oldVersion >= 1 && oldVersion <= 5 && newVersion == 6) {
             if(oldVersion==1)NativeCheckoutEngine.createTables(db);
             if(oldVersion<=2)NativeReconciliation.createTables(db);
             if(oldVersion<=3)NativeCheckoutEngine.createFreezeTables(db);
-            NativeCheckoutEngine.createResolutionTables(db);return;
+            if(oldVersion<=4)NativeCheckoutEngine.createResolutionTables(db);
+            NativePreparationTransition.createTables(db);return;
         }
         throw new IllegalStateException("A reviewed ledger migration is required");
     }

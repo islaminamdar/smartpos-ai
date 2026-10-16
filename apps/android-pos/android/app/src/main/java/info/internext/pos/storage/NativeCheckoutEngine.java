@@ -242,6 +242,12 @@ public final class NativeCheckoutEngine {
                 }
                 if(!recoveryOnly)unlock.requireUnlocked(binding);
                 if (exists(db, "SELECT 1 FROM offline_authority_state WHERE seal_envelope IS NULL OR blocked=1") || hasUncertain(db)) throw invalid("previous_authority_unresolved");
+                NativeAllocationLifecycle lifecycle=new NativeAllocationLifecycle(journal,serverKeys,deviceKey);
+                // Terminal-only custody retention grants no selling capability. Keep outstanding
+                // receipt uploads intact; active installation still requires their signed ACKs.
+                if(!retainExpired&&!recoveryOnly)lifecycle.requireClear();
+                else try(Cursor c=db.rawQuery("SELECT id FROM offline_bundles",null)){while(c.moveToNext())lifecycle.sealHash(c.getString(0),false);}
+                lifecycle.requireNewRange(bundle);
                 try (Cursor c = db.rawQuery("SELECT key_epoch FROM offline_chain WHERE slot=1", null)) {
                     if (c.moveToFirst()) {
                         if (!bundle.keyEpoch.equals(c.getString(0))) throw invalid("key_epoch_rotation_required");
@@ -661,6 +667,6 @@ public final class NativeCheckoutEngine {
     private static boolean trimChar(char c){return c==0x0009||c==0x000a||c==0x000b||c==0x000c||c==0x000d||c==0x0020||c==0x00a0||c==0x1680||(c>=0x2000&&c<=0x200a)||c==0x2028||c==0x2029||c==0x202f||c==0x205f||c==0x3000||c==0xfeff;}
     private static String canonical(Object value)throws Exception{return new String(CanonicalJson.bytes(value),StandardCharsets.UTF_8);}
     static String iso(long millis){java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",Locale.ROOT);f.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));return f.format(new java.util.Date(millis));}
-    private static void strictIso(String value)throws Exception{if(!value.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z"))throw invalid("invalid_timestamp");java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",Locale.ROOT);f.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));f.setLenient(false);if(!iso(f.parse(value).getTime()).equals(value))throw invalid("invalid_timestamp");}
+    static void strictIso(String value)throws Exception{if(!value.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z"))throw invalid("invalid_timestamp");java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",Locale.ROOT);f.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));f.setLenient(false);if(!iso(f.parse(value).getTime()).equals(value))throw invalid("invalid_timestamp");}
     private static IllegalStateException invalid(String code){return new IllegalStateException(code);}
 }

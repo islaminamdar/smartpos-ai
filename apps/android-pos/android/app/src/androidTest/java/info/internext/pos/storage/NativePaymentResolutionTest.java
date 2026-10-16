@@ -236,7 +236,7 @@ public class NativePaymentResolutionTest {
             try(Cursor missing=old.rawQuery("SELECT name FROM sqlite_master WHERE name='offline_payment_results'",null)){assertEquals(0,missing.getCount());}old.setVersion(4);assertEquals(4,old.getVersion());
         }
         try(NativeJournal migrated=new NativeJournal(context,historical,()->{})){
-            assertEquals(5,migrated.getReadableDatabase().getVersion());assertEquals(installation,migrated.installationId());assertEquals(binding.deviceKeySha256,identity.readOrCreate(migrated).getString("deviceKeySha256"));
+            assertEquals(6,migrated.getReadableDatabase().getVersion());assertEquals(installation,migrated.installationId());assertEquals(binding.deviceKeySha256,identity.readOrCreate(migrated).getString("deviceKeySha256"));
             for(String table:tables)assertEquals(table,expected.get(table),canonical(rows(migrated.getReadableDatabase(),table)));
             NativeCheckoutEngine upgraded=createEngine(migrated);assertEquals(originalProof,upgraded.freezePaymentIntentForManager(intent));String n=challenge();assertEquals("resolved_funds_returned",upgraded.acceptPaymentResolution(intent,response(intent,result(intent,"funds_returned"),n),n).getString("status"));
             for(String table:tables)assertEquals(table,expected.get(table),canonical(rows(migrated.getReadableDatabase(),table)));

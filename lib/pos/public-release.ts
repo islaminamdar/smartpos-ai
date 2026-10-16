@@ -28,6 +28,7 @@ export function publicReleaseAccess(
     const apiMethods: Record<string, string[]> = {
       '/api/pos/native/preparation': ['POST'],
       '/api/pos/native/prepare': ['POST'],
+      '/api/pos/native/continuation': ['POST'],
       '/api/pos/native/access': ['GET'],
       '/api/pos/native/device': ['POST'],
       '/api/pos/offline/enroll': ['POST'],

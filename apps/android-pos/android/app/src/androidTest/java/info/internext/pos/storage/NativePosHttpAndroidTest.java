@@ -65,6 +65,25 @@ public class NativePosHttpAndroidTest {
         assertThrows(NativeAccessError.class,()->http.request("GET","/api/pos/native/access",new JSONObject()));
         assertThrows(NativeAccessError.class,()->http.request("POST","/api/pos/session",null));assertEquals(0,opens);
     }
+    @Test public void continuationIsExactBoundedAndUsesCurrentSessionCookies()throws Exception{
+        String path="/api/pos/native/continuation";
+        cookie("pos-access","current-access");cookie("pos-device-"+ACTOR,"a".repeat(64));
+        response.setCookie("pos-refresh=rotated; Secure; HttpOnly; Path=/");
+        JSONObject body=new JSONObject().put("challenge",ACTOR).put("authorityId",ACTOR).put("sealSha256","b".repeat(64));
+        assertTrue(post(path,body).getBoolean("ok"));
+        assertTrue(header("Cookie").contains("pos-access=current-access"));
+        assertTrue(header("Cookie").contains("pos-device-"+ACTOR));
+        assertEquals("https://pos.internext.info",header("Origin"));
+        assertEquals("rotated",store.read().getJSONObject("cookies").getString("pos-refresh"));
+        int prior=opens;
+        assertThrows(NativeAccessError.class,()->post(path,new JSONObject().put("oversized","x".repeat(1024))));
+        assertThrows(NativeAccessError.class,()->http.request("GET",path,null));
+        assertThrows(NativeAccessError.class,()->post(path+"/",body));
+        assertThrows(NativeAccessError.class,()->post(path+"?authorityId="+ACTOR,body));
+        assertEquals(prior,opens);
+        response=new FakeConnection();response.status=401;
+        assertEquals("native_session_expired",postError(path,body));
+    }
     @Test public void redirectsDoNotFollowOrApplyTheirCookies()throws Exception{
         response.status=302;response.headers.put("Location",Arrays.asList("https://evil.invalid/"));response.setCookie("pos-access=redirect-secret; Secure; HttpOnly; Path=/");
         rejects("native_access_unavailable");assertFalse(store.read().getJSONObject("cookies").has("pos-access"));assertEquals(0,response.reads);

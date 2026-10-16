@@ -31,7 +31,7 @@ public class NativeUpgradeTest {
     @Test public void verifyUpgrade()throws Exception{
         assertTrue(context().getDatabasePath(DB).exists());
         try(NativeJournal j=new NativeJournal(context(),DB,()->{})){
-            assertEquals(5,j.getWritableDatabase().getVersion());
+            assertEquals(6,j.getWritableDatabase().getVersion());
             JSONObject before=new JSONObject(context().getSharedPreferences("native-upgrade-test",0).getString("identity","{}"));
             JSONObject after=new DeviceIdentity(KEY).readOrCreate(j);
             assertEquals(before.getString("installationId"),after.getString("installationId"));assertEquals(before.getString("deviceKeySha256"),after.getString("deviceKeySha256"));

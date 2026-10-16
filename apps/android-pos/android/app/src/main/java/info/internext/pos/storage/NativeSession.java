@@ -114,6 +114,15 @@ public final class NativeSession {
     // Internal native preparation host only. No bridge may return these snapshots or tokens.
     synchronized JSONObject nativeState()throws Exception{JSONObject value=store.read();custody(value);return value;}
     synchronized void saveOffline(JSONObject value)throws Exception{JSONObject current=store.read();custody(current);current.put("offline",value);store.write(current);}
+    /** Compare only preparation custody; retain current rotated tokens and other session fields. */
+    synchronized boolean compareAndSetOffline(JSONObject expected,JSONObject replacement)throws Exception{
+        JSONObject current=store.read();custody(current);
+        if(current.isNull("actorId")||current.getBoolean("logoutPending"))throw new NativeAccessError("native_session_expired");
+        if(!current.getString("actorId").equals(expected.getJSONObject("scope").getString("actorId")))throw new NativeAccessError("offline_context_changed");
+        JSONObject saved=current.optJSONObject("offline");
+        if(saved==null||!NativePreparationTransition.canonical(saved).equals(NativePreparationTransition.canonical(expected)))return false;
+        current.put("offline",replacement);store.write(current);return true;
+    }
     synchronized JSONObject nativeRequest(String method,String path,JSONObject body)throws Exception{
         JSONObject current=store.read();custody(current);if(current.isNull("actorId")||current.getBoolean("logoutPending"))throw new NativeAccessError("native_session_expired");
         return http.request(method,path,body);

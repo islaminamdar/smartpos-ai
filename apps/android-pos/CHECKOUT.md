@@ -20,9 +20,9 @@ The older device recovery screen still exposes limited journal summaries (invoic
 
 ## Release gates
 
-If authority expires after collection starts, the pending intent remains preserved and no backdated invoice is issued. A manager workflow for collected or uncertain funds is still required: freeze the original intent, retain payment evidence, and record an authenticated, signed, idempotent resolution. Returned/voided funds must be distinguished from money never collected. This missing path is one reason production issuance stays disabled.
+If authority expires after collection starts, the pending intent remains preserved and no backdated invoice is issued. The candidate now includes immutable payment freeze, server custody/manager review and native verification of signed full-return/void outcomes; see [PAYMENT-RECOVERY.md](PAYMENT-RECOVERY.md). A saved decision, signed delivery and native acceptance remain separate. Production manager writes remain gated.
 
-Also pending: native consumption of the reconciliation-only missing-bundle recovery endpoint; subsequent allocations and shifts; controlled PIN/clock recovery; full native/server two-device offline, restart and reconnect acceptance; physical printer and manager acceptance. The current counter does not send delayed offline bills to the cloud kitchen and does not print from this screen. No SQL017 deployment or customer APK release is implied by passing candidate tests.
+Missing-bundle recovery and controlled allocation continuation are implemented as candidates; see [RECOVERY.md](RECOVERY.md) and [NEXT-ALLOCATION.md](NEXT-ALLOCATION.md). Native cash-drawer close, controlled PIN/clock/staff/device-loss recovery, full two-device native/server offline/restart/reconnect acceptance, physical printing and supervised manager acceptance remain pending. Offline bills do not automatically reach the cloud kitchen. SQL017–022 deployment and customer APK release are not implied by candidate tests.
 
 ## Verification scope
 
