@@ -33,7 +33,7 @@ final class SecureSessionStore {
                 if(ks.containsAlias(alias))throw new NativeAccessError("native_storage_unavailable");
                 KeyGenerator g=KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES,"AndroidKeyStore");
                 g.init(new KeyGenParameterSpec.Builder(alias,KeyProperties.PURPOSE_ENCRYPT|KeyProperties.PURPOSE_DECRYPT).setKeySize(256).setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).setRandomizedEncryptionRequired(true).build());g.generateKey();
-                write(new JSONObject().put("schemaVersion",1).put("actorId",JSONObject.NULL).put("cookies",new JSONObject()).put("counter",JSONObject.NULL).put("enrollment",JSONObject.NULL).put("logoutPending",false));
+                write(new JSONObject().put("schemaVersion",2).put("offline",JSONObject.NULL).put("actorId",JSONObject.NULL).put("cookies",new JSONObject()).put("counter",JSONObject.NULL).put("enrollment",JSONObject.NULL).put("logoutPending",false));
             }
             read();
         }
@@ -49,7 +49,11 @@ final class SecureSessionStore {
                 byte[] bytes=file.readFully();if(bytes.length<30||bytes.length>131101||bytes[0]!=1)throw new NativeAccessError("native_storage_unavailable");
                 Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(Cipher.DECRYPT_MODE,key(),new GCMParameterSpec(128,Arrays.copyOfRange(bytes,1,13)));cipher.updateAAD(AAD);plain=cipher.doFinal(bytes,13,bytes.length-13);
                 Object parsed=CanonicalJson.parse(plain);if(!(parsed instanceof JSONObject))throw new NativeAccessError("native_storage_unavailable");JSONObject value=(JSONObject)parsed;
-                if(value.length()!=6||value.getInt("schemaVersion")!=1||!(value.get("cookies") instanceof JSONObject)||!(value.get("logoutPending") instanceof Boolean))throw new NativeAccessError("native_storage_unavailable");
+                if(value.getInt("schemaVersion")==1&&value.length()==6){
+                    for(String field:new String[]{"actorId","counter","enrollment","cookies","logoutPending"})if(!value.has(field))throw new NativeAccessError("native_storage_unavailable");
+                    if(!(value.get("cookies") instanceof JSONObject)||!(value.get("logoutPending") instanceof Boolean))throw new NativeAccessError("native_storage_unavailable");
+                    value.put("schemaVersion",2).put("offline",JSONObject.NULL);write(value);}
+                if(value.length()!=7||value.getInt("schemaVersion")!=2||!value.has("offline")||!(value.get("cookies") instanceof JSONObject)||!(value.get("logoutPending") instanceof Boolean))throw new NativeAccessError("native_storage_unavailable");
                 for(String field:new String[]{"actorId","counter","enrollment"})if(!value.has(field))throw new NativeAccessError("native_storage_unavailable");return value;
             }catch(NativeAccessError error){throw error;}catch(Exception error){throw new NativeAccessError("native_storage_unavailable");}finally{if(plain!=null)Arrays.fill(plain,(byte)0);}
         }

@@ -27,7 +27,7 @@ final class NativePosHttp {
     NativePosHttp(SecureSessionStore store,ConnectionFactory connection){this.store=store;this.connection=connection;}
     synchronized JSONObject request(String method,String path,JSONObject body)throws Exception{
         if(!allowed(method,path)||((method.equals("POST"))!=(body!=null)))throw new NativeAccessError("native_access_unavailable");
-        byte[] bytes=body==null?null:CanonicalJson.bytes(body);if(bytes!=null&&bytes.length>2048)throw new NativeAccessError("native_access_unavailable");
+        byte[] bytes=body==null?null:CanonicalJson.bytes(body);if(bytes!=null&&bytes.length>requestLimit(path))throw new NativeAccessError("native_access_unavailable");
         HttpsURLConnection c=null;long deadline=SystemClock.elapsedRealtime()+30000;
         try{
             if(CookieHandler.getDefault()!=null)throw new NativeAccessError("native_access_unavailable");
@@ -42,15 +42,17 @@ final class NativePosHttp {
             if(status<200||status>=300)throw new NativeAccessError(status==429?"native_access_unavailable":status==403?"native_authentication_failed":"native_access_unavailable");
             String contentType=c.getContentType();if(contentType==null||!contentType.split(";",2)[0].trim().toLowerCase(Locale.ROOT).equals("application/json"))throw new NativeAccessError("native_access_unavailable");
             String encoding=c.getHeaderField("Content-Encoding");if(encoding!=null&&!encoding.equalsIgnoreCase("identity"))throw new NativeAccessError("native_access_unavailable");
-            if(c.getContentLengthLong()>131072)throw new NativeAccessError("native_access_unavailable");
-            ByteArrayOutputStream output=new ByteArrayOutputStream();try(InputStream in=c.getInputStream()){byte[] buffer=new byte[4096];int n;while(true){checkDeadline(deadline);n=in.read(buffer);checkDeadline(deadline);if(n==-1)break;if(output.size()+n>131072)throw new NativeAccessError("native_access_unavailable");output.write(buffer,0,n);}}
+            int limit=responseLimit(path);if(c.getContentLengthLong()>limit)throw new NativeAccessError("native_access_unavailable");
+            ByteArrayOutputStream output=new ByteArrayOutputStream();try(InputStream in=c.getInputStream()){byte[] buffer=new byte[4096];int n;while(true){checkDeadline(deadline);n=in.read(buffer);checkDeadline(deadline);if(n==-1)break;if(output.size()+n>limit)throw new NativeAccessError("native_access_unavailable");output.write(buffer,0,n);}}
             String raw=StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(output.toByteArray())).toString();
-            Object parsed=CanonicalJson.transport(raw,131072);if(!(parsed instanceof JSONObject))throw new NativeAccessError("native_access_unavailable");return (JSONObject)parsed;
+            Object parsed=CanonicalJson.transport(raw,limit);if(!(parsed instanceof JSONObject))throw new NativeAccessError("native_access_unavailable");return (JSONObject)parsed;
         }catch(NativeAccessError error){throw error;}catch(java.nio.charset.CharacterCodingException error){throw new NativeAccessError("native_access_unavailable");}catch(java.io.IOException error){throw new NativeAccessError("native_network_unavailable");}catch(Exception error){throw new NativeAccessError("native_access_unavailable");}
         finally{if(bytes!=null)Arrays.fill(bytes,(byte)0);if(c!=null)c.disconnect();}
     }
+    private static int requestLimit(String path){return path.equals("/api/pos/offline/enroll")?16384:path.equals("/api/pos/native/prepare")?8192:2048;}
+    private static int responseLimit(String path){return path.equals("/api/pos/native/prepare")?2_900_000:131072;}
     private static void checkDeadline(long deadline)throws NativeAccessError{if(SystemClock.elapsedRealtime()>=deadline)throw new NativeAccessError("native_network_unavailable");}
-    private static boolean allowed(String method,String path){return (path.equals("/api/pos/session")&&(method.equals("POST")||method.equals("DELETE")))||(path.equals("/api/pos/native/access")&&method.equals("GET"))||(path.equals("/api/pos/native/device")&&method.equals("POST"));}
+    private static boolean allowed(String method,String path){return (method.equals("POST")&&(path.equals("/api/pos/native/preparation")||path.equals("/api/pos/native/prepare")||path.equals("/api/pos/offline/enroll")||path.equals("/api/pos/commands")))||(path.equals("/api/pos/session")&&(method.equals("POST")||method.equals("DELETE")))||(path.equals("/api/pos/native/access")&&method.equals("GET"))||(path.equals("/api/pos/native/device")&&method.equals("POST"));}
     static boolean nameAllowed(String name){return name.equals("pos-access")||name.equals("pos-refresh")||name.matches("pos-device-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}");}
     private static String cookieHeader(JSONObject cookies)throws Exception{
         StringBuilder result=new StringBuilder();Iterator<String> keys=cookies.keys();while(keys.hasNext()){String name=keys.next();Object value=cookies.get(name);if(!nameAllowed(name)||!(value instanceof String)||!validValue((String)value))throw new NativeAccessError("native_storage_unavailable");if(result.length()>0)result.append("; ");result.append(name).append('=').append(value);}if(result.length()>24000)throw new NativeAccessError("native_storage_unavailable");return result.toString();

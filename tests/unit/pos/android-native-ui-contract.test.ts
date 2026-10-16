@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  parseOfflineState,
+  openingCashToFils,
+  nativeOfflineError,
   parseIdentity,
   parseReceipts,
   parseStatus,
@@ -109,5 +112,55 @@ describe('Native access response boundary', () => {
   it('shows safe recovery directions for uncertain enrollment and generic failures', () => {
     expect(nativeAccessError({ code: 'native_enrollment_uncertain' })).toMatch(/Check access/)
     expect(nativeAccessError(new Error('sensitive unexpected payload'))).not.toContain('sensitive')
+  })
+})
+
+describe('Offline preparation native boundary', () => {
+  const state = {
+    schemaVersion: 1,
+    status: 'not_prepared',
+    stage: 'prepare',
+    canIssue: false,
+    shiftId: null,
+    authority: null,
+    pinProvisioned: false,
+    noticeCode: null,
+    pendingAction: null,
+    pendingOpeningCashFils: null,
+  }
+  it('accepts saved request recovery with immutable opening cash', () => {
+    const pending = {
+      ...state,
+      status: 'blocked',
+      stage: 'recover',
+      pendingAction: 'open_shift',
+      pendingOpeningCashFils: 12550,
+    }
+    expect(parseOfflineState(pending)).toEqual(pending)
+  })
+  it.each([
+    { ...state, canIssue: true },
+    { ...state, secret: 'unexpected' },
+    { ...state, pendingAction: 'open_shift' },
+    { ...state, pendingOpeningCashFils: 10 },
+    { ...state, pendingAction: 'open_shift', pendingOpeningCashFils: -1 },
+    { ...state, pendingAction: 'open_shift', pendingOpeningCashFils: 100000001 },
+    { ...state, noticeCode: 'unexpected' },
+    { ...state, status: 'prepared', stage: 'prepared' },
+    { ...state, authority: { id: 'invalid', expiresAt: 'bad', firstInvoice: 2, lastInvoice: 1 } },
+  ])('rejects malformed or falsely ready offline state', (value) =>
+    expect(() => parseOfflineState(value)).toThrow()
+  )
+  it('converts decimal AED amounts without rounding user input', () => {
+    expect(openingCashToFils('125.05')).toBe(12505)
+    expect(openingCashToFils('0')).toBe(0)
+    expect(openingCashToFils('1000000.00')).toBe(100000000)
+    for (const input of ['-1', '1.001', '1e3', '1,000', '', '1000000.01'])
+      expect(openingCashToFils(input)).toBeNull()
+  })
+  it('maps native PIN and configuration failures without exposing raw details', () => {
+    expect(nativeOfflineError({ code: 'pin_locked' })).toContain('locked')
+    expect(nativeOfflineError({ code: 'offline_not_configured' })).toContain('approved app update')
+    expect(nativeOfflineError({ message: 'private unknown error' })).not.toContain('private')
   })
 })

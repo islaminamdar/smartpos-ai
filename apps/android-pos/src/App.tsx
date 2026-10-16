@@ -10,6 +10,15 @@ import {
   nativeAccessError,
   nativeAccessErrorCode,
   type NativeAccessState,
+  type NativeOfflineState,
+  readOfflineState,
+  openNativeOfflineShift,
+  prepareNativeOffline,
+  unlockNativeOffline,
+  lockNativeOffline,
+  nativeOfflineError,
+  nativeOfflineErrorCode,
+  openingCashToFils,
 } from './native'
 import './app.css'
 
@@ -20,6 +29,354 @@ const date = (value: string) =>
     timeZone: 'Asia/Dubai',
   }).format(new Date(value))
 
+function OfflinePreparation({
+  available,
+  accessBusy,
+  accessVersion,
+  operationLock,
+  onBusyChange,
+  onCheckedVersion,
+}: {
+  available: boolean
+  accessBusy: boolean
+  accessVersion: number
+  operationLock: { current: boolean }
+  onBusyChange: (busy: boolean) => void
+  onCheckedVersion: (version: number) => void
+}) {
+  const [state, setState] = useState<NativeOfflineState | null>(null)
+  const [fresh, setFresh] = useState(false)
+  const [checkedVersion, setCheckedVersion] = useState(-1)
+  const [confirmedVersion, setConfirmedVersion] = useState(-1)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [openingCash, setOpeningCash] = useState('')
+  const [confirmedAmount, setConfirmedAmount] = useState<number | null>(null)
+  const mounted = useRef(false)
+  const localLock = useRef(false)
+  const check = useCallback(async () => {
+    if (!available || operationLock.current || localLock.current) return
+    operationLock.current = true
+    localLock.current = true
+    setBusy(true)
+    onBusyChange(true)
+    setFresh(false)
+    setError('')
+    try {
+      const next = await readOfflineState()
+      if (mounted.current) {
+        setState(next)
+        setFresh(true)
+        setCheckedVersion(accessVersion)
+      }
+    } catch (failure) {
+      if (mounted.current) setError(nativeOfflineError(failure))
+    } finally {
+      operationLock.current = false
+      localLock.current = false
+      if (mounted.current) {
+        setBusy(false)
+        onBusyChange(false)
+        onCheckedVersion(accessVersion)
+      }
+    }
+  }, [available, operationLock, onBusyChange, onCheckedVersion, accessVersion])
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+  useEffect(() => {
+    if (!accessBusy && checkedVersion !== accessVersion) void check()
+  }, [accessBusy, accessVersion, checkedVersion, check])
+  const amount = openingCashToFils(openingCash)
+  const paused = !fresh || checkedVersion !== accessVersion || busy || accessBusy
+  async function execute(action: 'open_shift' | 'prepare' | 'unlock' | 'lock', retry = false) {
+    if (paused || !state || operationLock.current || localLock.current) return
+    const savedAmount = retry ? state.pendingOpeningCashFils : amount
+    if (retry ? state.pendingAction !== action : !!state.pendingAction) return
+    if (
+      !retry &&
+      ((action === 'open_shift' &&
+        (state.stage !== 'open_shift' ||
+          savedAmount === null ||
+          confirmedAmount !== savedAmount ||
+          confirmedVersion !== accessVersion)) ||
+        (action === 'prepare' && state.stage !== 'prepare') ||
+        (action === 'unlock' && state.stage !== 'unlock') ||
+        (action === 'lock' && state.status !== 'prepared'))
+    )
+      return
+    if (action === 'open_shift' && savedAmount === null) return
+    operationLock.current = true
+    localLock.current = true
+    setBusy(true)
+    onBusyChange(true)
+    setFresh(false)
+    setError('')
+    setNotice('')
+    try {
+      const next = await (action === 'open_shift'
+        ? openNativeOfflineShift(savedAmount!)
+        : action === 'prepare'
+          ? prepareNativeOffline()
+          : action === 'unlock'
+            ? unlockNativeOffline()
+            : lockNativeOffline())
+      if (mounted.current) {
+        setState(next)
+        setFresh(true)
+        setCheckedVersion(accessVersion)
+        setConfirmedAmount(null)
+        setNotice(
+          next.status === 'prepared'
+            ? 'Offline preparation saved. New sales are still paused in this app version.'
+            : action === 'lock'
+              ? 'Local offline access locked. Saved records are kept.'
+              : 'Setup status updated. Review the next step below.'
+        )
+      }
+    } catch (failure) {
+      if (mounted.current) {
+        if (nativeOfflineErrorCode(failure) === 'native_pin_cancelled')
+          setNotice(nativeOfflineError(failure))
+        else setError(nativeOfflineError(failure))
+      }
+      // Read-only reconciliation discovers a durable pending request; it never retries a write.
+      try {
+        const next = await readOfflineState()
+        if (mounted.current) {
+          setState(next)
+          setFresh(true)
+          setCheckedVersion(accessVersion)
+        }
+      } catch {
+        if (mounted.current) setFresh(false)
+      }
+    } finally {
+      operationLock.current = false
+      localLock.current = false
+      if (mounted.current) {
+        setBusy(false)
+        onBusyChange(false)
+      }
+    }
+  }
+  const labels = {
+    not_prepared: 'Not prepared',
+    locked: 'Prepared access is locked',
+    prepared: 'Offline preparation saved',
+    blocked: 'Preparation needs attention',
+  }
+  return (
+    <section className="offline-preparation" aria-labelledby="offline-heading">
+      <h3 id="offline-heading">Prepare offline access</h3>
+      <p>
+        Save this counter’s menu, signed permission and invoice allocation. New sales remain paused
+        until the billing screen is enabled and verified.
+      </p>
+      {!available ? (
+        <p className="help">Open the installed Android app to prepare this counter.</p>
+      ) : (
+        <>
+          {busy && (
+            <p role="status" className="access-note">
+              Checking setup or waiting for the Android dialog…
+            </p>
+          )}
+          {error && (
+            <div className="error" role="alert">
+              <strong>Offline setup needs checking</strong>
+              <p>{error}</p>
+            </div>
+          )}
+          {notice && (
+            <p role="status" className="access-note">
+              {notice}
+            </p>
+          )}
+          {state && (
+            <>
+              <p className="offline-state">
+                <strong>{fresh ? labels[state.status] : 'Last checked setup — check again'}</strong>
+              </p>
+              {state.noticeCode && nativeOfflineError({ code: state.noticeCode }) !== error && (
+                <p className="help">{nativeOfflineError({ code: state.noticeCode })}</p>
+              )}
+              {state.authority && (
+                <dl className="record-values offline-details">
+                  <div>
+                    <dt>Saved permission expires</dt>
+                    <dd>{date(state.authority.expiresAt)} Dubai time</dd>
+                  </div>
+                  <div>
+                    <dt>Allocated invoice numbers</dt>
+                    <dd>
+                      {state.authority.firstInvoice}–{state.authority.lastInvoice}
+                    </dd>
+                  </div>
+                </dl>
+              )}
+              {state.pendingAction ? (
+                <div className="pending-setup">
+                  <h4>Saved setup request needs confirmation</h4>
+                  <p>
+                    {state.pendingAction === 'open_shift'
+                      ? `Opening cash: AED ${(state.pendingOpeningCashFils! / 100).toFixed(2)}. Retry this saved shift request with the same amount.`
+                      : 'Retry the saved preparation request. Its original counter, shift and request identity are preserved.'}
+                  </p>
+                  <button
+                    className="primary"
+                    disabled={paused}
+                    onClick={() => void execute(state.pendingAction!, true)}
+                  >
+                    Retry saved{' '}
+                    {state.pendingAction === 'open_shift' ? 'shift request' : 'preparation'}
+                  </button>
+                  <p className="help">
+                    Do not start a replacement request, change the opening cash or clear this app’s
+                    data.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {state.stage === 'sign_in' && (
+                    <p className="help">Use secure sign-in above, then check offline status.</p>
+                  )}
+                  {state.stage === 'enroll_counter' && (
+                    <p className="help">
+                      Enroll this counter above before preparing offline access.
+                    </p>
+                  )}
+                  {state.stage === 'open_shift' && (
+                    <div className="offline-shift">
+                      <label>
+                        Opening cash (AED)
+                        <input
+                          inputMode="decimal"
+                          autoComplete="off"
+                          value={openingCash}
+                          disabled={paused}
+                          placeholder="0.00"
+                          onChange={(event) => {
+                            setOpeningCash(event.target.value)
+                            setConfirmedAmount(null)
+                          }}
+                        />
+                      </label>
+                      <p className="help">
+                        Count the cash already in this counter’s drawer. This opens a shift; it does
+                        not record a sale.
+                      </p>
+                      {openingCash && amount === null && (
+                        <p role="alert">
+                          Enter an amount from AED 0.00 to 1,000,000.00, using up to two decimal
+                          places.
+                        </p>
+                      )}
+                      <label className="cash-confirm">
+                        <input
+                          type="checkbox"
+                          checked={
+                            amount !== null &&
+                            confirmedAmount === amount &&
+                            confirmedVersion === accessVersion
+                          }
+                          disabled={paused || amount === null}
+                          onChange={(event) => {
+                            setConfirmedAmount(event.target.checked ? amount : null)
+                            setConfirmedVersion(accessVersion)
+                          }}
+                        />
+                        <span>
+                          I confirm opening cash
+                          {amount === null ? '' : ` of AED ${(amount / 100).toFixed(2)}`} for this
+                          counter.
+                        </span>
+                      </label>
+                      <button
+                        className="primary"
+                        disabled={
+                          paused ||
+                          amount === null ||
+                          confirmedAmount !== amount ||
+                          confirmedVersion !== accessVersion
+                        }
+                        onClick={() => void execute('open_shift')}
+                      >
+                        Open counter shift
+                      </button>
+                    </div>
+                  )}
+                  {state.stage === 'prepare' && (
+                    <>
+                      <button
+                        className="primary"
+                        disabled={paused}
+                        onClick={() => void execute('prepare')}
+                      >
+                        Prepare this counter
+                      </button>
+                      <p className="help">
+                        Requires internet. Android will ask you to set or enter your local PIN. No
+                        PIN is entered on this screen.
+                      </p>
+                    </>
+                  )}
+                  {state.stage === 'unlock' && (
+                    <button
+                      className="primary"
+                      disabled={paused}
+                      onClick={() => void execute('unlock')}
+                    >
+                      Unlock with Android PIN
+                    </button>
+                  )}
+                  {state.status === 'prepared' && (
+                    <>
+                      <p className="help">
+                        Menu and permission are saved. This is preparation only; collecting or
+                        recording payment is not available here.
+                      </p>
+                      <button
+                        className="secondary"
+                        disabled={paused}
+                        onClick={() => void execute('lock')}
+                      >
+                        Lock offline access
+                      </button>
+                    </>
+                  )}
+                  {state.stage === 'recover' && (
+                    <p className="help">
+                      Keep this device’s records and contact your manager or support. This app
+                      cannot repair permission, time or counter changes. A local status check does
+                      not renew access.
+                    </p>
+                  )}
+                </>
+              )}
+            </>
+          )}
+          <button
+            className="secondary access-refresh"
+            disabled={busy || accessBusy}
+            onClick={() => void check()}
+          >
+            Check offline status
+          </button>
+          <p className="help">
+            This check reads saved device status only. It does not connect, prepare access or retry
+            a request.
+          </p>
+        </>
+      )}
+    </section>
+  )
+}
+
 function NativeAccess({ available }: { available: boolean }) {
   const [access, setAccess] = useState<NativeAccessState | null>(null)
   const [fresh, setFresh] = useState(false)
@@ -27,11 +384,16 @@ function NativeAccess({ available }: { available: boolean }) {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [pendingLogout, setPendingLogout] = useState(false)
+  const [offlineBusy, setOfflineBusy] = useState(false)
+  const [accessInitialized, setAccessInitialized] = useState(false)
+  const [accessVersion, setAccessVersion] = useState(0)
+  const [offlineCheckedVersion, setOfflineCheckedVersion] = useState(-1)
   const [branchId, setBranchId] = useState('')
   const [name, setName] = useState('')
   const locked = useRef(false)
   const mounted = useRef(false)
   const apply = useCallback((next: NativeAccessState) => {
+    setAccessVersion((version) => version + 1)
     setAccess(next)
     setFresh(true)
     setBranchId(
@@ -59,7 +421,10 @@ function NativeAccess({ available }: { available: boolean }) {
       if (mounted.current) setError(nativeAccessError(failure))
     } finally {
       locked.current = false
-      if (mounted.current) setBusy(null)
+      if (mounted.current) {
+        setBusy(null)
+        setAccessInitialized(true)
+      }
     }
   }, [available, apply])
   useEffect(() => {
@@ -71,7 +436,14 @@ function NativeAccess({ available }: { available: boolean }) {
   }, [check])
   const branch = access?.branches.find((candidate) => candidate.id === branchId)
   async function change(kind: 'signin' | 'signout' | 'enroll') {
-    if (!available || locked.current || !fresh || !access) return
+    if (
+      !available ||
+      locked.current ||
+      !fresh ||
+      !access ||
+      offlineCheckedVersion !== accessVersion
+    )
+      return
     if (kind === 'signin' && (access.status !== 'signed_out' || pendingLogout)) return
     if (
       kind !== 'signin' &&
@@ -109,7 +481,7 @@ function NativeAccess({ available }: { available: boolean }) {
             ? 'Signed in. Offline sales are still paused.'
             : kind === 'signout'
               ? 'Signed out. Saved device records have not been removed.'
-              : 'Counter enrolled. Offline sales are still paused until offline preparation is available.'
+              : 'Counter enrolled. Prepare offline access below; new sales remain paused.'
         )
       }
     } catch (failure) {
@@ -140,7 +512,7 @@ function NativeAccess({ available }: { available: boolean }) {
       if (mounted.current) setBusy(null)
     }
   }
-  const paused = !!busy || !fresh
+  const paused = !!busy || offlineBusy || !fresh || offlineCheckedVersion !== accessVersion
   return (
     <section className="setup-panel" aria-labelledby="setup-heading">
       <h2 id="setup-heading">
@@ -308,21 +680,21 @@ function NativeAccess({ available }: { available: boolean }) {
           )}
           <button
             className="secondary access-refresh"
-            disabled={!!busy}
+            disabled={!!busy || offlineBusy}
             onClick={() => void check()}
           >
             {busy === 'check' ? 'Checking access…' : 'Check access'}
           </button>
         </>
       )}
-      <div className="offline-next">
-        <h3>Offline preparation is next</h3>
-        <p>
-          The bundled app can open without internet. A prepared menu, signed selling permission and
-          invoice allocation are still required before it can record sales offline. These are not
-          enabled in this version.
-        </p>
-      </div>
+      <OfflinePreparation
+        available={available}
+        accessBusy={!!busy || !accessInitialized}
+        accessVersion={accessVersion}
+        operationLock={locked}
+        onBusyChange={setOfflineBusy}
+        onCheckedVersion={setOfflineCheckedVersion}
+      />
       <a
         className="external-link"
         href="https://pos.internext.info/counter"
@@ -421,7 +793,7 @@ export default function App() {
             <p>
               {!native
                 ? 'Native storage is unavailable in this browser. Open the installed Android app to check this device.'
-                : 'This device has no permission to issue offline sales yet.'}
+                : 'Offline preparation can save this counter’s setup. Recording new sales is not enabled in this app version.'}
             </p>
           </section>
           {busy && !snapshot && (

@@ -111,6 +111,13 @@ public final class NativeSession {
         if(value==null)return null;int start=0,end=value.length();while(start<end&&trimSpace(value.charAt(start)))start++;while(end>start&&trimSpace(value.charAt(end-1)))end--;return value.substring(start,end);
     }
     private static boolean trimSpace(char c){return (c>=9&&c<=13)||c==32||c==160||c==0x1680||(c>=0x2000&&c<=0x200A)||c==0x2028||c==0x2029||c==0x202F||c==0x205F||c==0x3000||c==0xFEFF;}
+    // Internal native preparation host only. No bridge may return these snapshots or tokens.
+    synchronized JSONObject nativeState()throws Exception{JSONObject value=store.read();custody(value);return value;}
+    synchronized void saveOffline(JSONObject value)throws Exception{JSONObject current=store.read();custody(current);current.put("offline",value);store.write(current);}
+    synchronized JSONObject nativeRequest(String method,String path,JSONObject body)throws Exception{
+        JSONObject current=store.read();custody(current);if(current.isNull("actorId")||current.getBoolean("logoutPending"))throw new NativeAccessError("native_session_expired");
+        return http.request(method,path,body);
+    }
     private static boolean sameDevice(JSONObject a,JSONObject b)throws Exception{return a.getString("id").equals(b.getString("id"))&&a.getString("branchId").equals(b.getString("branchId"));}
     private static JSONObject counter(String actor,JSONObject device)throws Exception{return AccessContext.device(device).put("actorId",actor);}
     private static boolean hasSession(JSONObject state)throws Exception{JSONObject cookies=state.getJSONObject("cookies");return cookies.has("pos-access")||cookies.has("pos-refresh");}

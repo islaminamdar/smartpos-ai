@@ -1,6 +1,6 @@
 # Native local staff unlock and clock source
 
-Candidate internal primitives; no write bridge, production provisioning or native checkout activation is authorized by these classes alone.
+Candidate native security components, now connected to the preparation coordinator and native PIN dialog. Sale issuance remains disabled; these components do not establish production readiness.
 
 `NativeStaffUnlock(Context, NativeJournal, NativeClockSource)` implements the checkout engine's native `UnlockGuard`. Construction and PIN methods are package-private. The host calls `isProvisioned(binding)`, `provisionVerifiedStaff(binding, char[])`, `unlock(binding, char[])`, `lock()` and `requireUnlocked(binding)`. Provisioning requires a fresh, independently verified native online staff/device identity and native PIN confirmation. An existing verifier is never replaced by provisioning. PIN reset/recovery requires a separately reviewed online workflow; this implementation intentionally supplies no reset, clear or deletion method.
 

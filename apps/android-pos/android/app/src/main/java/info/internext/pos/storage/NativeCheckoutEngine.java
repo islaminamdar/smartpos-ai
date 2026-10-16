@@ -69,7 +69,14 @@ public final class NativeCheckoutEngine {
 
     /** freshServerMs must originate from a fresh authenticated native HTTPS exchange, never JS
      * wall time or an old authority timestamp. Exact installation retries never reset the anchor. */
-    public void installVerifiedBundle(String snapshotEnvelope, String authorityEnvelope, long freshServerMs) throws Exception {
+    void installVerifiedBundle(String snapshotEnvelope, String authorityEnvelope, long freshServerMs) throws Exception {
+        installBundle(snapshotEnvelope,authorityEnvelope,freshServerMs,null);
+    }
+    public void installVerifiedBundle(String snapshotEnvelope, String authorityEnvelope, long freshServerMs, OfflineClock.Reading referenceReading) throws Exception {
+        if(referenceReading==null)throw invalid("handoff_clock_changed");
+        installBundle(snapshotEnvelope,authorityEnvelope,freshServerMs,referenceReading);
+    }
+    private void installBundle(String snapshotEnvelope, String authorityEnvelope, long freshServerMs, OfflineClock.Reading referenceReading) throws Exception {
         OfflineBundle bundle = OfflineBundle.verify(snapshotEnvelope, authorityEnvelope, serverKeys, binding);
         if (!bundle.deviceKeySha256.equals(SignedProtocol.fingerprint(deviceKey))) throw invalid("device_key_mismatch");
         synchronized (journal) {
@@ -94,7 +101,13 @@ public final class NativeCheckoutEngine {
                     }
                 }
                 OfflineClock.Reading reading = clock.read();
-                OfflineClock.Tick tick = OfflineClock.advance(OfflineClock.anchor(freshServerMs, reading), reading, bundle.notBeforeMs, bundle.expiresAtMs);
+                long anchoredServerMs=freshServerMs;
+                if(referenceReading!=null){
+                    long delay=reading.elapsedRealtimeMs-referenceReading.elapsedRealtimeMs;
+                    if(!reading.bootId.equals(referenceReading.bootId)||delay<0||delay>30000||reading.wallTimeMs<referenceReading.wallTimeMs)throw invalid("handoff_clock_changed");
+                    anchoredServerMs=Math.addExact(freshServerMs,delay);
+                }
+                OfflineClock.Tick tick = OfflineClock.advance(OfflineClock.anchor(anchoredServerMs, reading), reading, bundle.notBeforeMs, bundle.expiresAtMs);
                 ContentValues row = new ContentValues(); row.put("id", bundle.authorityId); row.put("snapshot_envelope", snapshotEnvelope); row.put("authority_envelope", authorityEnvelope); db.insertOrThrow("offline_bundles", null, row);
                 row = new ContentValues(); row.put("authority_id", bundle.authorityId); row.put("next_number", bundle.firstInvoice); row.put("gross_fils", 0); row.put("clock_json", tick.nextState.toJson()); db.insertOrThrow("offline_authority_state", null, row);
                 db.setTransactionSuccessful();

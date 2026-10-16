@@ -28,6 +28,11 @@ export type DeviceSnapshot = {
   checkedAt: string
 }
 interface NativeLedgerPlugin {
+  getOfflineState(): Promise<unknown>
+  openOfflineShift(input: { openingCashFils: number }): Promise<unknown>
+  prepareOffline(): Promise<unknown>
+  unlockOffline(): Promise<unknown>
+  lockOffline(): Promise<unknown>
   getIdentity(): Promise<unknown>
   getStatus(): Promise<unknown>
   listReceipts(): Promise<unknown>
@@ -278,4 +283,159 @@ export async function enrollNativeCounter(input: {
   if (state.status !== 'signed_in' || state.device?.branchId !== input.branchId)
     throw new Error('invalid_native_response')
   return state
+}
+
+export type NativeOfflineState = {
+  schemaVersion: 1
+  status: 'not_prepared' | 'locked' | 'prepared' | 'blocked'
+  stage: 'sign_in' | 'enroll_counter' | 'open_shift' | 'prepare' | 'unlock' | 'prepared' | 'recover'
+  canIssue: false
+  shiftId: string | null
+  authority: null | { id: string; expiresAt: string; firstInvoice: number; lastInvoice: number }
+  pinProvisioned: boolean
+  noticeCode: string | null
+  pendingAction: 'open_shift' | 'prepare' | null
+  pendingOpeningCashFils: number | null
+}
+export function parseOfflineState(value: unknown): NativeOfflineState {
+  const result = record(value, [
+    'schemaVersion',
+    'status',
+    'stage',
+    'canIssue',
+    'shiftId',
+    'authority',
+    'pinProvisioned',
+    'noticeCode',
+    'pendingAction',
+    'pendingOpeningCashFils',
+  ])
+  if (
+    result.schemaVersion !== 1 ||
+    result.canIssue !== false ||
+    !['not_prepared', 'locked', 'prepared', 'blocked'].includes(String(result.status)) ||
+    ![
+      'sign_in',
+      'enroll_counter',
+      'open_shift',
+      'prepare',
+      'unlock',
+      'prepared',
+      'recover',
+    ].includes(String(result.stage)) ||
+    (result.shiftId !== null && !uuid(result.shiftId)) ||
+    typeof result.pinProvisioned !== 'boolean' ||
+    (result.noticeCode !== null &&
+      ![
+        'offline_not_configured',
+        'offline_permission_expired',
+        'pin_confirmation_mismatch',
+        'pin_kdf_unsupported',
+        'offline_preparation_uncertain',
+        'offline_shift_required',
+        'offline_context_changed',
+        'pin_unlock_required',
+        'clock_source_blocked',
+        'native_access_unavailable',
+        'native_storage_unavailable',
+      ].includes(String(result.noticeCode))) ||
+    (result.pendingAction !== null &&
+      result.pendingAction !== 'open_shift' &&
+      result.pendingAction !== 'prepare') ||
+    (result.pendingAction === 'open_shift'
+      ? !Number.isSafeInteger(result.pendingOpeningCashFils) ||
+        Number(result.pendingOpeningCashFils) < 0 ||
+        Number(result.pendingOpeningCashFils) > 100000000
+      : result.pendingOpeningCashFils !== null)
+  )
+    throw new Error('invalid_native_response')
+  if (result.authority !== null) {
+    const authority = record(result.authority, ['id', 'expiresAt', 'firstInvoice', 'lastInvoice'])
+    if (
+      !uuid(authority.id) ||
+      typeof authority.expiresAt !== 'string' ||
+      !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,9})?Z$/.test(authority.expiresAt) ||
+      !Number.isFinite(Date.parse(authority.expiresAt)) ||
+      !Number.isSafeInteger(authority.firstInvoice) ||
+      Number(authority.firstInvoice) < 1 ||
+      !Number.isSafeInteger(authority.lastInvoice) ||
+      Number(authority.lastInvoice) < Number(authority.firstInvoice)
+    )
+      throw new Error('invalid_native_response')
+  }
+  if (
+    result.status === 'prepared' &&
+    (result.stage !== 'prepared' || !result.shiftId || !result.authority || !result.pinProvisioned)
+  )
+    throw new Error('invalid_native_response')
+  return result as NativeOfflineState
+}
+export function nativeOfflineErrorCode(error: unknown): string {
+  if (!error || typeof error !== 'object') return ''
+  const value = error as { code?: unknown; message?: unknown }
+  return typeof value.code === 'string'
+    ? value.code
+    : typeof value.message === 'string'
+      ? value.message
+      : ''
+}
+export function nativeOfflineError(error: unknown): string {
+  switch (nativeOfflineErrorCode(error)) {
+    case 'offline_not_configured':
+      return 'Offline preparation is not configured in this app build. Ask your manager for the approved app update. Saved records are kept.'
+    case 'offline_permission_expired':
+      return 'Saved offline permission has expired. Keep this app’s data and contact your manager or support. Renewal is not available in this app version.'
+    case 'pin_confirmation_mismatch':
+      return 'The PIN confirmation did not match. Try again in the Android dialog.'
+    case 'pin_kdf_unsupported':
+      return 'This device cannot provide the required PIN protection. Keep saved records and contact your manager or support.'
+    case 'offline_shift_required':
+      return 'An open counter shift is required. Check offline status before continuing.'
+    case 'offline_preparation_uncertain':
+      return 'Setup needs confirmation. Keep the saved request and retry that same setup; do not start a replacement shift or change its opening cash.'
+    case 'offline_context_changed':
+      return 'The staff, counter or shift has changed. Check account access and offline status before continuing.'
+    case 'pin_unlock_required':
+      return 'Unlock using the Android PIN dialog to check prepared access.'
+    case 'native_pin_cancelled':
+      return 'Android PIN dialog cancelled. No replacement setup request was started.'
+    case 'pin_incorrect':
+      return 'The PIN was not accepted. Use the Android dialog to try again.'
+    case 'pin_locked':
+      return 'Local unlock is locked after unsuccessful attempts. Connect and ask your manager for recovery.'
+    case 'pin_online_reset_required':
+      return 'Connect to recover local access with your manager. Saved device records are kept.'
+    case 'clock_source_blocked':
+      return 'Device time could not be verified. Keep this app’s data and contact your manager or support. Automatic time recovery is not available.'
+    default:
+      return nativeAccessError(error)
+  }
+}
+export function openingCashToFils(value: string): number | null {
+  if (!/^\d{1,7}(?:\.\d{1,2})?$/.test(value.trim())) return null
+  const [whole, fraction = ''] = value.trim().split('.')
+  const result = Number(whole) * 100 + Number(fraction.padEnd(2, '0'))
+  return Number.isSafeInteger(result) && result >= 0 && result <= 100000000 ? result : null
+}
+export async function readOfflineState(): Promise<NativeOfflineState> {
+  requireNativeAccess()
+  return parseOfflineState(await ledger.getOfflineState())
+}
+export async function openNativeOfflineShift(openingCashFils: number): Promise<NativeOfflineState> {
+  requireNativeAccess()
+  if (!Number.isSafeInteger(openingCashFils) || openingCashFils < 0 || openingCashFils > 100000000)
+    throw new Error('invalid_native_input')
+  return parseOfflineState(await ledger.openOfflineShift({ openingCashFils }))
+}
+export async function prepareNativeOffline(): Promise<NativeOfflineState> {
+  requireNativeAccess()
+  return parseOfflineState(await ledger.prepareOffline())
+}
+export async function unlockNativeOffline(): Promise<NativeOfflineState> {
+  requireNativeAccess()
+  return parseOfflineState(await ledger.unlockOffline())
+}
+export async function lockNativeOffline(): Promise<NativeOfflineState> {
+  requireNativeAccess()
+  return parseOfflineState(await ledger.lockOffline())
 }

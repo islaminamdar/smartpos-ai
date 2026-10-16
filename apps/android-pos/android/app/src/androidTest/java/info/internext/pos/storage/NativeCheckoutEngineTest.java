@@ -145,5 +145,38 @@ public class NativeCheckoutEngineTest {
         String id=id();engine.beginPaymentIntent(id,input());assertThrows(SQLiteException.class,()->journal.getWritableDatabase().execSQL("UPDATE offline_bundles SET authority_envelope='{}'"));assertThrows(SQLiteException.class,()->journal.getWritableDatabase().execSQL("DELETE FROM offline_intent_context"));assertThrows(SQLiteException.class,()->journal.getWritableDatabase().execSQL("DELETE FROM offline_authority_state"));
         sellAfterCancellation(id);assertThrows(SQLiteException.class,()->journal.getWritableDatabase().execSQL("UPDATE offline_authority_state SET next_number=1"));assertThrows(SQLiteException.class,()->journal.getWritableDatabase().execSQL("UPDATE offline_chain SET sequence=0"));
     }
+    private void prepareNextGrant()throws Exception{
+        engine.sealAuthority(authority.getString("id"));authority.put("id",id());authority.getJSONObject("invoiceRange").put("first",4).put("last",6);rebuild();
+    }
+    private String currentGrantClock()throws Exception{
+        try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT clock_json FROM offline_authority_state WHERE authority_id=?",new String[]{authority.getString("id")})){assertTrue(c.moveToFirst());return c.getString(0);}
+    }
+    @Test public void freshHandoffIncludesDelayInsideInstallTransactionAndThirtySecondBoundary()throws Exception{
+        prepareNextGrant();OfflineClock.Reading reference=new OfflineClock.Reading(boot,elapsed,wall);elapsed+=30000;wall+=30000;
+        engine.installVerifiedBundle(snapshotEnvelope,authorityEnvelope,start,reference);
+        OfflineClock.State clock=OfflineClock.State.fromJson(currentGrantClock());assertEquals(start+30000,clock.anchorServerMs);assertEquals(elapsed,clock.anchorElapsedMs);
+        JSONObject issued=payload(sell());assertEquals(NativeCheckoutEngine.iso(start+30000),issued.getJSONObject("document").getString("issuedAt"));assertEquals(2,count("offline_bundles"));
+    }
+    @Test public void changedBootElapsedRollbackWallRollbackAndStaleInstallCannotPersistGrant()throws Exception{
+        prepareNextGrant();String originalBoot=boot;OfflineClock.Reading reference=new OfflineClock.Reading(boot,elapsed,wall);
+        boot=id();assertThrows(IllegalStateException.class,()->engine.installVerifiedBundle(snapshotEnvelope,authorityEnvelope,start,reference));assertEquals(1,count("offline_bundles"));
+        boot=originalBoot;elapsed=999;assertThrows(IllegalStateException.class,()->engine.installVerifiedBundle(snapshotEnvelope,authorityEnvelope,start,reference));assertEquals(1,count("offline_bundles"));
+        elapsed=1250;wall=start-1;assertThrows(IllegalStateException.class,()->engine.installVerifiedBundle(snapshotEnvelope,authorityEnvelope,start,reference));assertEquals(1,count("offline_bundles"));
+        elapsed=31001;wall=start+30001;assertThrows(IllegalStateException.class,()->engine.installVerifiedBundle(snapshotEnvelope,authorityEnvelope,start,reference));assertEquals(1,count("offline_bundles"));
+        elapsed=1250;wall=start+250;engine.installVerifiedBundle(snapshotEnvelope,authorityEnvelope,start,reference);assertEquals(start+250,OfflineClock.State.fromJson(currentGrantClock()).anchorServerMs);
+    }
+    @Test public void handoffDelayCannotExtendExpiredGrantAndOverflowRollsBack()throws Exception{
+        prepareNextGrant();authority.put("expiresAt",NativeCheckoutEngine.iso(start+1000));rebuild();OfflineClock.Reading reference=new OfflineClock.Reading(boot,elapsed,wall);elapsed+=1000;wall+=1000;
+        OfflineClock.ClockException expired=assertThrows(OfflineClock.ClockException.class,()->engine.installVerifiedBundle(snapshotEnvelope,authorityEnvelope,start,reference));assertEquals("clock_expired",expired.code);assertEquals(1,count("offline_bundles"));
+        assertThrows(ArithmeticException.class,()->engine.installVerifiedBundle(snapshotEnvelope,authorityEnvelope,Long.MAX_VALUE,reference));assertEquals(1,count("offline_bundles"));assertEquals(1,count("offline_authority_state"));assertEquals(0,count("receipts"));
+    }
+    @Test public void repeatedPreparedBundleCannotResetClockDespiteLaterReferenceOrLock()throws Exception{
+        prepareNextGrant();OfflineClock.Reading reference=new OfflineClock.Reading(boot,elapsed,wall);elapsed+=250;wall+=250;engine.installVerifiedBundle(snapshotEnvelope,authorityEnvelope,start,reference);sell();String saved=currentGrantClock();
+        locked=true;elapsed+=4_000_000;wall+=4_000_000;engine.installVerifiedBundle(snapshotEnvelope,authorityEnvelope,wall,new OfflineClock.Reading(boot,elapsed,wall));
+        assertEquals(saved,currentGrantClock());assertEquals(1,count("receipts"));assertEquals(2,count("offline_bundles"));assertEquals(5,value("SELECT next_number FROM offline_authority_state WHERE seal_envelope IS NULL"));
+    }
+    @Test public void publicPreparedInstallRequiresNativeReferenceReading()throws Exception{
+        prepareNextGrant();assertThrows(IllegalStateException.class,()->engine.installVerifiedBundle(snapshotEnvelope,authorityEnvelope,start,null));assertEquals(1,count("offline_bundles"));assertEquals(1,count("offline_authority_state"));
+    }
     private void sellAfterCancellation(String id)throws Exception{engine.cancelUncollectedIntent(id,"No payment collected");sell();}
 }

@@ -14,15 +14,18 @@ import info.internext.pos.storage.DeviceIdentity;
 import info.internext.pos.storage.NativeAccessError;
 import info.internext.pos.storage.NativeJournal;
 import info.internext.pos.storage.NativeSession;
+import info.internext.pos.storage.NativeOfflineCoordinator;
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Display and secure online access bridge. Financial write methods remain unavailable. */
+/** Display and secure online access bridge. Offline sale issuance remains unavailable; opening a shift is explicit. */
 @CapacitorPlugin(name = "NativeLedger")
 public final class NativeLedgerPlugin extends Plugin {
     private NativeJournal journal;
     private NativeSession session;
+    private NativeOfflineCoordinator offline;
+    private volatile boolean foreground=true;
     private AlertDialog credentials;
     private EditText passwordField;
     private volatile boolean destroyed;
@@ -33,15 +36,20 @@ public final class NativeLedgerPlugin extends Plugin {
         if(session==null)session=new NativeSession(getContext(),journal);
         return session;
     }
+    private NativeOfflineCoordinator offline()throws Exception{if(offline==null)offline=new NativeOfflineCoordinator(getContext(),journal,session());return offline;}
+    private static String accessCode(Exception error){
+        if(error instanceof NativeAccessError)return ((NativeAccessError)error).code;
+        String code=error.getMessage();return java.util.Arrays.asList("pin_incorrect","pin_locked","pin_online_reset_required","pin_unlock_required","pin_format_invalid","pin_confirmation_mismatch","clock_source_blocked","clock_rollback","pin_kdf_unsupported").contains(code)?code:"native_access_unavailable";
+    }
     private void read(PluginCall call, ReadOperation operation) {
         execute(call,operation,false);
     }
     private boolean execute(PluginCall call,ReadOperation operation,boolean access){
         if(destroyed){call.reject("The app is closing. Open it again.","native_access_unavailable");return false;}
         try{storage.execute(() -> {
-            try { call.resolve(new JSObject(operation.read().toString())); }
+            try { org.json.JSONObject value=operation.read();if(value!=null)call.resolve(new JSObject(value.toString())); }
             catch (Exception error) {
-                String code=access?(error instanceof NativeAccessError?((NativeAccessError)error).code:"native_access_unavailable"):"native_storage_unavailable";
+                String code=access?accessCode(error):"native_storage_unavailable";
                 call.reject(access?"Secure access could not be completed. Check the app's recovery message.":"This device's saved records could not be read. Keep the app installed and contact support.",code);
             }
         });return true;}catch(java.util.concurrent.RejectedExecutionException error){call.reject("The app is closing. Open it again.","native_access_unavailable");return false;}
@@ -50,11 +58,40 @@ public final class NativeLedgerPlugin extends Plugin {
     @PluginMethod public void getStatus(PluginCall call) { read(call, () -> journal.status()); }
     @PluginMethod public void listReceipts(PluginCall call) { read(call, () -> journal.listReceipts()); }
     @PluginMethod public void getAccessState(PluginCall call){execute(call,()->session().getAccessState(),true);}
-    @PluginMethod public void signOut(PluginCall call){execute(call,()->session().signOut(),true);}
+    @PluginMethod public void signOut(PluginCall call){execute(call,()->{if(offline!=null)offline.lock();return session().signOut();},true);}
     @PluginMethod public void enrollCounter(PluginCall call){
         String branch=call.getString("branchId"),name=call.getString("name");
         execute(call,()->session().enrollCounter(branch,name),true);
     }
+    @PluginMethod public void getOfflineState(PluginCall call){execute(call,()->offline().getState(),true);}
+    @PluginMethod public void openOfflineShift(PluginCall call){
+        Object value=call.getData().opt("openingCashFils");
+        if(!(value instanceof Integer)&&!(value instanceof Long)){call.reject("Enter an exact opening cash amount.","native_access_unavailable");return;}
+        execute(call,()->offline().openShift(((Number)value).longValue()),true);
+    }
+    @PluginMethod public void prepareOffline(PluginCall call){
+        execute(call,()->{org.json.JSONObject state=offline().beginPreparation();String stage=state.getString("stage");
+            if(!(stage.equals("prepare")||stage.equals("unlock")||(stage.equals("recover")&&"prepare".equals(state.optString("pendingAction")))))return state;
+            showPinDialog(call,!state.getBoolean("pinProvisioned"),false);return null;},true);
+    }
+    @PluginMethod public void unlockOffline(PluginCall call){showPinDialog(call,false,true);}
+    @PluginMethod public void lockOffline(PluginCall call){execute(call,()->{offline().lock();return offline().getState();},true);}
+    private void showPinDialog(PluginCall call,boolean create,boolean unlockOnly){
+        getActivity().runOnUiThread(()->{
+            if(destroyed||!foreground||getActivity().isFinishing()||credentials!=null){call.reject("PIN entry is unavailable right now.","native_pin_cancelled");return;}
+            LinearLayout layout=new LinearLayout(getActivity());layout.setOrientation(LinearLayout.VERTICAL);int padding=(int)(24*getContext().getResources().getDisplayMetrics().density);layout.setPadding(padding,8,padding,8);
+            EditText pin=pinField(create?"Choose an 8–12 digit PIN":"Enter your PIN"),confirm=create?pinField("Confirm your PIN"):null;layout.addView(pin);if(confirm!=null)layout.addView(confirm);passwordField=pin;
+            AlertDialog dialog=new AlertDialog.Builder(getActivity()).setTitle(create?"Set this counter PIN":"Unlock this counter").setMessage(create?"Use a PIN for this staff account on this device. It is separate from your account password.":"Your PIN is checked on this device.").setView(layout).setNegativeButton("Cancel",(d,w)->call.reject("PIN entry cancelled.","native_pin_cancelled")).setPositiveButton(create?"Set PIN":"Unlock",null).create();
+            credentials=dialog;dialog.setOnCancelListener(d->call.reject("PIN entry cancelled.","native_pin_cancelled"));dialog.setOnDismissListener(d->{pin.getText().clear();if(confirm!=null)confirm.getText().clear();if(credentials==dialog){credentials=null;passwordField=null;}});
+            dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+                if(pin.length()<8||pin.length()>12){pin.setError("Use 8–12 digits");return;}
+                char[] secret=new char[pin.length()],repeat=confirm==null?null:new char[confirm.length()];android.text.TextUtils.getChars(pin.getText(),0,pin.length(),secret,0);if(confirm!=null)android.text.TextUtils.getChars(confirm.getText(),0,confirm.length(),repeat,0);
+                if(create&&!Arrays.equals(secret,repeat)){Arrays.fill(secret,'\0');Arrays.fill(repeat,'\0');confirm.setError("PINs must match");return;}
+                dialog.dismiss();if(!execute(call,()->{try{if(!foreground)throw new NativeAccessError("native_pin_cancelled");org.json.JSONObject result=unlockOnly?offline().unlockWithPin(secret):offline().prepareWithPin(secret,repeat);if(!foreground){offline().lock();return offline().getState();}return result;}finally{Arrays.fill(secret,'\0');if(repeat!=null)Arrays.fill(repeat,'\0');}},true)){Arrays.fill(secret,'\0');if(repeat!=null)Arrays.fill(repeat,'\0');}
+            }));if(dialog.getWindow()!=null)dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);dialog.show();
+        });
+    }
+    private EditText pinField(String label){EditText field=new EditText(getActivity());field.setHint(label);field.setContentDescription(label);field.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);field.setSingleLine(true);field.setSaveEnabled(false);field.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(12)});if(android.os.Build.VERSION.SDK_INT>=26)field.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);return field;}
     @PluginMethod public void signIn(PluginCall call){
         // Credentials never enter the WebView or PluginCall JSON. Android owns these fields.
         getActivity().runOnUiThread(()->{
@@ -77,10 +114,12 @@ public final class NativeLedgerPlugin extends Plugin {
             dialog.show();
         });
     }
+    @Override protected void handleOnPause(){foreground=false;if(credentials!=null)credentials.cancel();try{storage.execute(()->{if(offline!=null)offline.lock();});}catch(java.util.concurrent.RejectedExecutionException ignored){}super.handleOnPause();}
+    @Override protected void handleOnResume(){foreground=true;super.handleOnResume();}
     @Override protected void handleOnDestroy() {
         destroyed=true;
         if(passwordField!=null)passwordField.getText().clear();
         if(credentials!=null)credentials.dismiss();
-        storage.execute(() -> journal.close()); storage.shutdown(); super.handleOnDestroy();
+        storage.execute(() -> {if(offline!=null)offline.close();journal.close();}); storage.shutdown(); super.handleOnDestroy();
     }
 }
