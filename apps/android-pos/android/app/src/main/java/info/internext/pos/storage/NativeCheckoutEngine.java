@@ -70,19 +70,25 @@ public final class NativeCheckoutEngine {
     /** freshServerMs must originate from a fresh authenticated native HTTPS exchange, never JS
      * wall time or an old authority timestamp. Exact installation retries never reset the anchor. */
     void installVerifiedBundle(String snapshotEnvelope, String authorityEnvelope, long freshServerMs) throws Exception {
-        installBundle(snapshotEnvelope,authorityEnvelope,freshServerMs,null,false);
+        installBundle(snapshotEnvelope,authorityEnvelope,freshServerMs,null,false,false);
     }
     public void installVerifiedBundle(String snapshotEnvelope, String authorityEnvelope, long freshServerMs, OfflineClock.Reading referenceReading) throws Exception {
         if(referenceReading==null)throw invalid("handoff_clock_changed");
-        installBundle(snapshotEnvelope,authorityEnvelope,freshServerMs,referenceReading,false);
+        installBundle(snapshotEnvelope,authorityEnvelope,freshServerMs,referenceReading,false,false);
     }
     /** Retain a never-installed expired allocation and atomically seal it. This cannot enable
      * issuance, replace an installed bundle, reset its clock, or recycle its reserved numbers. */
     public void retainExpiredUnusedBundle(String snapshotEnvelope,String authorityEnvelope,long freshServerMs,OfflineClock.Reading referenceReading)throws Exception{
         if(referenceReading==null)throw invalid("handoff_clock_changed");
-        installBundle(snapshotEnvelope,authorityEnvelope,freshServerMs,referenceReading,true);
+        installBundle(snapshotEnvelope,authorityEnvelope,freshServerMs,referenceReading,true,false);
     }
-    private void installBundle(String snapshotEnvelope, String authorityEnvelope, long freshServerMs, OfflineClock.Reading referenceReading,boolean retainExpired) throws Exception {
+    /** Device-proof recovery only: missing bundles are inserted and sealed in one transaction.
+     * No staff/PIN/selling clock reset, and an existing active allocation is never finished here. */
+    void retainRecoveredUnusedBundle(String snapshotEnvelope,String authorityEnvelope,long freshServerMs,OfflineClock.Reading referenceReading)throws Exception{
+        if(referenceReading==null)throw invalid("handoff_clock_changed");
+        installBundle(snapshotEnvelope,authorityEnvelope,freshServerMs,referenceReading,false,true);
+    }
+    private void installBundle(String snapshotEnvelope, String authorityEnvelope, long freshServerMs, OfflineClock.Reading referenceReading,boolean retainExpired,boolean recoveryOnly) throws Exception {
         OfflineBundle bundle = OfflineBundle.verify(snapshotEnvelope, authorityEnvelope, serverKeys, binding);
         if (!bundle.deviceKeySha256.equals(SignedProtocol.fingerprint(deviceKey))) throw invalid("device_key_mismatch");
         synchronized (journal) {
@@ -92,10 +98,11 @@ public final class NativeCheckoutEngine {
                     if (c.moveToFirst()) {
                         OfflineBundle stored = OfflineBundle.verify(c.getString(0), c.getString(1), serverKeys, binding);
                         if (!stored.snapshotSha256.equals(bundle.snapshotSha256) || !stored.authoritySha256.equals(bundle.authoritySha256)) throw invalid("bundle_conflict");
+                        if(recoveryOnly&&state(db,bundle.authorityId).seal==null)throw invalid("offline_allocation_active");
                         db.setTransactionSuccessful(); return;
                     }
                 }
-                unlock.requireUnlocked(binding);
+                if(!recoveryOnly)unlock.requireUnlocked(binding);
                 if (exists(db, "SELECT 1 FROM offline_authority_state WHERE seal_envelope IS NULL OR blocked=1") || hasUncertain(db)) throw invalid("previous_authority_unresolved");
                 try (Cursor c = db.rawQuery("SELECT key_epoch FROM offline_chain WHERE slot=1", null)) {
                     if (c.moveToFirst()) {
@@ -106,19 +113,19 @@ public final class NativeCheckoutEngine {
                         db.insertOrThrow("offline_chain", null, row);
                     }
                 }
-                OfflineClock.Reading reading = clock.read();
+                OfflineClock.Reading reading = recoveryOnly?referenceReading:clock.read();
                 long anchoredServerMs=freshServerMs;
-                if(referenceReading!=null){
+                if(referenceReading!=null&&!recoveryOnly){
                     long delay=reading.elapsedRealtimeMs-referenceReading.elapsedRealtimeMs;
                     if(!reading.bootId.equals(referenceReading.bootId)||delay<0||delay>30000||reading.wallTimeMs<referenceReading.wallTimeMs)throw invalid("handoff_clock_changed");
                     anchoredServerMs=Math.addExact(freshServerMs,delay);
                 }
                 OfflineClock.State anchor=OfflineClock.anchor(anchoredServerMs, reading);
                 if(retainExpired&&anchoredServerMs<bundle.expiresAtMs)throw invalid("authority_not_expired");
-                OfflineClock.State savedClock=retainExpired?anchor:OfflineClock.advance(anchor, reading, bundle.notBeforeMs, bundle.expiresAtMs).nextState;
+                OfflineClock.State savedClock=(retainExpired||recoveryOnly)?anchor:OfflineClock.advance(anchor, reading, bundle.notBeforeMs, bundle.expiresAtMs).nextState;
                 ContentValues row = new ContentValues(); row.put("id", bundle.authorityId); row.put("snapshot_envelope", snapshotEnvelope); row.put("authority_envelope", authorityEnvelope); db.insertOrThrow("offline_bundles", null, row);
                 row = new ContentValues(); row.put("authority_id", bundle.authorityId); row.put("next_number", bundle.firstInvoice); row.put("gross_fils", 0); row.put("clock_json", savedClock.toJson()); db.insertOrThrow("offline_authority_state", null, row);
-                if(retainExpired)sealAuthority(bundle.authorityId);
+                if(retainExpired||recoveryOnly)sealAuthority(bundle.authorityId,!recoveryOnly);
                 db.setTransactionSuccessful();
             } finally { db.endTransaction(); }
         }
@@ -211,14 +218,15 @@ public final class NativeCheckoutEngine {
     }
 
     /** Stop new issuance durably BEFORE returning the exact signed terminal declaration. */
-    public String sealAuthority(String authorityId) throws Exception {
+    public String sealAuthority(String authorityId) throws Exception { return sealAuthority(authorityId,true); }
+    private String sealAuthority(String authorityId,boolean requireUnlock) throws Exception {
         uuid(authorityId);
         synchronized (journal) {
             SQLiteDatabase db = journal.getWritableDatabase(); db.beginTransaction();
             try {
                 OfflineBundle bundle = bundle(db, authorityId); State state = state(db, authorityId);
                 if (state.seal != null) { db.setTransactionSuccessful(); return state.seal; }
-                unlock.requireUnlocked(binding);
+                if(requireUnlock)unlock.requireUnlocked(binding);
                 if (hasUncertain(db)) throw invalid("payment_reconciliation_required");
                 long sequence; String hash;
                 try (Cursor c = db.rawQuery("SELECT sequence,event_hash FROM offline_chain WHERE slot=1", null)) {

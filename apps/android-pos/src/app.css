@@ -838,3 +838,37 @@ footer {
     flex-wrap: wrap;
   }
 }
+
+.bundle-recovery {
+  border-top: 1px solid #dce3ec;
+  margin-top: 28px;
+  padding-top: 24px;
+}
+.bundle-recovery p,
+.bundle-recovery span,
+.bundle-recovery strong {
+  overflow-wrap: anywhere;
+}
+.bundle-recovery h3 {
+  margin-top: 0;
+}
+.bundle-recovery-state {
+  border-left: 3px solid #9d6500;
+  padding: 8px 0 8px 16px;
+  margin: 20px 0;
+}
+.bundle-recovery button {
+  min-height: 48px;
+  max-width: 100%;
+  white-space: normal;
+}
+.bundle-recovery .access-refresh {
+  display: block;
+  margin-top: 16px;
+  margin-left: 0;
+}
+@media (max-width: 600px) {
+  .bundle-recovery button {
+    width: 100%;
+  }
+}

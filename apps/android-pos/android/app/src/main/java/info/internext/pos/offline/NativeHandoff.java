@@ -39,6 +39,16 @@ public final class NativeHandoff {
         }
     }
 
+    /** Historical handoff is deliberately a different type from an issuance preparation. */
+    public static final class Recovered {
+        public final String authorityId,snapshotSha256,authoritySha256;
+        public final long freshTimeMs;
+        private Recovered(OfflineBundle bundle,long fresh) {
+            authorityId=bundle.authorityId;snapshotSha256=bundle.snapshotSha256;
+            authoritySha256=bundle.authoritySha256;freshTimeMs=fresh;
+        }
+    }
+
     public static Context verifyContext(String envelope,Map<String,PublicKey> pinnedKeys,
             String challenge,Scope expected,OfflineClock.Reading before,OfflineClock.Reading after) throws Exception {
         if(expected==null)throw invalid();
@@ -57,6 +67,21 @@ public final class NativeHandoff {
         JSONObject value=payload(envelope,pinnedKeys);
         fields(value,"kind","schemaVersion","challenge","serverTimeMs","actorId","organizationId","branchId","deviceId","shiftId","keyEpoch","deviceKeySha256","authorityId","snapshotSha256","authoritySha256");
         literal(value,"kind","native-offline-prepared");integer(value,"schemaVersion",1,1);
+        matchBundle(value,expected,expectedAuthorityId,bundle);
+        return new Prepared(bundle,freshTime(value,challenge,before,after));
+    }
+
+    public static Recovered verifyRecovered(String envelope,Map<String,PublicKey> pinnedKeys,
+            String challenge,OfflineBundle.Binding expected,String expectedAuthorityId,OfflineBundle bundle,
+            OfflineClock.Reading before,OfflineClock.Reading after) throws Exception {
+        if(expected==null||bundle==null)throw invalid();uuid(expectedAuthorityId);
+        JSONObject value=payload(envelope,pinnedKeys);
+        fields(value,"kind","schemaVersion","purpose","challenge","serverTimeMs","actorId","organizationId","branchId","deviceId","shiftId","keyEpoch","deviceKeySha256","authorityId","snapshotSha256","authoritySha256");
+        literal(value,"kind","native-offline-recovered");literal(value,"purpose","reconciliation-only");integer(value,"schemaVersion",1,1);
+        matchBundle(value,expected,expectedAuthorityId,bundle);
+        return new Recovered(bundle,freshTime(value,challenge,before,after));
+    }
+    private static void matchBundle(JSONObject value,OfflineBundle.Binding expected,String expectedAuthorityId,OfflineBundle bundle)throws Exception {
         Scope scope=new Scope(expected.actorId,expected.organizationId,expected.branchId,expected.deviceId);
         matchScope(value,scope);
         equal(uuid(value.get("shiftId")),expected.shiftId);equal(uuid(value.get("keyEpoch")),expected.keyEpoch);
@@ -67,7 +92,6 @@ public final class NativeHandoff {
         equal(bundle.shiftId,expected.shiftId);equal(bundle.keyEpoch,expected.keyEpoch);equal(bundle.deviceKeySha256,expected.deviceKeySha256);
         equal(hash(value.get("snapshotSha256")),bundle.snapshotSha256);
         equal(hash(value.get("authoritySha256")),bundle.authoritySha256);
-        return new Prepared(bundle,freshTime(value,challenge,before,after));
     }
 
     private static JSONObject payload(String envelope,Map<String,PublicKey> pinnedKeys) throws Exception {

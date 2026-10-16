@@ -27,6 +27,7 @@ import {
   openingCashToFils,
 } from './native'
 import NativeCounter from './NativeCounter'
+import NativeBundleRecovery from './NativeBundleRecovery'
 import './app.css'
 
 const date = (value: string) =>
@@ -692,6 +693,7 @@ function NativeAccess({
   const [pendingLogout, setPendingLogout] = useState(false)
   const [offlineBusy, setOfflineBusy] = useState(false)
   const [reconciliationBusy, setReconciliationBusy] = useState(false)
+  const [recoveryBusy, setRecoveryBusy] = useState(false)
   const [reconciliationCheckedVersion, setReconciliationCheckedVersion] = useState(-1)
   const [preparation, setPreparation] = useState<NativeOfflineState | null>(null)
   const [accessInitialized, setAccessInitialized] = useState(false)
@@ -832,6 +834,7 @@ function NativeAccess({
     !busy &&
     !offlineBusy &&
     !reconciliationBusy &&
+    !recoveryBusy &&
     offlineCheckedVersion === accessVersion &&
     reconciliationCheckedVersion === accessVersion
   useEffect(() => {
@@ -842,6 +845,7 @@ function NativeAccess({
     !!busy ||
     offlineBusy ||
     reconciliationBusy ||
+    recoveryBusy ||
     !fresh ||
     offlineCheckedVersion !== accessVersion ||
     reconciliationCheckedVersion !== accessVersion
@@ -1012,7 +1016,7 @@ function NativeAccess({
           )}
           <button
             className="secondary access-refresh"
-            disabled={externalBusy || !!busy || offlineBusy || reconciliationBusy}
+            disabled={externalBusy || recoveryBusy || !!busy || offlineBusy || reconciliationBusy}
             onClick={() => void check()}
           >
             {busy === 'check' ? 'Checking access…' : 'Check access'}
@@ -1027,7 +1031,7 @@ function NativeAccess({
       )}
       <OfflinePreparation
         available={available}
-        accessBusy={!!busy || !accessInitialized || reconciliationBusy}
+        accessBusy={!!busy || !accessInitialized || reconciliationBusy || recoveryBusy}
         accessVersion={accessVersion}
         operationLock={locked}
         onBusyChange={setOfflineBusy}
@@ -1040,7 +1044,11 @@ function NativeAccess({
       <ReconciliationPanel
         available={available}
         ready={
-          accessInitialized && !busy && !offlineBusy && offlineCheckedVersion === accessVersion
+          accessInitialized &&
+          !busy &&
+          !offlineBusy &&
+          !recoveryBusy &&
+          offlineCheckedVersion === accessVersion
         }
         revision={accessVersion}
         operationLock={locked}
@@ -1053,6 +1061,15 @@ function NativeAccess({
         }
         onBusyChange={setReconciliationBusy}
         onCheckedVersion={setReconciliationCheckedVersion}
+        onChanged={refreshPreparation}
+      />
+      <NativeBundleRecovery
+        available={available}
+        ready={setupReady && !externalBusy}
+        revision={accessVersion}
+        actionsBlocked={financialHold}
+        operationLock={locked}
+        onBusyChange={setRecoveryBusy}
         onChanged={refreshPreparation}
       />
       <a

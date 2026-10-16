@@ -176,6 +176,77 @@ public class NativePosHttpAndroidTest {
         }
     }
 
+    private static final String BUNDLE_RECOVERY="/api/pos/offline/bundle-recovery";
+    // These fixtures test transport limits, not signature/schema acceptance by the recovery owner.
+    private static JSONObject jsonOfBytes(int bytes)throws Exception{
+        int overhead=new JSONObject().put("fixture","").toString().getBytes(StandardCharsets.UTF_8).length;
+        JSONObject body=new JSONObject().put("fixture","x".repeat(bytes-overhead));
+        assertEquals(bytes,body.toString().getBytes(StandardCharsets.UTF_8).length);return body;
+    }
+    @Test public void bundleRecoverySessionBypassesSignedOutGateWithoutSendingOrAdoptingCookies()throws Exception{
+        String database="http-recovery-test-"+UUID.randomUUID()+".db";NativeJournal journal=new NativeJournal(context,database,()->{});
+        try{
+            NativePosHttp transport=new NativePosHttp(store,url->{opens++;assertEquals(NativePosHttp.ORIGIN+BUNDLE_RECOVERY,url.toString());return response;});
+            NativeSession session=new NativeSession(store,transport,journal);
+            for(boolean pending:new boolean[]{false,true}){
+                JSONObject before=store.read();before.put("actorId",pending?ACTOR:JSONObject.NULL).put("logoutPending",pending);
+                before.getJSONObject("cookies").put("pos-access","retained-access").put("pos-refresh","retained-refresh").put("pos-device-"+ACTOR,"b".repeat(64));
+                before.put("offline",new JSONObject().put("pendingFixture",true));store.write(before);
+                byte[] vault=java.nio.file.Files.readAllBytes(new File(context.getNoBackupFilesDir(),name).toPath());
+                int prior=opens;
+                assertEquals("native_session_expired",assertThrows(NativeAccessError.class,()->session.nativeRequest("POST",BUNDLE_RECOVERY,new JSONObject())).code);
+                assertEquals(prior,opens);
+                response=new FakeConnection();response.setCookie("pos-access=unexpected; Secure; HttpOnly; Path=/","pos-refresh=; Max-Age=0; Secure; HttpOnly; Path=/","pos-device-"+ACTOR+"=bad; Domain=evil.invalid; Path=/");
+                assertTrue(session.historicalRequest(BUNDLE_RECOVERY,new JSONObject().put("signed","synthetic-query")).getBoolean("ok"));
+                assertNull(header("Cookie"));assertTrue(response.disconnected);
+                assertArrayEquals(CanonicalJson.bytes(before),CanonicalJson.bytes(store.read()));
+                assertArrayEquals(vault,java.nio.file.Files.readAllBytes(new File(context.getNoBackupFilesDir(),name).toPath()));
+            }
+        }finally{journal.close();assertTrue(context.deleteDatabase(database));assertFalse(context.getDatabasePath(database).exists());}
+    }
+    @Test public void bundleRecoveryErrorsAndMalformedSuccessNeverMutateSessionCookies()throws Exception{
+        cookie("pos-access","private-access");cookie("pos-refresh","private-refresh");byte[] before=CanonicalJson.bytes(store.read());
+        for(int status:new int[]{302,401,403,409,429,503,200}){
+            response=new FakeConnection();response.status=status;response.setCookie("pos-access=rotated; Secure; HttpOnly; Path=/","pos-refresh=; Max-Age=0; Secure; HttpOnly; Path=/");
+            response.body="{\"ok\":true,\"ok\":false}".getBytes(StandardCharsets.UTF_8);
+            String code=postError(BUNDLE_RECOVERY,new JSONObject());
+            assertEquals(status==403?"native_authentication_failed":"native_access_unavailable",code);
+            assertNull(header("Cookie"));assertTrue(response.disconnected);assertArrayEquals(before,CanonicalJson.bytes(store.read()));
+            if(status!=200)assertEquals(0,response.reads);
+        }
+    }
+    @Test public void bundleRecoveryAllowsOnlyExactHistoricalPostPath()throws Exception{
+        String database="http-recovery-path-test-"+UUID.randomUUID()+".db";NativeJournal journal=new NativeJournal(context,database,()->{});
+        try{
+            NativeSession session=new NativeSession(store,http,journal);
+            for(String path:new String[]{BUNDLE_RECOVERY+"/",BUNDLE_RECOVERY+"?authority=1",BUNDLE_RECOVERY+"#fragment","/api/pos/offline/../offline/bundle-recovery","/api/pos/offline/%62undle-recovery","/api/pos/offline/Bundle-recovery","https://pos.internext.info"+BUNDLE_RECOVERY,"https://evil.invalid"+BUNDLE_RECOVERY,"/api/pos/native/prepare","/api/pos/offline/enroll"}){
+                assertThrows(NativeAccessError.class,()->session.historicalRequest(path,new JSONObject()));
+                if(!path.equals("/api/pos/native/prepare")&&!path.equals("/api/pos/offline/enroll"))assertThrows(NativeAccessError.class,()->http.request("POST",path,new JSONObject()));
+            }
+            for(String method:new String[]{"GET","PUT","DELETE","post"})assertThrows(NativeAccessError.class,()->http.request(method,BUNDLE_RECOVERY,null));
+            assertThrows(NativeAccessError.class,()->http.request("POST",BUNDLE_RECOVERY,null));assertEquals(0,opens);
+        }finally{journal.close();assertTrue(context.deleteDatabase(database));assertFalse(context.getDatabasePath(database).exists());}
+    }
+    @Test public void bundleRecoveryRequestLimitIsExactUtf8BytesAndPreservesSubmittedPayload()throws Exception{
+        JSONObject exact=jsonOfBytes(16384);post(BUNDLE_RECOVERY,exact);
+        assertArrayEquals(exact.toString().getBytes(StandardCharsets.UTF_8),response.output.toByteArray());assertNull(header("Cookie"));
+        int prior=opens;assertEquals("native_access_unavailable",postError(BUNDLE_RECOVERY,jsonOfBytes(16385)));assertEquals(prior,opens);
+        JSONObject unicode=jsonOfBytes(16384);String value=unicode.getString("fixture");unicode.put("fixture","é"+value.substring(1));
+        assertEquals(16384,unicode.toString().length());assertEquals(16385,unicode.toString().getBytes(StandardCharsets.UTF_8).length);
+        assertEquals("native_access_unavailable",postError(BUNDLE_RECOVERY,unicode));assertEquals(prior,opens);
+    }
+    @Test public void bundleRecoveryAcceptsLargeResponsesButEnforcesDeclaredAndStreamingBounds()throws Exception{
+        // A transport wrapper may contain several separately bounded signed envelopes.
+        // This boundary fixture deliberately does not purport to be a verified bundle.
+        JSONObject exact=jsonOfBytes(2_900_000);response.body=exact.toString().getBytes(StandardCharsets.UTF_8);response.length=2_900_000;
+        JSONObject received=post(BUNDLE_RECOVERY,new JSONObject());assertEquals(exact.getString("fixture"),received.getString("fixture"));assertTrue(response.disconnected);
+        response=new FakeConnection();response.length=2_900_001;assertEquals("native_access_unavailable",postError(BUNDLE_RECOVERY,new JSONObject()));assertEquals(0,response.reads);assertTrue(response.disconnected);
+        response=new FakeConnection();response.length=-1;response.body=jsonOfBytes(2_900_001).toString().getBytes(StandardCharsets.UTF_8);
+        assertEquals("native_access_unavailable",postError(BUNDLE_RECOVERY,new JSONObject()));assertEquals(1,response.reads);assertTrue(response.disconnected);
+        response=new FakeConnection();response.length=20;response.body=jsonOfBytes(2_900_001).toString().getBytes(StandardCharsets.UTF_8);
+        assertEquals("native_access_unavailable",postError(BUNDLE_RECOVERY,new JSONObject()));assertEquals(1,response.reads);assertTrue(response.disconnected);
+    }
+
     private static final class FakeConnection extends HttpsURLConnection {
         int status=200,reads;long length=-1;boolean disconnected,noErrorStream,errorReadFailure;String type="application/json; charset=utf-8",encoding;
         byte[] body="{\"ok\":true}".getBytes(StandardCharsets.UTF_8);

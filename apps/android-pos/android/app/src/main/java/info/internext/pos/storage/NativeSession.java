@@ -120,7 +120,7 @@ public final class NativeSession {
     }
     /** Historical signed evidence remains uploadable after sign-out or access revocation. */
     synchronized JSONObject historicalRequest(String path,JSONObject envelope)throws Exception{
-        if(!path.equals("/api/pos/offline/import")&&!path.equals("/api/pos/offline/seal"))throw new NativeAccessError("native_access_unavailable");
+        if(!path.equals("/api/pos/offline/import")&&!path.equals("/api/pos/offline/seal")&&!path.equals("/api/pos/offline/bundle-recovery"))throw new NativeAccessError("native_access_unavailable");
         return http.request("POST",path,envelope);
     }
     private static boolean sameDevice(JSONObject a,JSONObject b)throws Exception{return a.getString("id").equals(b.getString("id"))&&a.getString("branchId").equals(b.getString("branchId"));}

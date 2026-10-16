@@ -2,6 +2,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../../../apps/android-pos/node_modules/react', async () => await import('react'))
 const bridge = vi.hoisted(() => ({
+  readNativeBundleRecovery: vi.fn(),
+  recoverNativeMissingBundle: vi.fn(),
   subscribeNativeCheckoutLock: vi.fn(),
   readNativeCheckout: vi.fn(),
   readNativeReconciliation: vi.fn(),
@@ -102,6 +104,13 @@ const reconciliation = {
   noticeCode: null,
 }
 beforeEach(() => {
+  bridge.readNativeBundleRecovery.mockResolvedValue({
+    schemaVersion: 1,
+    status: 'not_needed',
+    authorityId: null,
+    reasonCode: null,
+    canRecover: false,
+  })
   bridge.subscribeNativeCheckoutLock.mockResolvedValue({
     remove: vi.fn().mockResolvedValue(undefined),
   })
@@ -736,5 +745,74 @@ describe('Native payment custody across app navigation', () => {
     expect(screen.getByRole('button', { name: 'Sign out of this app' })).toBeDisabled()
     expect(bridge.signOutNative).not.toHaveBeenCalled()
     expect(bridge.finishNativeOfflineAuthority).not.toHaveBeenCalled()
+  })
+})
+
+describe('Missing allocation recovery integration', () => {
+  it('recovers while signed out without a PIN or upload and refreshes saved record counts', async () => {
+    const authorityId = '10000000-0000-4000-8000-000000000007'
+    bridge.readNativeBundleRecovery.mockResolvedValue({
+      schemaVersion: 1,
+      status: 'available',
+      authorityId,
+      reasonCode: null,
+      canRecover: true,
+    })
+    bridge.recoverNativeMissingBundle.mockResolvedValue({
+      schemaVersion: 1,
+      status: 'retained',
+      authorityId,
+      reasonCode: null,
+      canRecover: false,
+    })
+    render(<App />)
+    const check = screen.getByRole('button', { name: 'Check missing allocation' })
+    await waitFor(() => expect(check).toBeEnabled())
+    fireEvent.click(check)
+    const consent = await screen.findByRole('checkbox', {
+      name: /I confirm recovering and permanently finishing/,
+    })
+    await waitFor(() => expect(consent).toBeEnabled())
+    fireEvent.click(consent)
+    const prior = bridge.readNativeReconciliation.mock.calls.length
+    fireEvent.click(screen.getByRole('button', { name: 'Recover missing allocation' }))
+    await screen.findByText(/Original allocation recovered and permanently finished on this device/)
+    await waitFor(() =>
+      expect(bridge.readNativeReconciliation.mock.calls.length).toBeGreaterThan(prior)
+    )
+    expect(bridge.recoverNativeMissingBundle).toHaveBeenCalledExactlyOnceWith(authorityId)
+    expect(bridge.signInNative).not.toHaveBeenCalled()
+    expect(bridge.unlockNativeOffline).not.toHaveBeenCalled()
+    expect(bridge.reconcileNativeOffline).not.toHaveBeenCalled()
+    expect(bridge.prepareNativeOffline).not.toHaveBeenCalled()
+  })
+  it('keeps recovery mutation unavailable when Counter discovers a pending intent', async () => {
+    bridge.readNativeBundleRecovery.mockResolvedValue({
+      schemaVersion: 1,
+      status: 'available',
+      authorityId: branchId,
+      reasonCode: null,
+      canRecover: true,
+    })
+    bridge.readNativeCheckout.mockResolvedValue({
+      schemaVersion: 1,
+      canIssue: false,
+      reasonCode: 'pin_unlock_required',
+      context: null,
+      pendingIntentId: branchId,
+      lastReceiptId: null,
+      unresolvedIntent: null,
+      lastReceipt: null,
+    })
+    render(<App />)
+    const check = screen.getByRole('button', { name: 'Check missing allocation' })
+    await waitFor(() => expect(check).toBeEnabled())
+    fireEvent.click(check)
+    const consent = await screen.findByRole('checkbox', {
+      name: /I confirm recovering and permanently finishing/,
+    })
+    expect(consent).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Recover missing allocation' })).toBeDisabled()
+    expect(bridge.recoverNativeMissingBundle).not.toHaveBeenCalled()
   })
 })

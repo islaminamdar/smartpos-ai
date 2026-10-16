@@ -17,6 +17,7 @@ import info.internext.pos.storage.NativeSession;
 import info.internext.pos.storage.NativeOfflineCoordinator;
 import info.internext.pos.storage.NativeReconciliation;
 import info.internext.pos.storage.NativeCheckoutCoordinator;
+import info.internext.pos.storage.NativeBundleRecovery;
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -29,6 +30,7 @@ public final class NativeLedgerPlugin extends Plugin {
     private NativeOfflineCoordinator offline;
     private NativeReconciliation reconciliation;
     private NativeCheckoutCoordinator checkout;
+    private NativeBundleRecovery bundleRecovery;
     private volatile boolean foreground=true;
     private final java.util.concurrent.atomic.AtomicLong checkoutEpoch=new java.util.concurrent.atomic.AtomicLong();
     private AlertDialog credentials;
@@ -44,6 +46,24 @@ public final class NativeLedgerPlugin extends Plugin {
     private NativeOfflineCoordinator offline()throws Exception{if(offline==null)offline=new NativeOfflineCoordinator(getContext(),journal,session());return offline;}
     private NativeReconciliation reconciliation()throws Exception{if(reconciliation==null)reconciliation=new NativeReconciliation(getContext(),journal,session());return reconciliation;}
     private NativeCheckoutCoordinator checkout()throws Exception{if(checkout==null)checkout=new NativeCheckoutCoordinator(journal,offline());return checkout;}
+    private NativeBundleRecovery bundleRecovery()throws Exception{if(bundleRecovery==null)bundleRecovery=new NativeBundleRecovery(getContext(),journal,session());return bundleRecovery;}
+    @PluginMethod public void getBundleRecoveryState(PluginCall call){
+        if(call.getData().length()!=0){call.reject("Check the saved allocation.","offline_context_changed");return;}
+        execute(call,()->bundleRecovery().getState(),true);
+    }
+    @PluginMethod public void recoverMissingOfflineBundle(PluginCall call){
+        Object authorityId=call.getData().opt("authorityId");
+        if(call.getData().length()!=1||!(authorityId instanceof String)||!((String)authorityId).matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")){
+            call.reject("Select the original saved allocation.","offline_context_changed");return;
+        }
+        final long epoch=checkoutEpoch.get();
+        execute(call,()->{
+            if(!foreground||epoch!=checkoutEpoch.get())throw new NativeAccessError("offline_recovery_uncertain");
+            org.json.JSONObject result=bundleRecovery().recover((String)authorityId);
+            if(!foreground||epoch!=checkoutEpoch.get())throw new NativeAccessError("offline_recovery_uncertain");
+            return result;
+        },true);
+    }
     private void checkoutCall(PluginCall call,ReadOperation operation,String... fields){
         if(call.getData().length()!=fields.length){call.reject("Check the saved payment details.","native_checkout_unavailable");return;}
         for(String field:fields)if(!call.getData().has(field)){call.reject("Check the saved payment details.","native_checkout_unavailable");return;}

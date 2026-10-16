@@ -123,3 +123,20 @@ Validation for this UI slice:
 - A fixture-only stale post-commit reason was corrected; native output and production runtime were unaffected. Future release enablement must replace version-specific paused copy alongside native gate acceptance.
 
 Temporary browser fixture and preview are removed after review. A private synthetic fixture and review record are retained outside the repository for reproducibility.
+
+## Missing-allocation recovery UI — 2026-10-16
+
+Added `NativeBundleRecovery.tsx` to This device and strict native recovery state/ACK validation in `native.ts`. The panel begins with an explicit local status check. An available allocation requires a checkbox tied to its exact authority reference before recovery can permanently finish it. A successful ACK must be retained, match that same reference, and have recovery disabled. The panel refreshes preparation/reconciliation reads and points to Upload saved records; it never uploads automatically.
+
+Recovery uses the shared operation lock and can be requested while signed out or PIN locked. A pending or unverified payment blocks the mutation. Account/preparation/reconciliation operations cannot race a recovery; status reads remain distinct from recovery requests. A lost response is followed by local state readback, preserving the original reference and requiring fresh consent before a retry. A different returned allocation cannot replace the uncertain request. Backgrounding invalidates displayed action readiness and consent, and delayed responses from the earlier UI epoch are not treated as completion.
+
+Copy explicitly distinguishes recovering and permanently finishing the original allocation from enabling sales, renewing permission, reserving replacement numbers, closing the cash shift, or server confirmation. Unknown state/notice combinations fail closed. Native signatures, device custody and financial release enforcement remain native responsibilities; this UI does not handle staff credentials or PINs.
+
+Validation:
+
+- 22 new focused recovery UI/state tests and two new App integration regressions; the six-file native UI/contract regression run passed 141 tests. After the retained-state display refinement, all 57 tests in the affected recovery/App files passed again.
+- TypeScript, scoped ESLint and Vite build passed. Final UI bundle `index-CkHTm1Uc.js`; stylesheet `index-BKpGeRKi.css`.
+- Synthetic UI exercised signed-out explicit recovery, authority-bound consent, retained success and refreshed pending declaration count. At requested widths 320/375/768/1280, document scroll widths equalled client widths 305/360/753/1265. Recovery controls measured at least 48px high; narrow authority references wrapped without overflow.
+- These browser fixtures prove UI behavior only. They do not prove a real device-signed request, production recovery, server acknowledgement, printing or permission to collect payment. Native APK new sales remain paused; the separately deployed online web pilot is unchanged.
+
+Root independently verified the 375px consent → recovery → retained flow with the pending declaration count increasing to one, and the 1280px final layout. Final Semgrep scan: 210 rules on three changed runtime files, zero findings/errors. Temporary fixture and review browser tab were removed after review; private evidence remains outside the repository.

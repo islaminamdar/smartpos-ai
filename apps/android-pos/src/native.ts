@@ -28,6 +28,8 @@ export type DeviceSnapshot = {
   checkedAt: string
 }
 interface NativeLedgerPlugin {
+  getBundleRecoveryState(): Promise<unknown>
+  recoverMissingOfflineBundle(input: { authorityId: string }): Promise<unknown>
   addListener(
     eventName: 'nativeCheckoutLocked',
     listener: (event: unknown) => void
@@ -1155,4 +1157,77 @@ export async function subscribeNativeCheckoutLock(
 ): Promise<PluginListenerHandle> {
   requireNativeAccess()
   return ledger.addListener('nativeCheckoutLocked', () => onLock())
+}
+
+export type NativeBundleRecoveryState = {
+  schemaVersion: 1
+  status: 'not_needed' | 'available' | 'blocked' | 'retained'
+  authorityId: string | null
+  reasonCode: string | null
+  canRecover: boolean
+}
+export function parseBundleRecoveryState(value: unknown): NativeBundleRecoveryState {
+  const r = record(value, ['schemaVersion', 'status', 'authorityId', 'reasonCode', 'canRecover'])
+  if (
+    r.schemaVersion !== 1 ||
+    !['not_needed', 'available', 'blocked', 'retained'].includes(String(r.status)) ||
+    (r.authorityId !== null && !uuid(r.authorityId)) ||
+    !reasonCode(r.reasonCode) ||
+    typeof r.canRecover !== 'boolean' ||
+    r.canRecover !== (r.status === 'available') ||
+    (['available', 'retained'].includes(String(r.status)) && r.authorityId === null)
+  )
+    invalidCheckout()
+  return r as NativeBundleRecoveryState
+}
+export function knownBundleRecoveryReason(code: string | null): boolean {
+  return (
+    code === null ||
+    [
+      'offline_recovery_uncertain',
+      'offline_not_configured',
+      'previous_authority_unresolved',
+      'offline_allocation_active',
+      'payment_reconciliation_required',
+      'native_storage_unavailable',
+      'offline_context_changed',
+      'native_network_unavailable',
+    ].includes(code)
+  )
+}
+export function nativeBundleRecoveryError(error: unknown): string {
+  switch (nativeOfflineErrorCode(error)) {
+    case 'offline_not_configured':
+      return 'Recovery is not configured in this app build. Keep this app’s data and ask your manager for the approved app update.'
+    case 'previous_authority_unresolved':
+      return 'A previous allocation still needs reconciliation. Keep its records and use Upload saved records; do not reserve replacement numbers.'
+    case 'offline_allocation_active':
+      return 'The original allocation is already saved on this device. Missing-allocation recovery is not needed; review its current status in Prepare offline access.'
+    case 'offline_recovery_uncertain':
+      return 'Recovery was not confirmed. Check the original allocation’s saved status before retrying; do not reserve replacement invoice numbers.'
+    case 'payment_reconciliation_required':
+      return 'A saved payment needs checking. Resolve that original payment in Counter before recovering an allocation.'
+    case 'native_storage_unavailable':
+      return 'The saved recovery record could not be read. Keep this app’s data and contact your manager or support.'
+    case 'offline_context_changed':
+      return 'The allocation no longer matches this recovery request. Keep the original record and contact your manager or support.'
+    case 'native_network_unavailable':
+      return 'Connect to the internet, then check the original recovery status before retrying.'
+    default:
+      return 'Recovery could not be verified. Keep this app’s data and check the original allocation status. Do not reinstall or reserve replacement numbers.'
+  }
+}
+export async function readNativeBundleRecovery(): Promise<NativeBundleRecoveryState> {
+  requireNativeAccess()
+  return parseBundleRecoveryState(await ledger.getBundleRecoveryState())
+}
+export async function recoverNativeMissingBundle(
+  authorityId: string
+): Promise<NativeBundleRecoveryState> {
+  requireNativeAccess()
+  if (!uuid(authorityId)) throw new Error('invalid_native_input')
+  const result = parseBundleRecoveryState(await ledger.recoverMissingOfflineBundle({ authorityId }))
+  if (result.authorityId !== authorityId || result.status !== 'retained' || result.canRecover)
+    invalidCheckout()
+  return result
 }

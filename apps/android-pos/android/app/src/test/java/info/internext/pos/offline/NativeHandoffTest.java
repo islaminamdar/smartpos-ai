@@ -35,6 +35,8 @@ public class NativeHandoffTest {
     private JSONObject prepared()throws Exception{return context().put("kind","native-offline-prepared").put("keyEpoch",binding.keyEpoch).put("deviceKeySha256",binding.deviceKeySha256).put("authorityId",bundle.authorityId).put("snapshotSha256",bundle.snapshotSha256).put("authoritySha256",bundle.authoritySha256);}
     private NativeHandoff.Context context(JSONObject value)throws Exception{return NativeHandoff.verifyContext(sign(value),pins,nonce,scope,before,after);}
     private NativeHandoff.Prepared prepared(JSONObject value)throws Exception{return NativeHandoff.verifyPrepared(sign(value),pins,nonce,binding,bundle.authorityId,bundle,before,after);}
+    private JSONObject recovered()throws Exception{return prepared().put("kind","native-offline-recovered").put("purpose","reconciliation-only");}
+    private NativeHandoff.Recovered recovered(JSONObject value)throws Exception{return NativeHandoff.verifyRecovered(sign(value),pins,nonce,binding,bundle.authorityId,bundle,before,after);}
 
     @Test public void signedContextAddsEntireRoundTripAndKeepsIndependentScope()throws Exception{
         NativeHandoff.Context result=context(context());assertEquals(now+250,result.freshTimeMs);
@@ -125,5 +127,38 @@ public class NativeHandoffTest {
         String duplicate=envelope.substring(0,envelope.length()-1)+",\"keyId\":\""+parsed.getString("keyId")+"\"}";
         assertThrows(Exception.class,()->NativeHandoff.verifyContext(duplicate,pins,nonce,scope,before,after));
         assertThrows(Exception.class,()->NativeHandoff.verifyContext(" ".repeat(16385)+envelope,pins,nonce,scope,before,after));
+    }
+    @Test public void recoveredHandoffAddsRoundTripAndCannotBeUsedForPreparation()throws Exception{
+        NativeHandoff.Recovered result=recovered(recovered());assertEquals(now+250,result.freshTimeMs);
+        assertEquals(bundle.authorityId,result.authorityId);assertEquals(bundle.snapshotSha256,result.snapshotSha256);assertEquals(bundle.authoritySha256,result.authoritySha256);
+        String terminal=sign(recovered()),sale=sign(prepared());
+        assertThrows(Exception.class,()->NativeHandoff.verifyPrepared(terminal,pins,nonce,binding,bundle.authorityId,bundle,before,after));
+        assertThrows(Exception.class,()->NativeHandoff.verifyRecovered(sale,pins,nonce,binding,bundle.authorityId,bundle,before,after));
+        assertThrows(Exception.class,()->recovered(recovered().put("kind","native-offline-prepared")));
+        assertThrows(Exception.class,()->recovered(recovered().put("purpose","checkout")));
+        JSONObject missing=recovered();missing.remove("purpose");assertThrows(Exception.class,()->recovered(missing));
+        assertThrows(Exception.class,()->recovered(recovered().put("extra",true)));
+    }
+    @Test public void recoveredHandoffRequiresIndependentAllScopeHashesAuthorityAndPinnedSigner()throws Exception{
+        for(String field:new String[]{"actorId","organizationId","branchId","deviceId","shiftId","keyEpoch","authorityId"})
+            assertThrows(field,Exception.class,()->recovered(recovered().put(field,UUID.randomUUID().toString())));
+        for(String field:new String[]{"deviceKeySha256","snapshotSha256","authoritySha256","challenge"})
+            assertThrows(field,Exception.class,()->recovered(recovered().put(field,"f".repeat(64))));
+        String envelope=sign(recovered());
+        assertThrows(Exception.class,()->NativeHandoff.verifyRecovered(envelope,Collections.emptyMap(),nonce,binding,bundle.authorityId,bundle,before,after));
+        assertThrows(Exception.class,()->NativeHandoff.verifyRecovered(envelope,pins,nonce,binding,UUID.randomUUID().toString(),bundle,before,after));
+        assertThrows(Exception.class,()->NativeHandoff.verifyRecovered(envelope,pins,nonce,binding,bundle.authorityId,null,before,after));
+        String otherShift=UUID.randomUUID().toString();OfflineBundle.Binding changed=new OfflineBundle.Binding(binding.organizationId,binding.branchId,binding.deviceId,binding.actorId,otherShift,binding.keyEpoch,binding.deviceKeySha256);
+        String rebound=sign(recovered().put("shiftId",otherShift));assertThrows(Exception.class,()->NativeHandoff.verifyRecovered(rebound,pins,nonce,changed,bundle.authorityId,bundle,before,after));
+    }
+    @Test public void recoveredHandoffEnforcesFreshnessWithoutExtendingItsTimeBound()throws Exception{
+        String envelope=sign(recovered());
+        assertEquals(now,NativeHandoff.verifyRecovered(envelope,pins,nonce,binding,bundle.authorityId,bundle,before,before).freshTimeMs);
+        assertEquals(now+30000,NativeHandoff.verifyRecovered(envelope,pins,nonce,binding,bundle.authorityId,bundle,before,new OfflineClock.Reading(boot,31000,now+30000)).freshTimeMs);
+        for(OfflineClock.Reading bad:new OfflineClock.Reading[]{null,new OfflineClock.Reading(boot,31001,now+30001),new OfflineClock.Reading(boot,999,now),new OfflineClock.Reading(boot,1250,now-1),new OfflineClock.Reading(UUID.randomUUID().toString(),1250,now+250)})
+            assertThrows(Exception.class,()->NativeHandoff.verifyRecovered(envelope,pins,nonce,binding,bundle.authorityId,bundle,before,bad));
+        for(Object bad:new Object[]{-1L,OfflineClock.MAX_TIME_MS,OfflineClock.MAX_TIME_MS+1,"1792132200000",true,JSONObject.NULL})
+            assertThrows(Exception.class,()->recovered(recovered().put("serverTimeMs",bad)));
+        assertEquals(OfflineClock.MAX_TIME_MS,recovered(recovered().put("serverTimeMs",OfflineClock.MAX_TIME_MS-250)).freshTimeMs);
     }
 }
