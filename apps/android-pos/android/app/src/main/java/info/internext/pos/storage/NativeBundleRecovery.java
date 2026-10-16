@@ -37,6 +37,7 @@ public final class NativeBundleRecovery {
 
     public NativeBundleRecovery(Context context,NativeJournal journal,NativeSession session)throws Exception {
         this(journal,session,new DeviceIdentity(),NativeTrustKeys.load(context),session::historicalRequest,()->{
+            try(NativeClockSource clock=new NativeClockSource(context,journal)){clock.requireNoRecovery();}
             int boot=Settings.Global.getInt(context.getContentResolver(),Settings.Global.BOOT_COUNT);
             return new OfflineClock.Reading(NativeClockSource.bootId(journal.installationId(),boot),SystemClock.elapsedRealtime(),System.currentTimeMillis());
         });
@@ -56,6 +57,7 @@ public final class NativeBundleRecovery {
             OfflineBundle.Binding binding=binding(state,offline);
             if(keys.isEmpty())return display("blocked",authorityId,"offline_not_configured");
             synchronized(journal){
+                NativeClockRetirement.requireNoPending(journal);
                 SQLiteDatabase db=journal.getReadableDatabase();
                 try(Cursor c=db.rawQuery("SELECT b.snapshot_envelope,b.authority_envelope,s.seal_envelope,s.blocked FROM offline_bundles b LEFT JOIN offline_authority_state s ON s.authority_id=b.id WHERE b.id=?",new String[]{authorityId})){
                     if(c.moveToFirst()){
@@ -70,7 +72,8 @@ public final class NativeBundleRecovery {
                     }
                 }
                 if(NativeCheckoutEngine.hasUncertainPayments(journal,keys,publicKey))return display("blocked",authorityId,"payment_reconciliation_required");
-                if(exists(db,"SELECT 1 FROM offline_authority_state WHERE seal_envelope IS NULL OR blocked=1"))return display("blocked",authorityId,"previous_authority_unresolved");
+                if(exists(db,"SELECT 1 FROM offline_authority_state WHERE seal_envelope IS NULL"))return display("blocked",authorityId,"previous_authority_unresolved");
+                try(Cursor c=db.rawQuery("SELECT id FROM offline_bundles",null)){while(c.moveToNext())new NativeAllocationLifecycle(journal,keys,publicKey).sealHash(c.getString(0),false);}
                 try(Cursor c=db.rawQuery("SELECT key_epoch FROM offline_chain WHERE slot=1",null)){
                     if(c.moveToFirst()){
                         if(!binding.keyEpoch.equals(c.getString(0)))return display("blocked",authorityId,"offline_context_changed");

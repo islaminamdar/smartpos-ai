@@ -28,6 +28,9 @@ export type DeviceSnapshot = {
   checkedAt: string
 }
 interface NativeLedgerPlugin {
+  getNativeClockRecoveryState(): Promise<unknown>
+  startNativeClockRecovery(): Promise<unknown>
+  retryNativeClockRecovery(input: { requestId: string }): Promise<unknown>
   getPinRecoveryState(): Promise<unknown>
   startPinRecovery(): Promise<unknown>
   retryPinRecovery(input: { requestId: string }): Promise<unknown>
@@ -355,7 +358,7 @@ export function parseOfflineState(value: unknown): NativeOfflineState {
     typeof result.pinProvisioned !== 'boolean' ||
     (result.noticeCode !== null &&
       ![
-        'pin_recovery_pending',
+        'clock_recovery_pending', 'pin_recovery_pending',
         'offline_not_configured',
         'offline_permission_expired',
         'offline_allocation_finished',
@@ -411,6 +414,8 @@ export function nativeOfflineErrorCode(error: unknown): string {
 }
 export function nativeOfflineError(error: unknown): string {
   switch (nativeOfflineErrorCode(error)) {
+    case 'clock_recovery_pending':
+      return 'Check the saved clock recovery in Device setup. New payments and offline setup remain paused; saved records are kept.'
     case 'pin_recovery_pending':
       return 'Finish the saved PIN recovery in Device setup before changing offline setup. Saved records are kept.'
     case 'offline_not_configured':
@@ -440,7 +445,7 @@ export function nativeOfflineError(error: unknown): string {
     case 'pin_online_reset_required':
       return 'Connect to recover local access with your manager. Saved device records are kept.'
     case 'clock_source_blocked':
-      return 'Device time could not be verified. Keep this app’s data and contact your manager or support. Automatic time recovery is not available.'
+      return 'Device time could not be verified. In Device setup, check clock recovery after correcting Android automatic date and time. Keep all saved records.'
     default:
       return nativeAccessError(error)
   }
@@ -1092,6 +1097,8 @@ export function quantityToMilli(value: string, unit: NativeCheckoutLine['unit'])
 }
 export function nativeCheckoutError(error: unknown): string {
   switch (nativeOfflineErrorCode(error)) {
+    case 'clock_recovery_pending':
+      return 'Check the saved clock recovery in Device setup. New payments and offline setup remain paused; saved records are kept.'
     case 'pin_recovery_pending':
       return 'Finish the saved PIN recovery in Device setup before new payments or setup changes. Saved payment review remains available.'
     case 'native_shift_close_pending':
@@ -1204,7 +1211,7 @@ export function knownCheckoutReason(code: string | null): boolean {
     code === null ||
     [
       'native_checkout_not_enabled',
-      'pin_recovery_pending', 'native_shift_close_pending',
+      'clock_recovery_pending', 'pin_recovery_pending', 'native_shift_close_pending',
       'native_session_expired',
       'pin_unlock_required',
       'clock_expired',
@@ -1330,7 +1337,7 @@ export type NativeNextAllocationState = {
   reasonCode: string | null
   canContinue: boolean
 }
-const continuationReasons = new Set(['pin_recovery_pending', 'native_shift_close_pending', 'offline_allocation_active', 'offline_seal_confirmation_required',
+const continuationReasons = new Set(['clock_recovery_pending', 'pin_recovery_pending', 'native_shift_close_pending', 'offline_allocation_active', 'offline_seal_confirmation_required',
   'offline_upload_required', 'payment_reconciliation_required', 'previous_authority_unresolved',
   'offline_continuation_uncertain', 'offline_context_changed', 'pin_unlock_required',
   'native_session_expired', 'native_storage_unavailable', 'offline_not_configured', 'offline_preparation_uncertain'])
@@ -1386,7 +1393,7 @@ export type NativeShiftCloseState = {
 const shiftCloseReasons = new Set(['offline_allocation_active', 'payment_reconciliation_required', 'offline_upload_required',
   'shift_close_unavailable', 'shift_already_closed', 'offline_preparation_uncertain', 'native_shift_close_uncertain',
   'native_session_expired', 'offline_context_changed', 'native_storage_unavailable', 'pin_unlock_required',
-  'offline_not_configured', 'shift_close_cancelled', 'pin_recovery_pending', 'native_shift_close_pending'])
+  'offline_not_configured', 'shift_close_cancelled', 'clock_recovery_pending', 'pin_recovery_pending', 'native_shift_close_pending'])
 const countedShiftCash = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 && v <= 100_000_000
 export function parseNativeShiftCloseState(value: unknown): NativeShiftCloseState {
   const r = record(value, ['schemaVersion', 'status', 'shiftId', 'commandId', 'countedCashFils', 'result', 'pinRequired', 'canClose', 'canRetry', 'reasonCode'])
@@ -1446,7 +1453,7 @@ export type NativePinRecoveryState = {
 }
 const pinRecoveryReasons = new Set([
   'pin_not_provisioned', 'offline_not_configured', 'native_session_expired',
-  'clock_source_blocked', 'pin_recovery_pending', 'pin_recovery_approved',
+  'clock_source_blocked', 'clock_recovery_pending', 'pin_recovery_pending', 'pin_recovery_approved',
   'pin_recovery_completed', 'pin_recovery_uncertain', 'offline_context_changed',
   'pin_recovery_invalid', 'pin_recovery_conflict', 'native_storage_unavailable',
   'native_authentication_failed',
@@ -1482,5 +1489,65 @@ export async function retryNativePinRecovery(requestId: string): Promise<NativeP
   if (!uuid(requestId)) throw new Error('invalid_native_input')
   const result = parseNativePinRecoveryState(await ledger.retryPinRecovery({ requestId }))
   if (result.requestId !== requestId) invalidCheckout()
+  return result
+}
+
+
+export type NativeClockRecoveryState = {
+  schemaVersion: 1
+  status: 'not_available' | 'ready' | 'pending' | 'approved' | 'completed' | 'blocked'
+  requestId: string | null
+  canStart: boolean
+  canRetry: boolean
+  passwordRequired: boolean
+  reasonCode: string | null
+}
+const clockRecoveryReasons = new Set([
+  'clock_healthy', 'clock_recovery_pending', 'clock_recovery_approved',
+  'clock_recovery_completed', 'clock_recovery_conflict', 'clock_recovery_interrupted',
+  'clock_recovery_invalid', 'clock_recovery_uncertain', 'clock_time_settings_required',
+  'clock_signal_unavailable', 'offline_context_changed', 'native_session_expired',
+  'offline_not_configured', 'native_storage_unavailable',
+])
+export function parseNativeClockRecoveryState(value: unknown): NativeClockRecoveryState {
+  const r = record(value, ['schemaVersion', 'status', 'requestId', 'canStart', 'canRetry', 'passwordRequired', 'reasonCode'])
+  if (r.schemaVersion !== 1 || typeof r.status !== 'string' || !['not_available', 'ready', 'pending', 'approved', 'completed', 'blocked'].includes(String(r.status)) ||
+    (r.requestId !== null && !uuid(r.requestId)) ||
+    ['canStart', 'canRetry', 'passwordRequired'].some(k => typeof r[k] !== 'boolean') ||
+    (r.reasonCode !== null && (typeof r.reasonCode !== 'string' || !clockRecoveryReasons.has(r.reasonCode)))) invalidCheckout()
+  if ((['pending', 'approved', 'completed'].includes(String(r.status)) && r.requestId === null) ||
+    (['not_available', 'ready'].includes(String(r.status)) && r.requestId !== null) ||
+    (r.canStart && r.status !== 'ready') ||
+    (r.status === 'ready' && (!r.canStart || !r.passwordRequired)) ||
+    (r.canRetry && !['pending', 'approved'].includes(String(r.status))) ||
+    (['not_available', 'blocked'].includes(String(r.status)) && (r.canStart || r.canRetry || r.passwordRequired)) ||
+    (r.status === 'approved' && r.passwordRequired) ||
+    (r.status === 'completed' && (r.canRetry || r.canStart || r.passwordRequired)) ||
+    (r.status === 'blocked' && r.reasonCode === null)) invalidCheckout()
+  const failureReason = typeof r.reasonCode === 'string' && clockRecoveryReasons.has(r.reasonCode) &&
+    !['clock_healthy', 'clock_recovery_pending', 'clock_recovery_approved', 'clock_recovery_completed'].includes(r.reasonCode)
+  if ((r.status === 'ready' && r.reasonCode !== null) ||
+    (r.status === 'not_available' && r.reasonCode !== 'clock_healthy') ||
+    (r.status === 'completed' && r.reasonCode !== 'clock_recovery_completed') ||
+    (r.status === 'pending' && r.reasonCode !== 'clock_recovery_pending' && !failureReason) ||
+    (r.status === 'approved' && r.reasonCode !== 'clock_recovery_approved' && !failureReason) ||
+    (r.status === 'blocked' && !failureReason)) invalidCheckout()
+  return r as NativeClockRecoveryState
+}
+export async function getNativeClockRecoveryState(): Promise<NativeClockRecoveryState> {
+  requireNativeAccess()
+  return parseNativeClockRecoveryState(await ledger.getNativeClockRecoveryState())
+}
+export async function startNativeClockRecovery(): Promise<NativeClockRecoveryState> {
+  requireNativeAccess()
+  const result = parseNativeClockRecoveryState(await ledger.startNativeClockRecovery())
+  if (result.requestId === null || !['pending', 'approved', 'completed', 'blocked'].includes(result.status)) invalidCheckout()
+  return result
+}
+export async function retryNativeClockRecovery(input: { requestId: string }): Promise<NativeClockRecoveryState> {
+  requireNativeAccess()
+  if (!input || !uuid(input.requestId) || Object.keys(input).length !== 1) throw new Error('invalid_native_input')
+  const result = parseNativeClockRecoveryState(await ledger.retryNativeClockRecovery({ requestId: input.requestId }))
+  if (result.requestId !== input.requestId) invalidCheckout()
   return result
 }

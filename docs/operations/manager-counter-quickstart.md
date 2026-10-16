@@ -32,6 +32,14 @@ If a change has no confirmation, keep browser data and use the saved-change cont
 
 In **Menu**, a manager can add an item or edit its price, unit and availability. Enter a reason and wait for the saved confirmation. For weight sales, enter the full kilogram price. Keep an item unavailable until its price is approved. Cashiers must refresh an older basket when its menu details change; issued bills retain their original details.
 
+The photo editor can upload, replace or remove an item's picture. Check the preview, then save the menu change. Uploading a picture alone does not attach it to the item. Uploaded pictures have public links; removing one from the menu does not erase its existing link. Use restaurant menu photographs, never private documents.
+
+## Review daily operations and stock
+
+Use the [daily Operations guide](manager-daily-overview.md) to review branch shifts, saved requests and work needing attention. A failed refresh means the current position is unavailable; it does not mean there are no outstanding items.
+
+Use the [stock guide](manager-stock-guide.md) for opening counts, receiving, waste and adjustments. Record actual quantities with the correct unit and reason. Stock balances start unknown until counted; recipe deductions, branch transfers and expiry batches are still pending.
+
 ## Set up offers
 
 In **Offers**, a manager can create or edit a percentage discount, fixed AED discount, exact-item bundle, or buy-X-get-Y offer. Choose its items/categories, order types, minimum spend, coupon and any manager restriction. Date and weekly time windows use Dubai time; an overnight window belongs to its starting weekday. Enter a reason and wait for confirmation before leaving. An interrupted save keeps the same request for retry.

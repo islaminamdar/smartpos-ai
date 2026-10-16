@@ -268,16 +268,16 @@ public class NativeShiftCloseTest {
 
     @Test public void genuineVersionSixUpgradePreservesReceiptsAcknowledgementsAndTransitionArchive()throws Exception{
         prepare();sell();String old=finishUploaded();coordinator.continueAfterAllocationWithPin(old,PIN.toCharArray());String historical=prefix+"-v6.db";databases.add(historical);Map<String,String> expected=new LinkedHashMap<>();List<String> commands=new ArrayList<>(),tables=new ArrayList<>(),triggers=new ArrayList<>();
-        // Version7 adds only native_shift_close_* tables/triggers. Reconstruct the exact
-        // existing version6 schema without those objects, then migrate an actual database.
+        // Versions7/8 add native_shift_close_* and native_clock_* objects. Reconstruct
+        // the existing version6 schema without either addition, then migrate it.
         try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE sql IS NOT NULL AND type IN ('table','trigger') ORDER BY rowid",null)){
-            while(c.moveToNext()){String type=c.getString(0),name=c.getString(1),table=c.getString(2);if(name.startsWith("sqlite_")||name.equals("android_metadata")||table.startsWith("native_shift_close_"))continue;if(type.equals("table")){commands.add(c.getString(3));tables.add(name);}else triggers.add(c.getString(3));}
+            while(c.moveToNext()){String type=c.getString(0),name=c.getString(1),table=c.getString(2);if(name.startsWith("sqlite_")||name.equals("android_metadata")||table.startsWith("native_shift_close_")||table.startsWith("native_clock_"))continue;if(type.equals("table")){commands.add(c.getString(3));tables.add(name);}else triggers.add(c.getString(3));}
         }
         try(SQLiteDatabase legacy=SQLiteDatabase.openOrCreateDatabase(context.getDatabasePath(historical),null)){
             legacy.setForeignKeyConstraintsEnabled(true);for(String sql:commands)legacy.execSQL(sql);for(String table:tables){JSONArray data=new JSONArray(rows(journal.getReadableDatabase(),table));for(int i=0;i<data.length();i++){JSONObject row=data.getJSONObject(i);ContentValues values=new ContentValues();Iterator<String> names=row.keys();while(names.hasNext()){String name=names.next();if(row.isNull(name))values.putNull(name);else values.put(name,row.getString(name));}legacy.insertOrThrow(table,null,values);}expected.put(table,rows(legacy,table));}for(String sql:triggers)legacy.execSQL(sql);legacy.setVersion(6);assertEquals(6,legacy.getVersion());try(Cursor c=legacy.rawQuery("SELECT name FROM sqlite_master WHERE name LIKE 'native_shift_close_%'",null)){assertEquals(0,c.getCount());}
         }
         try(NativeJournal upgraded=new NativeJournal(context,historical,()->{})){
-            assertEquals(7,upgraded.getReadableDatabase().getVersion());assertEquals(journal.installationId(),upgraded.installationId());assertEquals(deviceIdentity.getString("deviceKeySha256"),identity.readOrCreate(upgraded).getString("deviceKeySha256"));for(String table:tables)assertEquals(table,expected.get(table),rows(upgraded.getReadableDatabase(),table));
+            assertEquals(8,upgraded.getReadableDatabase().getVersion());assertEquals(journal.installationId(),upgraded.installationId());assertEquals(deviceIdentity.getString("deviceKeySha256"),identity.readOrCreate(upgraded).getString("deviceKeySha256"));for(String table:tables)assertEquals(table,expected.get(table),rows(upgraded.getReadableDatabase(),table));
             NativeAllocationLifecycle lifecycle=new NativeAllocationLifecycle(upgraded,Collections.singletonMap("synthetic-server",server.getPublic()),publicKey());lifecycle.requireCandidate(old);assertNotNull(NativePreparationTransition.read(upgraded,lifecycle,Collections.singletonMap("synthetic-server",server.getPublic()),old));for(String table:new String[]{"native_shift_close_requests","native_shift_close_outcomes","native_shift_close_setup_transitions"})assertEquals("[]",rows(upgraded.getReadableDatabase(),table));
         }
     }

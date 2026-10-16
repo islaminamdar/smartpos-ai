@@ -236,7 +236,7 @@ public class NativePaymentFreezeTest {
             try(Cursor c=old.rawQuery("SELECT count(*) FROM sqlite_master WHERE name='offline_intent_freezes'",null)){assertTrue(c.moveToFirst());assertEquals(0,c.getInt(0));}
         }
         try(NativeJournal upgraded=new NativeJournal(context,migratedName,()->{})){
-            assertEquals(7,upgraded.getReadableDatabase().getVersion());assertEquals(journal.installationId(),upgraded.installationId());
+            assertEquals(8,upgraded.getReadableDatabase().getVersion());assertEquals(journal.installationId(),upgraded.installationId());
             assertEquals(binding.deviceKeySha256,identity.readOrCreate(upgraded).getString("deviceKeySha256"));
             for(String table:tables)assertEquals("Preserved v"+version+" "+table,expected.get(table),exactRows(upgraded.getReadableDatabase(),table));
             assertEquals("[]",exactRows(upgraded.getReadableDatabase(),"offline_intent_freezes"));

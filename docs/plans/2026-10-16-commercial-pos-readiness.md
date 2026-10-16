@@ -1,5 +1,11 @@
 # Commercial POS scope and release evidence
 
+## Current release checkpoint
+
+The online web release `8bd118c` is deployed with SQL001–027. The manager Operations view, menu photo editor and stock baseline have passed production checks using isolated synthetic accounts; existing restaurant records were preserved. Earlier migration and deployment statements below describe historical checkpoints and are superseded by this paragraph. Physical counter enrollment, opening cash, a supervised first real bill and receipt printing still require customer acceptance.
+
+The subsequent [native clock recovery candidate](../../apps/android-pos/CLOCK-RECOVERY.md) and SQL028 are not deployed. It preserves bills and unresolved payments, permanently retires old offline allocations after verified approval, and leaves the counter locked. Clock failure before first enrollment, staff/device loss, complete two-device acceptance and customer APK signing/printing remain pending. Offline issuance and PayPal remain disabled; the existing AED100 manual pilot is unchanged.
+
 ## Stock baseline candidate
 
 SQL027 adds a manager stock catalogue, explicit opening count, receiving, waste, reasoned adjustments, low-stock visibility and immutable history. Durable browser requests, exact revision checks and historical lookup/cancellation cover interrupted and competing writes. See the [inventory contract](../contracts/20261016-inventory.md) and [manager guide](../operations/manager-stock-guide.md). This supersedes the matrix's earlier entirely planned inventory status for this bounded baseline only. Recipes, automatic ingredient deductions, purchase orders, supplier accounts, costing, expiry batches and transfers are still pending. SQL017–027 remain unapplied live, and this work does not alter the pilot's price or activate PayPal.

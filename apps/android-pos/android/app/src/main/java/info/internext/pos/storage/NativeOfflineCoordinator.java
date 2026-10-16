@@ -27,11 +27,11 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
     public NativeOfflineCoordinator(Context context,NativeJournal journal,NativeSession session)throws Exception{
         this.journal=journal;this.session=session;this.identity=new DeviceIdentity();this.deviceIdentity=identity.readOrCreate(journal);
         this.publicKey=SignedProtocol.publicKey(SignedProtocol.decode(deviceIdentity.getString("publicKeySpkiBase64Url"),256));
-        this.keys=NativeTrustKeys.load(context);this.clock=new NativeClockSource(context,journal);this.unlock=new NativeStaffUnlock(context,journal,clock);session.recoveryGuard(unlock::requireNoRecovery);
+        this.keys=NativeTrustKeys.load(context);this.clock=new NativeClockSource(context,journal);this.unlock=new NativeStaffUnlock(context,journal,clock);session.recoveryGuard(()->{unlock.requireNoRecovery();clock.requireNoRecovery();NativeClockRetirement.requireNoPending(journal);});
     }
     NativeOfflineCoordinator(NativeJournal journal,NativeSession session,DeviceIdentity identity,NativeClockSource clock,NativeStaffUnlock unlock,Map<String,PublicKey> keys)throws Exception{
         this.journal=journal;this.session=session;this.identity=identity;this.clock=clock;this.unlock=unlock;this.keys=Collections.unmodifiableMap(new java.util.HashMap<>(keys));
-        session.recoveryGuard(unlock::requireNoRecovery);this.deviceIdentity=identity.readOrCreate(journal);this.publicKey=SignedProtocol.publicKey(SignedProtocol.decode(deviceIdentity.getString("publicKeySpkiBase64Url"),256));
+        session.recoveryGuard(()->{unlock.requireNoRecovery();clock.requireNoRecovery();NativeClockRetirement.requireNoPending(journal);});this.deviceIdentity=identity.readOrCreate(journal);this.publicKey=SignedProtocol.publicKey(SignedProtocol.decode(deviceIdentity.getString("publicKeySpkiBase64Url"),256));
     }
     String recoverySign(JSONObject payload)throws Exception{return sign(payload);}
     // Deliberately no coordinator monitor: recovery apply owns session -> journal -> auth;
@@ -53,6 +53,7 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
         JSONObject display=new JSONObject().put("schemaVersion",1).put("status","not_prepared").put("stage","sign_in").put("canIssue",false).put("shiftId",JSONObject.NULL).put("authority",JSONObject.NULL).put("pinProvisioned",false).put("noticeCode",JSONObject.NULL).put("pendingAction",JSONObject.NULL).put("pendingOpeningCashFils",JSONObject.NULL);
         if(state.isNull("actorId")||state.getBoolean("logoutPending")){unlock.lock();return display;}
         if(state.isNull("counter"))return display.put("stage","enroll_counter");
+        if(clock.recoveryPending()!=null)return display.put("status","blocked").put("stage","recover").put("noticeCode","clock_recovery_pending").put("shiftId",offline==null?JSONObject.NULL:offline.get("shiftId"));
         if(unlock.recoveryPending()!=null)return display.put("status","blocked").put("stage","recover").put("noticeCode","pin_recovery_pending").put("shiftId",offline==null?JSONObject.NULL:offline.get("shiftId"));
         if(keys.isEmpty())return display.put("status","blocked").put("stage","recover").put("noticeCode","offline_not_configured");
         if(offline==null)return display.put("stage","prepare");
@@ -81,7 +82,7 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
     }
     /** Native worker step before showing a PIN dialog. Does not reserve invoice numbers. */
     public synchronized JSONObject beginPreparation()throws Exception{
-        unlock.requireNoRecovery();NativeShiftCloseJournal.requireNoPending(journal,keys);
+        clock.requireNoRecovery();NativeClockRetirement.requireNoPending(journal);unlock.requireNoRecovery();NativeShiftCloseJournal.requireNoPending(journal,keys);
         JSONObject access=requireAccess(),offline=ensureScope(access);NativeHandoff.Context context=freshContext(offline);
         reconcileShift(offline,context.shiftId);session.saveOffline(offline);
         if(context.shiftId==null)return getState();
@@ -180,7 +181,7 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
             if(state.isNull("actorId")||state.getBoolean("logoutPending"))return nextState("blocked",null,null,null,"native_session_expired",false);
             if(keys.isEmpty())return nextState("blocked",null,null,null,"offline_not_configured",false);
             if(offline==null)return nextState("not_available",null,null,null,null,false);checkStoredScope(state,offline);
-            unlock.requireNoRecovery();NativeShiftCloseJournal.requireNoPending(journal,keys);
+            clock.requireNoRecovery();NativeClockRetirement.requireNoPending(journal);unlock.requireNoRecovery();NativeShiftCloseJournal.requireNoPending(journal,keys);
             JSONObject reservation=offline.optJSONObject("reservation");
             if(reservation==null){
                 if(offline.has("nativeShiftClosureId"))return nextState("not_available",null,null,null,null,false);
@@ -325,7 +326,7 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
     }
     private static String continuationCode(Exception error){
         String code=error instanceof NativeAccessError?((NativeAccessError)error).code:error.getMessage();
-        return Arrays.asList("pin_recovery_pending","native_shift_close_pending","offline_allocation_active","offline_seal_confirmation_required","offline_upload_required","payment_reconciliation_required","previous_authority_unresolved","offline_continuation_uncertain","offline_context_changed","pin_unlock_required","native_session_expired","native_storage_unavailable","offline_not_configured","offline_preparation_uncertain").contains(code)?code:"native_storage_unavailable";
+        return Arrays.asList("clock_recovery_pending","pin_recovery_pending","native_shift_close_pending","offline_allocation_active","offline_seal_confirmation_required","offline_upload_required","payment_reconciliation_required","previous_authority_unresolved","offline_continuation_uncertain","offline_context_changed","pin_unlock_required","native_session_expired","native_storage_unavailable","offline_not_configured","offline_preparation_uncertain").contains(code)?code:"native_storage_unavailable";
     }
 
     public synchronized void lock(){unlock.lock();}
@@ -344,7 +345,7 @@ public final class NativeOfflineCoordinator implements AutoCloseable {
     }
     @Override public synchronized void close(){unlock.close();clock.close();}
     private JSONObject requireAccess()throws Exception{
-        unlock.requireNoRecovery();
+        clock.requireNoRecovery();NativeClockRetirement.requireNoPending(journal);unlock.requireNoRecovery();
         if(keys.isEmpty())throw fail("offline_not_configured");JSONObject access=session.getAccessState();if(!"signed_in".equals(access.getString("status")))throw fail("native_session_expired");if(access.isNull("device"))throw fail("offline_context_changed");return access;
     }
     private JSONObject ensureScope(JSONObject access)throws Exception{

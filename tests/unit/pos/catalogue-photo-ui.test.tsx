@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import CatalogueManager from '@/components/pos/CatalogueManager'
 import MenuPhotoEditor from '@/components/pos/MenuPhotoEditor'
@@ -139,7 +139,9 @@ describe('menu photo selection and public upload', () => {
     )
     expect(changed).toHaveBeenCalledExactlyOnceWith(uploadedImage)
     expect(pending).toHaveBeenLastCalledWith(false)
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:local-preview')
+    await waitFor(() =>
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:local-preview')
+    )
   })
 
   it('rejects unsupported, empty and oversized files without sending data', () => {

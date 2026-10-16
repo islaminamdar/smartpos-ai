@@ -20,7 +20,7 @@ public final class NativeJournal extends SQLiteOpenHelper {
     private final CommitProbe probe;
     public NativeJournal(Context context) { this(context, DATABASE, () -> {}); }
     NativeJournal(Context context, String name, CommitProbe probe) {
-        super(context, name, null, 7);
+        super(context, name, null, 8);
         this.probe = probe;
         setWriteAheadLoggingEnabled(true);
     }
@@ -55,15 +55,17 @@ public final class NativeJournal extends SQLiteOpenHelper {
         NativeCheckoutEngine.createResolutionTables(db);
         NativePreparationTransition.createTables(db);
         NativeShiftCloseJournal.createTables(db);
+        NativeClockRetirement.createTables(db);
     }
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        if (oldVersion >= 1 && oldVersion <= 6 && newVersion == 7) {
+        if (oldVersion >= 1 && oldVersion <= 7 && newVersion == 8) {
             if(oldVersion==1)NativeCheckoutEngine.createTables(db);
             if(oldVersion<=2)NativeReconciliation.createTables(db);
             if(oldVersion<=3)NativeCheckoutEngine.createFreezeTables(db);
             if(oldVersion<=4)NativeCheckoutEngine.createResolutionTables(db);
             if(oldVersion<=5)NativePreparationTransition.createTables(db);
-            NativeShiftCloseJournal.createTables(db);return;
+            if(oldVersion<=6)NativeShiftCloseJournal.createTables(db);
+            NativeClockRetirement.createTables(db);return;
         }
         throw new IllegalStateException("A reviewed ledger migration is required");
     }
@@ -73,7 +75,7 @@ public final class NativeJournal extends SQLiteOpenHelper {
             return c.getString(0);
         }
     }
-    public synchronized boolean hasCustody() { return count("intents") > 0 || count("receipts") > 0 || count("offline_bundles") > 0 || count("native_shift_close_requests") > 0; }
+    public synchronized boolean hasCustody() { return count("intents") > 0 || count("receipts") > 0 || count("offline_bundles") > 0 || count("native_shift_close_requests") > 0 || count("native_clock_holds") > 0; }
     public synchronized void bindDeviceKey(String fingerprint) {
         if (!fingerprint.matches("[a-f0-9]{64}")) throw new IllegalArgumentException("invalid_key_fingerprint");
         SQLiteDatabase db = getWritableDatabase(); db.beginTransaction();

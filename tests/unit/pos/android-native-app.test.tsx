@@ -2,6 +2,9 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../../../apps/android-pos/node_modules/react', async () => await import('react'))
 const bridge = vi.hoisted(() => ({
+  getNativeClockRecoveryState: vi.fn(),
+  startNativeClockRecovery: vi.fn(),
+  retryNativeClockRecovery: vi.fn(),
   getNativePinRecoveryState: vi.fn(),
   startNativePinRecovery: vi.fn(),
   retryNativePinRecovery: vi.fn(),
@@ -35,6 +38,9 @@ vi.mock('../../../apps/android-pos/src/native', async () => ({
   ...bridge,
 }))
 import App from '../../../apps/android-pos/src/App'
+import { parseNativeClockRecoveryState } from '../../../apps/android-pos/src/native'
+import { state as checkoutState, receipt } from './fixtures/native-checkout'
+import actualClock from './fixtures/native-clock-recovery-android-output.json'
 const snapshot = {
   identity: { installationId: 'qa-installation', deviceKeySha256: 'b'.repeat(64) },
   status: { receiptCount: 2, pendingCount: 1, lastAcknowledgedAt: null },
@@ -113,6 +119,15 @@ const reconciliation = {
   noticeCode: null,
 }
 beforeEach(() => {
+  bridge.getNativeClockRecoveryState.mockResolvedValue({
+    schemaVersion: 1,
+    status: 'not_available',
+    requestId: null,
+    canStart: false,
+    canRetry: false,
+    passwordRequired: false,
+    reasonCode: 'clock_healthy',
+  })
   bridge.getNativePinRecoveryState.mockResolvedValue({
     schemaVersion: 1,
     status: 'not_available',
@@ -957,7 +972,7 @@ describe('integrated Android drawer close recovery', () => {
     expect(screen.getByRole('button', { name: 'Sign out of this app' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Prepare this counter' })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: /^Counter/ }))
-    expect(screen.getByText(/A drawer close request needs checking/)).toBeVisible()
+    expect(await screen.findByText(/A drawer close request needs checking/)).toBeVisible()
     expect(bridge.closeNativeShift).not.toHaveBeenCalled()
   })
   it('fails closed after a local close-state read error and recovers via explicit online check', async () => {
@@ -1136,7 +1151,10 @@ it('completes PIN recovery, refreshes preparation, preserves the completion and 
     bridge.getNativePinRecoveryState.mockResolvedValue(complete)
     return complete
   })
-  render(<App />)
+  // Settle the sequential local access/setup/recovery discovery before interacting.
+  await act(async () => {
+    render(<App />)
+  })
   const start = await screen.findByRole('button', { name: 'Continue in Android' })
   const consent = screen.getByRole('checkbox', {
     name: /Recover the PIN for this original staff account/,
@@ -1154,3 +1172,259 @@ it('completes PIN recovery, refreshes preparation, preserves the completion and 
   expect(bridge.startNativePinRecovery).toHaveBeenCalledTimes(1)
   expect(screen.getByText('New sales paused')).toBeVisible()
 })
+
+const clockPending = { ...pinPending, reasonCode: 'clock_recovery_pending' }
+// Exported by actual Android instrumentation, including its no-record/no-custody paths.
+const unpreparedClock = actualClock.states.fresh_install
+it('allows a healthy fresh installation to sign in, enroll and explicitly prepare', async () => {
+  bridge.readDeviceSnapshot.mockResolvedValue({
+    ...snapshot,
+    status: { receiptCount: 0, pendingCount: 0, lastAcknowledgedAt: null },
+    history: { receipts: [], hasMore: false },
+  })
+  bridge.readNativeReconciliation.mockResolvedValue({
+    ...reconciliation,
+    pendingReceipts: 0,
+    unsealedAuthorities: 0,
+    status: 'idle',
+  })
+  bridge.getNativeClockRecoveryState.mockResolvedValue(
+    parseNativeClockRecoveryState(unpreparedClock)
+  )
+  bridge.signInNative.mockImplementation(async () => {
+    bridge.readOfflineState.mockResolvedValue({ ...offline, stage: 'enroll_counter' })
+    return signedIn
+  })
+  bridge.enrollNativeCounter.mockImplementation(async () => {
+    bridge.readOfflineState.mockResolvedValue({ ...offline, stage: 'prepare' })
+    return enrolled
+  })
+  render(<App />)
+  const signin = await screen.findByRole('button', { name: 'Sign in securely' })
+  await waitFor(() => expect(signin).toBeEnabled())
+  fireEvent.click(signin)
+  const name = await screen.findByLabelText('Counter name')
+  await waitFor(() => expect(name).toBeEnabled())
+  fireEvent.change(name, { target: { value: 'Fresh counter' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Enroll this counter' }))
+  const prepare = await screen.findByRole('button', { name: 'Prepare this counter' })
+  await waitFor(() => expect(prepare).toBeEnabled())
+  expect(bridge.startNativeClockRecovery).not.toHaveBeenCalled()
+  expect(bridge.prepareNativeOffline).not.toHaveBeenCalled()
+  fireEvent.click(prepare)
+  await waitFor(() => expect(bridge.prepareNativeOffline).toHaveBeenCalledTimes(1))
+  expect(screen.getByText('New sales paused')).toBeVisible()
+})
+it('allows an enrolled healthy counter without offline context to prepare without clock recovery', async () => {
+  bridge.readAccessState.mockResolvedValue(enrolled)
+  bridge.readOfflineState.mockResolvedValue({ ...offline, stage: 'prepare' })
+  bridge.getNativeClockRecoveryState.mockResolvedValue(
+    parseNativeClockRecoveryState(actualClock.states.enrolled_unprepared)
+  )
+  render(<App />)
+  const prepare = await screen.findByRole('button', { name: 'Prepare this counter' })
+  await waitFor(() => expect(prepare).toBeEnabled())
+  fireEvent.click(prepare)
+  await waitFor(() => expect(bridge.prepareNativeOffline).toHaveBeenCalledTimes(1))
+  expect(bridge.enrollNativeCounter).not.toHaveBeenCalled()
+  expect(bridge.startNativeClockRecovery).not.toHaveBeenCalled()
+  expect(bridge.unlockNativeOffline).not.toHaveBeenCalled()
+})
+it('discovers clock and pending PIN recovery while holding setup and preserving historical reads', async () => {
+  bridge.readAccessState.mockResolvedValue(enrolled)
+  bridge.readOfflineState.mockResolvedValue({ ...offline, stage: 'prepare', shiftId: branchId })
+  bridge.getNativeClockRecoveryState.mockResolvedValue(clockPending)
+  bridge.getNativePinRecoveryState.mockResolvedValue(pinPending)
+  render(<App />)
+  await screen.findByRole('button', { name: 'Check / retry clock recovery' })
+  expect(screen.getByRole('button', { name: 'Check / retry saved PIN recovery' })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Sign out of this app' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Prepare this counter' })).toBeDisabled()
+  const upload = screen.getByRole('button', { name: 'Upload saved records' })
+  await waitFor(() => expect(upload).toBeEnabled())
+  fireEvent.click(upload)
+  await waitFor(() => expect(bridge.reconcileNativeOffline).toHaveBeenCalledTimes(1))
+  fireEvent.click(screen.getByRole('button', { name: /^Counter/ }))
+  await screen.findByText(/Device time recovery needs checking/)
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Check counter status' })).toBeEnabled()
+  )
+})
+it('allows original account sign-in during clock recovery but prevents new enrollment', async () => {
+  bridge.getNativeClockRecoveryState.mockResolvedValue({ ...clockPending, passwordRequired: false })
+  bridge.signInNative.mockResolvedValue(signedIn)
+  render(<App />)
+  const signin = await screen.findByRole('button', { name: 'Sign in securely' })
+  await waitFor(() => expect(signin).toBeEnabled())
+  fireEvent.click(signin)
+  await screen.findByText('Signed in')
+  await waitFor(() => expect(bridge.getNativeClockRecoveryState).toHaveBeenCalledTimes(2))
+  expect(screen.getByRole('button', { name: 'Enroll this counter' })).toBeDisabled()
+})
+it('completion refreshes setup without unlocking, changing a PIN or preparing new allowance', async () => {
+  bridge.readAccessState.mockResolvedValue(enrolled)
+  bridge.readOfflineState.mockResolvedValue({
+    ...offlinePrepared,
+    status: 'locked',
+    stage: 'unlock',
+  })
+  bridge.getNativeClockRecoveryState.mockResolvedValue(pinReady)
+  const complete = {
+    ...pinReady,
+    status: 'completed',
+    requestId: clockPending.requestId,
+    canStart: false,
+    passwordRequired: false,
+    reasonCode: 'clock_recovery_completed',
+  }
+  bridge.startNativeClockRecovery.mockImplementation(async () => {
+    bridge.getNativeClockRecoveryState.mockResolvedValue(complete)
+    return complete
+  })
+  render(<App />)
+  const start = await screen.findByRole('button', { name: 'Continue clock recovery in Android' })
+  const consent = screen.getByRole('checkbox', {
+    name: /Recover device time for this original staff account/,
+  })
+  await waitFor(() => expect(consent).toBeEnabled())
+  fireEvent.click(consent)
+  await waitFor(() => expect(start).toBeEnabled())
+  fireEvent.click(start)
+  await screen.findByText(/Clock recovery complete\./)
+  await waitFor(() => expect(bridge.readOfflineState.mock.calls.length).toBeGreaterThan(1))
+  expect(bridge.unlockNativeOffline).not.toHaveBeenCalled()
+  expect(bridge.prepareNativeOffline).not.toHaveBeenCalled()
+  expect(bridge.startNativePinRecovery).not.toHaveBeenCalled()
+  expect(screen.getByText('New sales paused')).toBeVisible()
+})
+
+it.each(['start', 'retry'] as const)(
+  'clears cached receipt, buyer and drawer details on the native clock %s lock event',
+  async (action) => {
+    const buyer = {
+      name: 'Clock recovery private buyer',
+      address: 'Clock recovery private address',
+      trn: '100000000000099',
+    }
+    const savedReceipt = { ...receipt, customer: buyer }
+    const completion = {
+      ...unpreparedClock,
+      status: 'completed',
+      requestId: clockPending.requestId,
+      reasonCode: 'clock_recovery_completed',
+    }
+    bridge.readAccessState.mockResolvedValue(enrolled)
+    bridge.readOfflineState.mockResolvedValue(offlinePrepared)
+    bridge.readNativeCheckout.mockResolvedValue({
+      ...checkoutState,
+      lastReceiptId: savedReceipt.id,
+      lastReceipt: savedReceipt,
+    })
+    bridge.getNativeShiftCloseState.mockResolvedValue({
+      schemaVersion: 1,
+      status: 'closed',
+      shiftId: branchId,
+      commandId: branchId,
+      countedCashFils: 12345,
+      result: {
+        commandId: branchId,
+        shiftId: branchId,
+        countedCashFils: 12345,
+        expectedCashFils: 12500,
+        cashDifferenceFils: -155,
+        closedAt: '2026-10-16T07:00:00.000Z',
+      },
+      pinRequired: false,
+      canClose: false,
+      canRetry: false,
+      reasonCode: null,
+    })
+    bridge.getNativeClockRecoveryState.mockResolvedValue(
+      action === 'start'
+        ? pinReady
+        : {
+            ...clockPending,
+            status: 'approved',
+            passwordRequired: false,
+            reasonCode: 'clock_recovery_approved',
+          }
+    )
+    let finish!: (value: unknown) => void
+    const nativeAction =
+      action === 'start' ? bridge.startNativeClockRecovery : bridge.retryNativeClockRecovery
+    nativeAction.mockImplementation(() => {
+      // The native bridge now publishes the shared lock event at recovery entry.
+      for (const [listener] of bridge.subscribeNativeCheckoutLock.mock.calls) listener()
+      bridge.readNativeCheckout.mockResolvedValue({
+        ...checkoutState,
+        canIssue: false,
+        reasonCode: 'pin_unlock_required',
+        context: null,
+        lastReceiptId: savedReceipt.id,
+        lastReceipt: null,
+      })
+      bridge.getNativeShiftCloseState.mockResolvedValue({
+        schemaVersion: 1,
+        status: 'closed',
+        shiftId: branchId,
+        commandId: branchId,
+        countedCashFils: null,
+        result: null,
+        pinRequired: true,
+        canClose: false,
+        canRetry: false,
+        reasonCode: 'pin_unlock_required',
+      })
+      bridge.readOfflineState.mockResolvedValue({
+        ...offlinePrepared,
+        status: 'blocked',
+        stage: 'recover',
+        noticeCode: 'offline_context_changed',
+      })
+      return new Promise((resolve) => {
+        finish = resolve
+      })
+    })
+    const view = render(<App />)
+    await screen.findByText('AED 125.00')
+    await waitFor(() => expect(view.container).toHaveTextContent(buyer.name))
+    fireEvent.click(screen.getByRole('button', { name: /^Counter/ }))
+    await screen.findByRole('heading', { name: savedReceipt.documentNumber })
+    fireEvent.click(screen.getByRole('button', { name: 'This device' }))
+    const consent = screen.getByRole('checkbox', {
+      name:
+        action === 'start'
+          ? /Recover device time for this original staff account/
+          : /Continue this exact saved clock recovery/,
+    })
+    await waitFor(() => expect(consent).toBeEnabled())
+    fireEvent.click(consent)
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: action === 'start' ? 'Continue clock recovery in Android' : 'Finish clock recovery',
+      })
+    )
+    const assertPrivateDetailsCleared = () => {
+      for (const value of [
+        ...Object.values(buyer),
+        savedReceipt.documentNumber,
+        savedReceipt.merchant.legalName,
+        'AED 125.00',
+        'AED -1.55',
+      ])
+        expect(view.container).not.toHaveTextContent(value)
+    }
+    assertPrivateDetailsCleared()
+    bridge.getNativeClockRecoveryState.mockResolvedValue(completion)
+    await act(async () => finish(completion))
+    assertPrivateDetailsCleared()
+    expect(screen.queryByText(/Clock recovery complete\./)).toBeNull()
+    const check = screen.getByRole('button', { name: 'Check saved clock recovery' })
+    await waitFor(() => expect(check).toBeEnabled())
+    fireEvent.click(check)
+    await screen.findByText(/Clock recovery complete\./)
+    assertPrivateDetailsCleared()
+    expect(nativeAction).toHaveBeenCalledTimes(1)
+    expect(bridge.unlockNativeOffline).not.toHaveBeenCalled()
+  }
+)

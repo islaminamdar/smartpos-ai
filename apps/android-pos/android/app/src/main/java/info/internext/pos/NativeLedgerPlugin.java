@@ -21,6 +21,7 @@ import info.internext.pos.storage.NativeBundleRecovery;
 import info.internext.pos.storage.NativePaymentRecovery;
 import info.internext.pos.storage.NativeShiftClose;
 import info.internext.pos.storage.NativePinRecovery;
+import info.internext.pos.storage.NativeClockRecovery;
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -37,6 +38,7 @@ public final class NativeLedgerPlugin extends Plugin {
     private NativePaymentRecovery paymentRecovery;
     private volatile NativeShiftClose shiftClose;
     private volatile NativePinRecovery pinRecovery;
+    private volatile NativeClockRecovery clockRecovery;
     private volatile boolean foreground=true;
     private final java.util.concurrent.atomic.AtomicLong checkoutEpoch=new java.util.concurrent.atomic.AtomicLong();
     private AlertDialog credentials;
@@ -56,6 +58,7 @@ public final class NativeLedgerPlugin extends Plugin {
     private NativePaymentRecovery paymentRecovery()throws Exception{if(paymentRecovery==null)paymentRecovery=new NativePaymentRecovery(getContext(),journal,session());return paymentRecovery;}
     private NativeShiftClose shiftClose()throws Exception{if(shiftClose==null)shiftClose=new NativeShiftClose(getContext(),journal,session(),offline());return shiftClose;}
     private NativePinRecovery pinRecovery()throws Exception{if(pinRecovery==null)pinRecovery=new NativePinRecovery(getContext(),journal,session(),offline());return pinRecovery;}
+    private NativeClockRecovery clockRecovery()throws Exception{if(clockRecovery==null)clockRecovery=new NativeClockRecovery(getContext(),journal,session(),offline());return clockRecovery;}
     private void requireRecoveryForeground(long epoch)throws NativeAccessError{if(destroyed||!foreground||epoch!=checkoutEpoch.get())throw new NativeAccessError("pin_recovery_interrupted");}
     @PluginMethod public void getPinRecoveryState(PluginCall call){
         if(call.getData().length()!=0){call.reject("Check the original PIN recovery.","pin_recovery_invalid");return;}
@@ -103,6 +106,57 @@ public final class NativeLedgerPlugin extends Plugin {
                 }
                 return result;
             }finally{wipeSecret(secret);wipeSecret(replacement);wipeSecret(repeat);}},true)){wipeSecret(secret);wipeSecret(replacement);wipeSecret(repeat);}
+        }));
+        if(dialog.getWindow()!=null)dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);dialog.show();
+    }
+    private void requireClockRecoveryForeground(long epoch)throws NativeAccessError{if(destroyed||!foreground||epoch!=checkoutEpoch.get())throw new NativeAccessError("clock_recovery_interrupted");}
+    private void lockClockRecoveryDetails(){
+        invalidateCheckoutAccess();final long epoch=checkoutEpoch.get();
+        getActivity().runOnUiThread(()->{if(!destroyed&&checkoutEpoch.get()==epoch)publishCheckoutLocked();});
+    }
+    @PluginMethod public void getNativeClockRecoveryState(PluginCall call){
+        if(call.getData().length()!=0){call.reject("Check the original clock recovery.","clock_recovery_invalid");return;}
+        final long epoch=checkoutEpoch.get();execute(call,()->{requireClockRecoveryForeground(epoch);org.json.JSONObject result=clockRecovery().getState();requireClockRecoveryForeground(epoch);return result;},true);
+    }
+    @PluginMethod public void startNativeClockRecovery(PluginCall call){
+        if(call.getData().length()!=0){call.reject("Enter recovery credentials only in Android.","clock_recovery_invalid");return;}
+        lockClockRecoveryDetails();final long epoch=checkoutEpoch.get();execute(call,()->{requireClockRecoveryForeground(epoch);org.json.JSONObject state=clockRecovery().getState();
+            if(!state.getBoolean("canStart"))throw new NativeAccessError("clock_recovery_invalid");
+            String previous=state.isNull("requestId")?null:state.getString("requestId");requireClockRecoveryForeground(epoch);
+            getActivity().runOnUiThread(()->showClockRecoveryDialog(call,null,false,previous,epoch));return null;},true);
+    }
+    @PluginMethod public void retryNativeClockRecovery(PluginCall call){
+        Object id=call.getData().opt("requestId");if(call.getData().length()!=1||!closeId(id)){call.reject("Select the original saved clock recovery.","clock_recovery_invalid");return;}
+        final String requestId=(String)id;lockClockRecoveryDetails();final long epoch=checkoutEpoch.get();execute(call,()->{requireClockRecoveryForeground(epoch);org.json.JSONObject state=clockRecovery().getState();
+            if(!requestId.equals(state.opt("requestId"))||(!state.getBoolean("canRetry")&&!"completed".equals(state.opt("status"))))throw new NativeAccessError("clock_recovery_invalid");
+            requireClockRecoveryForeground(epoch);getActivity().runOnUiThread(()->showClockRecoveryDialog(call,requestId,false,null,epoch));return null;},true);
+    }
+    /** Secrets are Android-owned; retry first checks the saved request without a password. */
+    private void showClockRecoveryDialog(PluginCall call,String requestId,boolean passwordOnly,String previousRequestId,long epoch){
+        if(destroyed||!foreground||epoch!=checkoutEpoch.get()||getActivity().isFinishing()||credentials!=null){call.reject("clock recovery confirmation is unavailable right now.","native_sign_in_cancelled");return;}
+        final boolean starting=requestId==null;
+        final EditText password=(starting||passwordOnly)?recoveryPasswordField():null;
+        String message=starting?"Recover this original counter after a device-time fault. Set Android date and time correctly first. Verified approval permanently retires saved offline allocations; bills, unresolved payments and staff PIN attempts are kept. Enter the original staff account password. The counter stays locked.":passwordOnly?"No approval was found for saved recovery "+requestId+". Enter the original staff account password to approve this exact saved recovery. Existing allocations will be retired. This does not authorize more sales.":"Check saved clock recovery "+requestId+" and obtain a fresh signed time check. Set Android date and time correctly before continuing. An approved recovery keeps existing allocations retired, preserves bills and payment records, and leaves the counter locked.";
+        AlertDialog.Builder builder=new AlertDialog.Builder(getActivity()).setTitle(starting?"Recover device clock":passwordOnly?"Authorize saved clock recovery":"Check saved clock recovery").setMessage(message);
+        if(password!=null){LinearLayout layout=new LinearLayout(getActivity());layout.setOrientation(LinearLayout.VERTICAL);int padding=(int)(24*getContext().getResources().getDisplayMetrics().density);layout.setPadding(padding,8,padding,8);layout.addView(password);builder.setView(layout);passwordField=password;}
+        AlertDialog dialog=builder.setNegativeButton("Cancel",(d,w)->call.reject("clock recovery confirmation cancelled.","native_sign_in_cancelled")).setPositiveButton(starting?"Recover clock":passwordOnly?"Authorize saved recovery":"Check and finish recovery",null).create();
+        credentials=dialog;dialog.setOnCancelListener(d->call.reject("clock recovery confirmation cancelled.","native_sign_in_cancelled"));
+        dialog.setOnDismissListener(d->{if(password!=null)password.getText().clear();if(credentials==dialog){credentials=null;passwordField=null;}});
+        dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            if(destroyed||!foreground||epoch!=checkoutEpoch.get()){dialog.cancel();return;}
+            if(password!=null&&password.length()==0){password.setError("Enter your account password");return;}
+            final char[] secret=copySecret(password);
+            dialog.dismiss();if(!execute(call,()->{try{
+                requireClockRecoveryForeground(epoch);org.json.JSONObject state=clockRecovery().getState();
+                if(starting){String current=state.isNull("requestId")?null:state.getString("requestId");if(!state.getBoolean("canStart")||!java.util.Objects.equals(previousRequestId,current))throw new NativeAccessError("clock_recovery_invalid");}
+                else if(!requestId.equals(state.opt("requestId")))throw new NativeAccessError("clock_recovery_invalid");
+                requireClockRecoveryForeground(epoch);org.json.JSONObject result=starting?clockRecovery().startWithPassword(secret):clockRecovery().retryWithPassword(requestId,secret);
+                requireClockRecoveryForeground(epoch);
+                if(!starting&&!passwordOnly&&"pending".equals(result.opt("status"))&&requestId.equals(result.opt("requestId"))&&result.getBoolean("canRetry")&&result.getBoolean("passwordRequired")){
+                    getActivity().runOnUiThread(()->showClockRecoveryDialog(call,requestId,true,null,epoch));return null;
+                }
+                return result;
+            }finally{wipeSecret(secret);}},true)){wipeSecret(secret);}
         }));
         if(dialog.getWindow()!=null)dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);dialog.show();
     }
@@ -183,7 +237,7 @@ public final class NativeLedgerPlugin extends Plugin {
             return result;
         }catch(Exception error){throw new NativeAccessError(NativeCheckoutCoordinator.code(error));}},true);
     }
-    private void invalidateCheckoutAccess(){checkoutEpoch.incrementAndGet();if(shiftClose!=null)shiftClose.invalidateCheck();if(pinRecovery!=null)pinRecovery.invalidate();}
+    private void invalidateCheckoutAccess(){checkoutEpoch.incrementAndGet();if(shiftClose!=null)shiftClose.invalidateCheck();if(pinRecovery!=null)pinRecovery.invalidate();if(clockRecovery!=null)clockRecovery.invalidate();}
     private void publishCheckoutLocked(){if(!destroyed)notifyListeners("nativeCheckoutLocked",new JSObject().put("schemaVersion",1),true);}
     private void notifyCheckoutLocked(){invalidateCheckoutAccess();publishCheckoutLocked();}
     @PluginMethod public void getCheckoutState(PluginCall call){checkoutCall(call,()->checkout().getState());}
@@ -226,7 +280,7 @@ public final class NativeLedgerPlugin extends Plugin {
     }
     private static String accessCode(Exception error){
         if(error instanceof NativeAccessError)return ((NativeAccessError)error).code;
-        String code=error.getMessage();return java.util.Arrays.asList("pin_incorrect","pin_locked","pin_online_reset_required","pin_unlock_required","pin_format_invalid","pin_confirmation_mismatch","pin_recovery_pending","pin_recovery_invalid","pin_recovery_conflict","pin_recovery_interrupted","clock_source_blocked","clock_rollback","pin_kdf_unsupported").contains(code)?code:"native_access_unavailable";
+        String code=error.getMessage();return java.util.Arrays.asList("pin_incorrect","pin_locked","pin_online_reset_required","pin_unlock_required","pin_format_invalid","pin_confirmation_mismatch","pin_recovery_pending","pin_recovery_invalid","pin_recovery_conflict","pin_recovery_interrupted","clock_recovery_pending","clock_recovery_invalid","clock_recovery_conflict","clock_recovery_interrupted","clock_time_settings_required","clock_signal_unavailable","clock_recovery_uncertain","clock_source_blocked","clock_rollback","pin_kdf_unsupported").contains(code)?code:"native_access_unavailable";
     }
     private void read(PluginCall call, ReadOperation operation) {
         execute(call,operation,false);
@@ -312,7 +366,7 @@ public final class NativeLedgerPlugin extends Plugin {
     @Override protected void handleOnPause(){foreground=false;notifyCheckoutLocked();if(credentials!=null)credentials.cancel();try{storage.execute(()->{if(offline!=null)offline.lock();});}catch(java.util.concurrent.RejectedExecutionException ignored){}super.handleOnPause();}
     @Override protected void handleOnResume(){foreground=true;super.handleOnResume();}
     @Override protected void handleOnDestroy() {
-        destroyed=true;checkoutEpoch.incrementAndGet();if(pinRecovery!=null)pinRecovery.invalidate();
+        destroyed=true;checkoutEpoch.incrementAndGet();if(pinRecovery!=null)pinRecovery.invalidate();if(clockRecovery!=null)clockRecovery.invalidate();
         if(passwordField!=null)passwordField.getText().clear();
         if(credentials!=null)credentials.dismiss();
         storage.execute(() -> {if(offline!=null)offline.close();journal.close();}); storage.shutdown(); super.handleOnDestroy();

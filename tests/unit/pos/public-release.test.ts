@@ -194,3 +194,11 @@ it('exposes only exact native PIN recovery POST even when new selling is paused'
   expect(publicReleaseAccess('/api/pos/native/pin-recovery/extra','POST',pilot)).not.toBe('allow')
  }
 })
+
+it('exposes only exact clock recovery POST while selling is paused',()=>{
+ for(const pilot of [true,false]){
+  expect(publicReleaseAccess('/api/pos/native/clock-recovery','POST',pilot)).toBe('allow')
+  for(const method of ['GET','HEAD','PUT','PATCH','DELETE','OPTIONS'])expect(publicReleaseAccess('/api/pos/native/clock-recovery',method,pilot)).not.toBe('allow')
+  expect(publicReleaseAccess('/api/pos/native/clock-recovery/extra','POST',pilot)).not.toBe('allow')
+ }
+})

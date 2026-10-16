@@ -232,6 +232,9 @@ public final class NativeCheckoutEngine {
         synchronized (journal) {
             SQLiteDatabase db = journal.getWritableDatabase(); db.beginTransaction();
             try {
+                NativeClockRetirement.requireNoPending(journal);
+                if(clock instanceof NativeClockSource)((NativeClockSource)clock).requireNoRecovery();
+                if(!retainExpired&&!recoveryOnly&&NativeClockRetirement.retired(journal,bundle.authorityId,serverKeys,deviceKey))throw invalid("authority_blocked");
                 try (Cursor c = db.rawQuery("SELECT snapshot_envelope,authority_envelope FROM offline_bundles WHERE id=?", new String[]{bundle.authorityId})) {
                     if (c.moveToFirst()) {
                         OfflineBundle stored = OfflineBundle.verify(c.getString(0), c.getString(1), serverKeys, binding);
@@ -242,7 +245,7 @@ public final class NativeCheckoutEngine {
                 }
                 if(!recoveryOnly)unlock.requireUnlocked(binding);
                 if(!retainExpired&&!recoveryOnly){NativeShiftCloseJournal.requireNoPending(journal,serverKeys);NativeShiftCloseJournal.requireNoCloseForShift(db,bundle.shiftId);}
-                if (exists(db, "SELECT 1 FROM offline_authority_state WHERE seal_envelope IS NULL OR blocked=1") || hasUncertain(db)) throw invalid("previous_authority_unresolved");
+                if (exists(db, "SELECT 1 FROM offline_authority_state WHERE seal_envelope IS NULL") || hasUncertain(db)) throw invalid("previous_authority_unresolved");
                 NativeAllocationLifecycle lifecycle=new NativeAllocationLifecycle(journal,serverKeys,deviceKey);
                 // Terminal-only custody retention grants no selling capability. Keep outstanding
                 // receipt uploads intact; active installation still requires their signed ACKs.
@@ -269,7 +272,7 @@ public final class NativeCheckoutEngine {
                 if(retainExpired&&anchoredServerMs<bundle.expiresAtMs)throw invalid("authority_not_expired");
                 OfflineClock.State savedClock=(retainExpired||recoveryOnly)?anchor:OfflineClock.advance(anchor, reading, bundle.notBeforeMs, bundle.expiresAtMs).nextState;
                 ContentValues row = new ContentValues(); row.put("id", bundle.authorityId); row.put("snapshot_envelope", snapshotEnvelope); row.put("authority_envelope", authorityEnvelope); db.insertOrThrow("offline_bundles", null, row);
-                row = new ContentValues(); row.put("authority_id", bundle.authorityId); row.put("next_number", bundle.firstInvoice); row.put("gross_fils", 0); row.put("clock_json", savedClock.toJson()); db.insertOrThrow("offline_authority_state", null, row);
+                row = new ContentValues(); row.put("authority_id", bundle.authorityId); row.put("next_number", bundle.firstInvoice); row.put("gross_fils", 0); row.put("clock_json", savedClock.toJson()); if(NativeClockRetirement.retired(journal,bundle.authorityId,serverKeys,deviceKey))row.put("blocked",1); db.insertOrThrow("offline_authority_state", null, row);
                 if(retainExpired||recoveryOnly)sealAuthority(bundle.authorityId,!recoveryOnly);
                 db.setTransactionSuccessful();
             } finally { db.endTransaction(); }
@@ -289,6 +292,7 @@ public final class NativeCheckoutEngine {
                         JSONObject result = intentState(db, intentId); db.setTransactionSuccessful(); return result;
                     }
                 }
+                NativeClockRetirement.requireNoPending(journal);
                 if (hasUncertain(db)) throw invalid("payment_reconciliation_required");
                 NativeShiftCloseJournal.requireNoPending(journal,serverKeys);
                 OfflineBundle bundle = bundle(db, authorityId);NativeShiftCloseJournal.requireNoCloseForShift(db,bundle.shiftId); unlock.requireUnlocked(binding);
@@ -314,6 +318,7 @@ public final class NativeCheckoutEngine {
                 if ("committed".equals(intent.getString("state"))) {
                     String original = receiptEnvelope(db, intent.getString("orderId")); db.setTransactionSuccessful(); return original;
                 }
+                NativeClockRetirement.requireNoPending(journal);
                 if ("cancelled".equals(intent.getString("state"))) throw invalid("intent_cancelled");
                 if ("frozen_for_manager".equals(intent.getString("state")) || "manager_resolved".equals(intent.getString("state"))) throw invalid("payment_frozen");
                 if(hasUncertainPayments(journal,serverKeys,deviceKey,intentId))throw invalid("payment_reconciliation_required");

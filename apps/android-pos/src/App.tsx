@@ -31,6 +31,7 @@ import NativeBundleRecovery from './NativeBundleRecovery'
 import NativeNextAllocation from './NativeNextAllocation'
 import NativeShiftClose from './NativeShiftClose'
 import NativePinRecovery from './NativePinRecovery'
+import NativeClockRecovery from './NativeClockRecovery'
 import './app.css'
 
 const date = (value: string) =>
@@ -647,9 +648,9 @@ function OfflinePreparation({
                   {state.stage === 'recover' &&
                     state.noticeCode !== 'offline_allocation_finished' && (
                       <p className="help">
-                        Keep this device’s records and contact your manager or support. This app
-                        cannot repair permission, time or counter changes. A local status check does
-                        not renew access.
+                        Keep this device’s records. Use Recover device time for a blocked clock;
+                        other permission or counter changes need your manager or support. A local
+                        status check does not renew access.
                       </p>
                     )}
                 </>
@@ -682,6 +683,7 @@ function NativeAccess({
   onSetupState,
   onClosePendingChange,
   onPinPendingChange,
+  onClockPendingChange,
 }: {
   available: boolean
   onRecordsChanged: () => void
@@ -691,6 +693,7 @@ function NativeAccess({
   onSetupState: (ready: boolean, revision: number) => void
   onClosePendingChange: (pending: boolean) => void
   onPinPendingChange: (pending: boolean) => void
+  onClockPendingChange: (pending: boolean) => void
 }) {
   const [access, setAccess] = useState<NativeAccessState | null>(null)
   const [fresh, setFresh] = useState(false)
@@ -701,6 +704,16 @@ function NativeAccess({
   const [offlineBusy, setOfflineBusy] = useState(false)
   const [reconciliationBusy, setReconciliationBusy] = useState(false)
   const [recoveryBusy, setRecoveryBusy] = useState(false)
+  const [clockBusy, setClockBusy] = useState(false)
+  const [clockPending, setClockPending] = useState(true)
+  const [clockCheckedVersion, setClockCheckedVersion] = useState(-1)
+  const reportClockPending = useCallback(
+    (pending: boolean) => {
+      setClockPending(pending)
+      onClockPendingChange(pending)
+    },
+    [onClockPendingChange]
+  )
   const [pinBusy, setPinBusy] = useState(false)
   const [pinPending, setPinPending] = useState(true)
   const [pinCheckedVersion, setPinCheckedVersion] = useState(-1)
@@ -789,7 +802,10 @@ function NativeAccess({
       reconciliationCheckedVersion !== accessVersion
     )
       return
-    if (kind !== 'signin' && (financialHold || nextAllocationPending || closePending || pinPending))
+    if (
+      kind !== 'signin' &&
+      (financialHold || nextAllocationPending || closePending || clockPending || pinPending)
+    )
       return
     if (kind === 'signin' && (access.status !== 'signed_out' || pendingLogout)) return
     if (
@@ -867,7 +883,9 @@ function NativeAccess({
     !recoveryBusy &&
     !nextAllocationBusy &&
     !closeBusy &&
+    !clockBusy &&
     !pinBusy &&
+    clockCheckedVersion === accessVersion &&
     pinCheckedVersion === accessVersion &&
     closeCheckedVersion === accessVersion &&
     offlineCheckedVersion === accessVersion &&
@@ -883,7 +901,9 @@ function NativeAccess({
     recoveryBusy ||
     nextAllocationBusy ||
     closeBusy ||
+    clockBusy ||
     pinBusy ||
+    clockCheckedVersion !== accessVersion ||
     pinCheckedVersion !== accessVersion ||
     !fresh ||
     offlineCheckedVersion !== accessVersion ||
@@ -985,6 +1005,7 @@ function NativeAccess({
                       onChange={(event) => setBranchId(event.target.value)}
                       disabled={
                         paused ||
+                        clockPending ||
                         pinPending ||
                         closePending ||
                         nextAllocationPending ||
@@ -1022,6 +1043,7 @@ function NativeAccess({
                           placeholder="For example, Front counter"
                           disabled={
                             paused ||
+                            clockPending ||
                             pinPending ||
                             closePending ||
                             nextAllocationPending ||
@@ -1035,6 +1057,7 @@ function NativeAccess({
                         disabled={
                           paused ||
                           nextAllocationPending ||
+                          clockPending ||
                           pinPending ||
                           closePending ||
                           financialHold ||
@@ -1056,7 +1079,12 @@ function NativeAccess({
               <button
                 className="secondary signout"
                 disabled={
-                  paused || pinPending || closePending || nextAllocationPending || financialHold
+                  paused ||
+                  clockPending ||
+                  pinPending ||
+                  closePending ||
+                  nextAllocationPending ||
+                  financialHold
                 }
                 onClick={() => void change('signout')}
               >
@@ -1071,6 +1099,7 @@ function NativeAccess({
                 className="secondary"
                 disabled={
                   paused ||
+                  clockPending ||
                   pinPending ||
                   closePending ||
                   nextAllocationPending ||
@@ -1089,6 +1118,7 @@ function NativeAccess({
               externalBusy ||
               nextAllocationBusy ||
               closeBusy ||
+              clockBusy ||
               pinBusy ||
               recoveryBusy ||
               !!busy ||
@@ -1108,6 +1138,7 @@ function NativeAccess({
         </p>
       )}
       <NativePinRecovery
+        startBlocked={clockPending}
         available={available}
         ready={
           accessInitialized &&
@@ -1117,6 +1148,7 @@ function NativeAccess({
           !recoveryBusy &&
           !nextAllocationBusy &&
           !closeBusy &&
+          !clockBusy &&
           !externalBusy &&
           offlineCheckedVersion === accessVersion &&
           reconciliationCheckedVersion === accessVersion &&
@@ -1130,6 +1162,31 @@ function NativeAccess({
         onCheckedVersion={setPinCheckedVersion}
         onChanged={refreshPreparation}
       />
+      <NativeClockRecovery
+        available={available}
+        ready={
+          accessInitialized &&
+          !busy &&
+          !offlineBusy &&
+          !reconciliationBusy &&
+          !recoveryBusy &&
+          !nextAllocationBusy &&
+          !closeBusy &&
+          !pinBusy &&
+          !externalBusy &&
+          offlineCheckedVersion === accessVersion &&
+          reconciliationCheckedVersion === accessVersion &&
+          closeCheckedVersion === accessVersion &&
+          pinCheckedVersion === accessVersion
+        }
+        revision={accessVersion}
+        actorId={fresh && access?.status === 'signed_in' ? access.actorId : null}
+        operationLock={locked}
+        onBusyChange={setClockBusy}
+        onPendingChange={reportClockPending}
+        onCheckedVersion={setClockCheckedVersion}
+        onChanged={refreshPreparation}
+      />
       <OfflinePreparation
         available={available}
         accessBusy={
@@ -1139,6 +1196,7 @@ function NativeAccess({
           recoveryBusy ||
           nextAllocationBusy ||
           closeBusy ||
+          clockBusy ||
           pinBusy
         }
         accessVersion={accessVersion}
@@ -1150,6 +1208,7 @@ function NativeAccess({
           financialHold ||
           nextAllocationPending ||
           closePending ||
+          clockPending ||
           pinPending ||
           externalBusy ||
           reconciliationCheckedVersion !== accessVersion
@@ -1164,13 +1223,16 @@ function NativeAccess({
           !recoveryBusy &&
           !nextAllocationBusy &&
           !closeBusy &&
+          !clockBusy &&
           !pinBusy &&
           offlineCheckedVersion === accessVersion
         }
         revision={accessVersion}
         operationLock={locked}
         actorId={fresh && access?.status === 'signed_in' ? access.actorId : null}
-        finishBlocked={financialHold || pinPending || nextAllocationPending || externalBusy}
+        finishBlocked={
+          financialHold || clockPending || pinPending || nextAllocationPending || externalBusy
+        }
         authority={
           preparation?.noticeCode === 'offline_allocation_finished'
             ? null
@@ -1189,6 +1251,7 @@ function NativeAccess({
           !reconciliationBusy &&
           !recoveryBusy &&
           !nextAllocationBusy &&
+          !clockBusy &&
           !pinBusy &&
           !externalBusy &&
           offlineCheckedVersion === accessVersion &&
@@ -1197,7 +1260,11 @@ function NativeAccess({
         revision={accessVersion}
         actorId={fresh && access?.status === 'signed_in' ? access.actorId : null}
         actionsBlocked={
-          financialHold || pinPending || nextAllocationPending || !!preparation?.pendingAction
+          financialHold ||
+          clockPending ||
+          pinPending ||
+          nextAllocationPending ||
+          !!preparation?.pendingAction
         }
         operationLock={locked}
         onBusyChange={setCloseBusy}
@@ -1214,6 +1281,7 @@ function NativeAccess({
           !reconciliationBusy &&
           !recoveryBusy &&
           !closeBusy &&
+          !clockBusy &&
           !pinBusy &&
           !externalBusy &&
           offlineCheckedVersion === accessVersion &&
@@ -1221,7 +1289,13 @@ function NativeAccess({
         }
         revision={accessVersion}
         actorId={fresh && access?.status === 'signed_in' ? access.actorId : null}
-        actionsBlocked={financialHold || pinPending || closePending || !!preparation?.pendingAction}
+        actionsBlocked={
+          financialHold ||
+          clockPending ||
+          pinPending ||
+          closePending ||
+          !!preparation?.pendingAction
+        }
         operationLock={locked}
         onBusyChange={setNextAllocationBusy}
         onPendingChange={setNextAllocationPending}
@@ -1231,7 +1305,9 @@ function NativeAccess({
         available={available}
         ready={setupReady && !externalBusy}
         revision={accessVersion}
-        actionsBlocked={financialHold || pinPending || closePending || nextAllocationPending}
+        actionsBlocked={
+          financialHold || clockPending || pinPending || closePending || nextAllocationPending
+        }
         operationLock={locked}
         onBusyChange={setRecoveryBusy}
         onChanged={refreshPreparation}
@@ -1265,6 +1341,7 @@ export default function App() {
   const [financialHold, setFinancialHold] = useState(true)
   const [closePending, setClosePending] = useState(true)
   const [pinPending, setPinPending] = useState(true)
+  const [clockPending, setClockPending] = useState(true)
   const [setup, setSetup] = useState({ ready: false, revision: 0 })
   const onSetupState = useCallback(
     (ready: boolean, revision: number) =>
@@ -1399,8 +1476,10 @@ export default function App() {
             <NativeCounter
               available={native}
               ready={setup.ready}
-              newSalesBlocked={closePending || pinPending}
-              newSalesBlockReason={pinPending ? 'pin_recovery' : 'drawer_close'}
+              newSalesBlocked={closePending || pinPending || clockPending}
+              newSalesBlockReason={
+                clockPending ? 'clock_recovery' : pinPending ? 'pin_recovery' : 'drawer_close'
+              }
               revision={setup.revision}
               operationLock={operationLock}
               onBusyChange={setCounterBusy}
@@ -1419,6 +1498,7 @@ export default function App() {
               onSetupState={onSetupState}
               onClosePendingChange={setClosePending}
               onPinPendingChange={setPinPending}
+              onClockPendingChange={setClockPending}
             />
             <section className="records-panel" aria-labelledby="records-heading">
               <h2 id="records-heading">Records on this device</h2>

@@ -1,0 +1,90 @@
+{
+  "states": {
+    "fresh_install": {
+      "schemaVersion": 1,
+      "status": "not_available",
+      "requestId": null,
+      "canStart": false,
+      "canRetry": false,
+      "passwordRequired": false,
+      "reasonCode": "clock_healthy"
+    },
+    "enrolled_unprepared": {
+      "schemaVersion": 1,
+      "status": "not_available",
+      "requestId": null,
+      "canStart": false,
+      "canRetry": false,
+      "passwordRequired": false,
+      "reasonCode": "clock_healthy"
+    },
+    "not_available": {
+      "schemaVersion": 1,
+      "status": "not_available",
+      "requestId": null,
+      "canStart": false,
+      "canRetry": false,
+      "passwordRequired": false,
+      "reasonCode": "clock_healthy"
+    },
+    "ready": {
+      "schemaVersion": 1,
+      "status": "ready",
+      "requestId": null,
+      "canStart": true,
+      "canRetry": false,
+      "passwordRequired": true,
+      "reasonCode": null
+    },
+    "pending": {
+      "schemaVersion": 1,
+      "status": "pending",
+      "requestId": "61e393a6-5a3a-4c43-aee1-be9d98c80f99",
+      "canStart": false,
+      "canRetry": true,
+      "passwordRequired": true,
+      "reasonCode": "clock_recovery_uncertain"
+    },
+    "approved": {
+      "schemaVersion": 1,
+      "status": "approved",
+      "requestId": "61e393a6-5a3a-4c43-aee1-be9d98c80f99",
+      "canStart": false,
+      "canRetry": true,
+      "passwordRequired": false,
+      "reasonCode": "clock_recovery_interrupted"
+    },
+    "completed": {
+      "schemaVersion": 1,
+      "status": "completed",
+      "requestId": "61e393a6-5a3a-4c43-aee1-be9d98c80f99",
+      "canStart": false,
+      "canRetry": false,
+      "passwordRequired": false,
+      "reasonCode": "clock_recovery_completed"
+    }
+  },
+  "devicePublicKeySpki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEpmnkBVhGAWyKP_aHzLF7RIqlNfeEzmEjtw1NZqb0TdPYnobO-r8x-XpwAu91kp8oEzArS73HrTw0kucX0lY9Hw",
+  "serverPublicKeySpki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdxymqRP4wN3WSYB_cxKsfmk61n-edZhVlFLVGXNj0y3kGoMUOuFxwYvYT6yVCeImcBYNKLqWqvxiGbIiY01tHw",
+  "proof": {
+    "format": "pos-signed-v1",
+    "alg": "ECDSA-P256-SHA256-DER",
+    "keyId": "d7ffc56b031fd969cd5fb9e53d30f43464e2d63031ff2776626f77be8e905622",
+    "payloadBase64Url": "eyJhY3RvcklkIjoiYWVjNDVlNTAtZTVjMy00OGI3LTlmNDItNGU2NThiNjVmZjE0IiwiYnJhbmNoSWQiOiIwOTUzOGRlOS1iZmMxLTRlMjMtOGYyYi05NWZmNTJmMWQ0YWYiLCJkZXZpY2VJZCI6Ijg3ZmY0NjhiLThmZWQtNDgzNS1iOWMxLWVjM2IwZmExNWQ2YyIsImRldmljZUtleVNoYTI1NiI6ImQ3ZmZjNTZiMDMxZmQ5NjljZDVmYjllNTNkMzBmNDM0NjRlMmQ2MzAzMWZmMjc3NjYyNmY3N2JlOGU5MDU2MjIiLCJpbnN0YWxsYXRpb25JZCI6IjU4NDViOGQxLTg2OGMtNGUzMi1hMzIxLTVkZTA0MzIwODMyMyIsImtleUVwb2NoIjoiNGZjNDMyMDAtYmI5Zi00NGJmLWJiZGItZTlkYzkyMmYyMDhjIiwia2luZCI6Im5hdGl2ZS1jbG9jay1yZWNvdmVyeSIsIm9sZENsb2NrR2VuZXJhdGlvbiI6MCwib2xkQ2xvY2tTaGEyNTYiOiIwNzljODcyYzc2OTEzNTg4MTAyZTg4YWMzMDYyOTM3OWIxZGY1ZTc4NjViMWU0MGY1OWU2ZjlmNWI5NGE4ZmI0Iiwib3JnYW5pemF0aW9uSWQiOiJmOGRhNTIwYi01OTA4LTQzNzEtOGRlMS1jYTM0OGM1NzhjNjMiLCJyZXF1ZXN0SWQiOiI2MWUzOTNhNi01YTNhLTRjNDMtYWVlMS1iZTlkOThjODBmOTkiLCJyZXRpcmVtZW50U2hhMjU2IjoiZWI2OThmMjZiNmYwNDdlN2E1NzhkNjliNzM3OTZkZWU0YjdhMDY2MzQ4NWFlZTllN2M4MjY4OTVhNTg0MmUwYyIsInNjaGVtYVZlcnNpb24iOjF9",
+    "signatureBase64Url": "MEYCIQDMkeFtLGV2bBrRU1psgL3ssrmkRI6c2UVRY9Geka_3KwIhAKPGki61GcGZRlfwIx7jzAp7ChRcdWbTcjCaXoyLMNKG"
+  },
+  "approval": {
+    "format": "pos-signed-v1",
+    "alg": "ECDSA-P256-SHA256-DER",
+    "keyId": "synthetic-server",
+    "payloadBase64Url": "eyJhY3RvcklkIjoiYWVjNDVlNTAtZTVjMy00OGI3LTlmNDItNGU2NThiNjVmZjE0IiwiYXBwcm92ZWRBdCI6IjIwMjYtMTAtMTZUMDY6MzA6MDAuMDAwWiIsImJyYW5jaElkIjoiMDk1MzhkZTktYmZjMS00ZTIzLThmMmItOTVmZjUyZjFkNGFmIiwiZGV2aWNlSWQiOiI4N2ZmNDY4Yi04ZmVkLTQ4MzUtYjljMS1lYzNiMGZhMTVkNmMiLCJkZXZpY2VLZXlTaGEyNTYiOiJkN2ZmYzU2YjAzMWZkOTY5Y2Q1ZmI5ZTUzZDMwZjQzNDY0ZTJkNjMwMzFmZjI3NzY2MjZmNzdiZThlOTA1NjIyIiwiaW5zdGFsbGF0aW9uSWQiOiI1ODQ1YjhkMS04NjhjLTRlMzItYTMyMS01ZGUwNDMyMDgzMjMiLCJrZXlFcG9jaCI6IjRmYzQzMjAwLWJiOWYtNDRiZi1iYmRiLWU5ZGM5MjJmMjA4YyIsImtpbmQiOiJuYXRpdmUtY2xvY2stcmVjb3ZlcnktYXBwcm92YWwiLCJvbGRDbG9ja0dlbmVyYXRpb24iOjAsIm9sZENsb2NrU2hhMjU2IjoiMDc5Yzg3MmM3NjkxMzU4ODEwMmU4OGFjMzA2MjkzNzliMWRmNWU3ODY1YjFlNDBmNTllNmY5ZjViOTRhOGZiNCIsIm9yZ2FuaXphdGlvbklkIjoiZjhkYTUyMGItNTkwOC00MzcxLThkZTEtY2EzNDhjNTc4YzYzIiwicHJvb2ZTaGEyNTYiOiJmMGQzMjZhNTRmZjM4NjY0M2ZmNGI4NWQ3ZjNlZTkxYjk0MmE5NzYxOGViMmY0ODUzY2NiOTMwZjFlNWU5NWRkIiwicmVxdWVzdElkIjoiNjFlMzkzYTYtNWEzYS00YzQzLWFlZTEtYmU5ZDk4YzgwZjk5IiwicmV0aXJlbWVudFNoYTI1NiI6ImViNjk4ZjI2YjZmMDQ3ZTdhNTc4ZDY5YjczNzk2ZGVlNGI3YTA2NjM0ODVhZWU5ZTdjODI2ODk1YTU4NDJlMGMiLCJzY2hlbWFWZXJzaW9uIjoxfQ",
+    "signatureBase64Url": "MEYCIQD3IFRXcbSwtueKZ17fhq8GYAkSDefDRDHQpdeA8HoEVgIhAKwwTbbgct6OClwC8x7jCgVM_BP9RfmR5v7zGYdi22N3"
+  },
+  "time": {
+    "format": "pos-signed-v1",
+    "alg": "ECDSA-P256-SHA256-DER",
+    "keyId": "synthetic-server",
+    "payloadBase64Url": "eyJhcHByb3ZhbFNoYTI1NiI6ImRlMTBjN2YzYjk4MDQyMTlhN2JlZjQ3ZTQzOTQ2MDdiZmRlOTA5NThjNWZmMWRkNmQ4ODA3ZDU3ODE4ODc0MGIiLCJjaGFsbGVuZ2UiOiIwY2M2ZTYwZGMxMjIyNTM2YjZkM2JhYmNjM2VkYmQ5YmMxMTcxMTEyMDkxYTlkNjY1Y2M0MzE2YmEzNWQ1MmVlIiwia2luZCI6Im5hdGl2ZS1jbG9jay1yZWNvdmVyeS10aW1lIiwib2xkQ2xvY2tHZW5lcmF0aW9uIjowLCJyZXF1ZXN0SWQiOiI2MWUzOTNhNi01YTNhLTRjNDMtYWVlMS1iZTlkOThjODBmOTkiLCJyZXRpcmVtZW50U2hhMjU2IjoiZWI2OThmMjZiNmYwNDdlN2E1NzhkNjliNzM3OTZkZWU0YjdhMDY2MzQ4NWFlZTllN2M4MjY4OTVhNTg0MmUwYyIsInNjaGVtYVZlcnNpb24iOjEsInNlcnZlclRpbWVNcyI6MTc5MjEzMjIwMDAwMH0",
+    "signatureBase64Url": "MEQCIQChRLwBfqpe7e4cpzVmIYUbyftv5nnVC1k3ZMnXWdGG4QIfc6xftSc88rSnVpyk5tG2W5lOVyPf1qSegyfJv4rjDA"
+  }
+}

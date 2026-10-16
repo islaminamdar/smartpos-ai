@@ -27,7 +27,7 @@ final class NativeAllocationLifecycle {
     String sealHash(String id,boolean confirmed)throws Exception{
         OfflineBundle b=bundle(id);
         try(Cursor c=journal.getReadableDatabase().rawQuery("SELECT s.seal_envelope,s.blocked,c.seal_payload_hash,c.response_json FROM offline_authority_state s LEFT JOIN offline_seal_confirmations c ON c.authority_id=s.authority_id WHERE s.authority_id=?",new String[]{id})){
-            if(!c.moveToFirst())throw failure("native_storage_unavailable");if(c.getInt(1)!=0)throw failure("previous_authority_unresolved");if(c.isNull(0))throw failure("offline_allocation_active");
+            if(!c.moveToFirst())throw failure("native_storage_unavailable");if(c.getInt(1)!=0&&!NativeClockRetirement.retired(journal,id,keys,device))throw failure("previous_authority_unresolved");if(c.isNull(0))throw failure("offline_allocation_active");
             SignedProtocol.Verified signed=SignedProtocol.verify(c.getString(0),Collections.singletonMap(SignedProtocol.fingerprint(device),device));JSONObject p=(JSONObject)signed.payload();
             fields(p,"kind","schemaVersion","id","authorityId","keyEpoch","deviceId","finalSequence","finalEventSha256");
             if(!"offline-seal".equals(p.get("kind"))||integer(p,"schemaVersion")!=1||!id.equals(p.get("authorityId"))||!b.deviceId.equals(p.get("deviceId"))||!b.keyEpoch.equals(p.get("keyEpoch")))throw failure("native_storage_unavailable");uuid(p.getString("id"));long seq=integer(p,"finalSequence");Object hash=p.get("finalEventSha256");if((seq==0)!=(hash==JSONObject.NULL)||(hash!=JSONObject.NULL&&(!(hash instanceof String)||!((String)hash).matches("[a-f0-9]{64}"))))throw failure("native_storage_unavailable");
@@ -63,6 +63,7 @@ final class NativeAllocationLifecycle {
         if(latest!=null)requireHead(latest);
     }
     void requireClear()throws Exception{
+        NativeClockRetirement.requireNoPending(journal);
         SQLiteDatabase db=journal.getReadableDatabase();
         if(exists(db,"SELECT 1 FROM outbox"))throw failure("offline_upload_required");
         if(NativeCheckoutEngine.hasUncertainPayments(journal,keys,device))throw failure("payment_reconciliation_required");

@@ -128,11 +128,15 @@ public final class NativeSession {
     }
     synchronized JSONObject nativeRequest(String method,String path,JSONObject body)throws Exception{
         JSONObject current=store.read();custody(current);if(current.isNull("actorId")||current.getBoolean("logoutPending"))throw new NativeAccessError("native_session_expired");
-        if(!path.equals("/api/pos/native/pin-recovery")&&!path.equals("/api/pos/native/shift-close"))recoveryGuard.check();
+        if(!path.equals("/api/pos/native/clock-recovery")&&!path.equals("/api/pos/native/pin-recovery")&&!path.equals("/api/pos/native/shift-close"))recoveryGuard.check();
         return http.request(method,path,body);
     }
     /** Historical signed evidence remains uploadable after sign-out or access revocation. */
     synchronized JSONObject historicalRequest(String path,JSONObject envelope)throws Exception{
+        if(path.equals("/api/pos/native/clock-recovery")){
+            if(envelope==null||envelope.length()!=3||!"lookup".equals(envelope.opt("mode"))||!(envelope.opt("proof") instanceof JSONObject)||!(envelope.opt("challenge") instanceof String)||!envelope.getString("challenge").matches("[a-f0-9]{64}"))throw new NativeAccessError("native_access_unavailable");
+            return http.request("POST",path,envelope);
+        }
         if(path.equals("/api/pos/native/pin-recovery")){
             if(envelope==null||envelope.length()!=2||!"lookup".equals(envelope.opt("mode"))||!(envelope.opt("proof") instanceof JSONObject))throw new NativeAccessError("native_access_unavailable");
             return http.request("POST",path,envelope);

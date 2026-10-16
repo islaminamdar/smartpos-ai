@@ -9,6 +9,7 @@ import {
 } from './native'
 
 type Props = {
+  startBlocked?: boolean
   available: boolean
   ready: boolean
   revision: number
@@ -30,8 +31,9 @@ const messages: Record<string, string> = {
     'Recovery was not confirmed. Read the saved status before retrying the original request.',
   native_session_expired:
     'Sign in with the original staff account. A saved request can still be checked without starting another recovery.',
+  clock_recovery_pending: 'Finish the saved clock recovery before starting a new PIN change. Existing PIN recovery can still be checked.',
   clock_source_blocked:
-    'Device time cannot be verified. PIN recovery cannot repair the device clock. Keep this app’s data and contact support.',
+    'Device time cannot be verified. PIN recovery cannot repair the device clock. Check Recover device time below; keep all saved records.',
   native_storage_unavailable:
     'The saved recovery record cannot be read. Keep this app’s data and contact support.',
   pin_not_provisioned:
@@ -65,6 +67,7 @@ const isPending = (value: NativePinRecoveryState) =>
 
 export default function NativePinRecovery({
   available,
+  startBlocked = false,
   ready,
   revision,
   actorId,
@@ -213,7 +216,7 @@ export default function NativePinRecovery({
   }, [ready, listening, checked, revision, read])
   const currentState = fresh && checked === revision && readScope === scope
   const known = state?.reasonCode === null || !!(state?.reasonCode && messages[state.reasonCode])
-  const mayStart = currentState && known && !!actorId && !!state?.canStart && !original.current
+  const mayStart = !startBlocked && currentState && known && !!actorId && !!state?.canStart && !original.current
   const mayRetry = currentState && known && !!state?.canRetry && !!state.requestId
   const consentKey = `${scope}:${state?.status}:${state?.requestId ?? 'new'}:${state?.passwordRequired}`
   async function run(kind: 'start' | 'retry') {
