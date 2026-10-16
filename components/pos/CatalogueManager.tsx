@@ -326,7 +326,11 @@ export default function CatalogueManager({
             Refresh menu
           </button>
         </div>
-        <aside ref={editor} className="lc-menu-editor" aria-label="Edit menu item">
+        <aside
+          ref={editor}
+          className={`lc-menu-editor${selected || adding ? '' : 'lc-menu-editor-empty'}`}
+          aria-label="Edit menu item"
+        >
           {selected || adding ? (
             <form key={selected ? `${selected.id}:${selected.revision}` : 'new'} onSubmit={submit}>
               <h2>{selected ? 'Edit item' : 'New item'}</h2>

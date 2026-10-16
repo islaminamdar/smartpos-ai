@@ -17,6 +17,10 @@ For the online pilot at [pos.internext.info/counter](https://pos.internext.info/
 4. Select **Save sale** and wait for confirmation. If confirmation is interrupted, use the saved-request recovery controls. Do not create another bill for the same payment until its status is resolved.
 5. Open the confirmed receipt under **Receipts** and choose **Print / save PDF**. Check the actual paper output; a browser print dialog does not confirm delivery to a physical printer.
 
+## Update the menu
+
+In **Menu**, a manager can add an item or edit its price, unit and availability. Enter a reason and wait for the saved confirmation. For weight sales, enter the full kilogram price. Keep an item unavailable until its price is approved. Cashiers must refresh an older basket when its menu details change; issued bills retain their original details.
+
 ## End a shift
 
 Review the shift totals, count the actual cash in the drawer, then use **Close shift**. Investigate any difference rather than changing the count to match the screen. Record authorized cash movements with their real amounts and reasons.

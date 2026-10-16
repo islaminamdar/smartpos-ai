@@ -13,9 +13,15 @@ export function loginSourceKey(request: Request) {
     } catch {
       throw new PosServerError('login_source_unavailable', 503)
     }
+    // NextURL normalizes literal loopback addresses to localhost. Require both
+    // hosts to be loopback and preserve the protocol/port boundary.
+    const actual = new URL(request.url)
+    const loopback = ['127.0.0.1', 'localhost', '[::1]']
     if (
-      !['127.0.0.1', 'localhost', '[::1]'].includes(origin.hostname) ||
-      new URL(request.url).origin !== origin.origin
+      !loopback.includes(origin.hostname) ||
+      !loopback.includes(actual.hostname) ||
+      actual.protocol !== origin.protocol ||
+      actual.port !== origin.port
     )
       throw new PosServerError('login_source_unavailable', 503)
     return hash('development-loopback')

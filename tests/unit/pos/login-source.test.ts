@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { NextRequest } from 'next/server'
 vi.mock('@/lib/pos/server/client', () => ({
   PosServerError: class extends Error {
     constructor(
@@ -56,6 +57,18 @@ describe('explicit trusted login source boundary', () => {
     expect(loginSourceKey(request(undefined, 'http://127.0.0.1:3048/api/pos/session'))).toMatch(
       /^[a-f0-9]{64}$/
     )
+    expect(loginSourceKey(new NextRequest('http://127.0.0.1:3048/api/pos/session'))).toMatch(
+      /^[a-f0-9]{64}$/
+    )
+    expect(loginSourceKey(request(undefined, 'http://localhost:3048/api/pos/session'))).toMatch(
+      /^[a-f0-9]{64}$/
+    )
+    expect(() =>
+      loginSourceKey(request(undefined, 'http://localhost:3049/api/pos/session'))
+    ).toThrow()
+    expect(() =>
+      loginSourceKey(request(undefined, 'https://localhost:3048/api/pos/session'))
+    ).toThrow()
     expect(() => loginSourceKey(request())).toThrow()
     vi.stubEnv('POS_PUBLIC_ORIGIN', 'https://pos.example')
     expect(() => loginSourceKey(request())).toThrow()

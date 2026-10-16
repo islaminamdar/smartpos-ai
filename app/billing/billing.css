@@ -247,3 +247,10 @@
     scroll-behavior: auto;
   }
 }
+/* Keep the navigation easy to touch on narrow counter screens. */
+.billing-nav > a,
+.billing-footer > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}

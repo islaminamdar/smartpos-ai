@@ -41,7 +41,7 @@ Thirty entries have zero source base prices; the UI requires a positive reviewed
 
 ## Authenticated online pilot
 
-The `/counter` workspace supports staff login, device enrollment, cashier-owned shifts, approved branch menu, cash/card-recorded/split payments, immutable numbered invoices, full credit notes, receipt history, cash movements and shift reconciliation. Six isolated `pos_*` migrations provide tenant boundaries, authoritative money calculations, device binding, idempotency and durable request cancellation. See [server setup and contracts](lib/pos/server/README.md).
+The `/counter` workspace supports staff login, device enrollment, cashier-owned shifts, approved branch menu, cash/card-recorded/split payments, immutable numbered invoices, full credit notes, receipt history, cash movements and shift reconciliation. Nine isolated `pos_*` migrations provide tenant boundaries, authoritative money calculations, device binding, idempotency, durable request cancellation, audited menu revisions, prepared PayPal billing and source-specific login limits. Managers can add items or change prices, units and availability in **Menu**; edited items require a fresh cashier basket while earlier invoices remain unchanged. See [server setup and contracts](lib/pos/server/README.md).
 
 The pilot requires an internet connection. A browser journal retains each submitted request until the server returns its matching confirmation or cancellation; retrying does not create a second bill. Training records are never imported as live sales. Card entries and credit notes do not execute bank-terminal payments or refunds.
 

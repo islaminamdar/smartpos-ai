@@ -205,6 +205,7 @@
 }
 .lc-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 16px 28px;
   border-bottom: 1px solid var(--line);
@@ -748,8 +749,17 @@
   .lc-menu-editor {
     grid-row: 1;
   }
+  .lc-menu-editor-empty {
+    display: none;
+  }
   .lc-catalogue-list > button {
     padding: 12px;
     gap: 8px;
   }
+}
+
+.lc-login > a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
 }
