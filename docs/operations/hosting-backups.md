@@ -40,3 +40,13 @@ Local checks cover authenticated round trips, large payloads, altered/truncated
 ciphertext, wrong keys, unsafe key permissions and refusal to overwrite restore
 targets. Hosting deployment and actual isolated database restoration need their
 own dated execution evidence before they can be reported verified.
+
+## Verified on 17 October 2026
+
+The hosting timer and both encryption helpers were installed after a verified
+backup of the previous configuration. The new encrypted archive was authenticated,
+decrypted, and restored with `pg_restore --single-transaction --exit-on-error` into
+a uniquely named database with public connections revoked and connection limit
+zero. All 32 migration hashes matched; 91 public tables restored. The owned test
+database and decrypted staging files were removed after verification, and the
+nightly timer remained active. Existing historical backups were preserved.

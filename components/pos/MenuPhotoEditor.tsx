@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react'
 import { ImagePlus } from 'lucide-react'
+import { temporaryMenuIllustration } from '@/lib/pos/menu-illustrations'
 import {
   MENU_PHOTO_MAX_SOURCE_BYTES,
   MENU_PHOTO_SOURCE_TYPES,
@@ -10,6 +11,7 @@ import {
 import styles from './MenuPhotoEditor.module.css'
 
 type Props = {
+  productId?: string
   branchId: string
   deviceId: string
   itemName: string
@@ -152,7 +154,10 @@ export default function MenuPhotoEditor(props: Props) {
     }
   }
 
-  const shownImage = preview || imageUrl
+  const illustration = !preview
+    ? temporaryMenuIllustration({ id: props.productId, branchId, imageUrl })
+    : null
+  const shownImage = preview || imageUrl || illustration?.src
   const changed = imageUrl !== savedImageUrl
   return (
     <section className={styles.editor} aria-label="Menu photo" aria-busy={busy}>
@@ -165,7 +170,9 @@ export default function MenuPhotoEditor(props: Props) {
               ? 'Unsaved change'
               : imageUrl
                 ? 'Saved photo'
-                : 'Optional'}
+                : illustration
+                  ? illustration.label
+                  : 'Optional'}
         </span>
       </div>
       <div className={styles.preview}>
@@ -173,7 +180,11 @@ export default function MenuPhotoEditor(props: Props) {
           // eslint-disable-next-line @next/next/no-img-element -- Local blob previews and already processed same-origin WebP need no image proxy.
           <img
             src={shownImage}
-            alt={file ? 'Selected photo preview' : `Menu photo for ${itemName || 'this item'}`}
+            alt={
+              file
+                ? 'Selected photo preview'
+                : (illustration?.alt ?? `Menu photo for ${itemName || 'this item'}`)
+            }
           />
         ) : (
           <div className={styles.empty}>
@@ -184,6 +195,13 @@ export default function MenuPhotoEditor(props: Props) {
           </div>
         )}
       </div>
+      {illustration && (
+        <p className={styles.help}>
+          Temporary illustration — not a photograph of your serving. Upload the actual item photo to
+          replace it.
+          {changed && ' Save this item to confirm removal of the previous photo.'}
+        </p>
+      )}
       <p id={descriptionId} className={styles.help}>
         JPEG, PNG or WebP, up to 5 MB and 16 megapixels. Use a photo you have permission to publish.
         Uploaded photos are public. Replacing or removing a photo from this item does not delete its

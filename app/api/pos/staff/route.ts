@@ -1,3 +1,4 @@
+import { staffAccountSetupAvailable } from '@/lib/pos/server/staff-mail'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { authenticatedPosClient, PosServerError } from '@/lib/pos/server/client'
@@ -24,7 +25,11 @@ export async function GET(request: Request) {
     if (error) staffRpcError(error.message)
     const result = staffListSchema.parse({
       ...data,
-      capabilities: { inviteLinks: invitationLinksAvailable(), emailDelivery: false },
+      capabilities: {
+        inviteLinks: invitationLinksAvailable(),
+        emailDelivery: staffAccountSetupAvailable(),
+        accountSetup: staffAccountSetupAvailable(),
+      },
     })
     if (
       result.branchId !== query.data.branchId ||

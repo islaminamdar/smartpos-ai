@@ -1,7 +1,7 @@
 import styles from './staff.module.css'
 
 /** Guidance only: opening this panel never changes an account or sends a message. */
-export default function StaffAccessHelp() {
+export default function StaffAccessHelp({ accountSetup = false }: { accountSetup?: boolean }) {
   return (
     <details className={styles.accessHelp}>
       <summary>Need help signing in or adding a cashier?</summary>
@@ -12,13 +12,25 @@ export default function StaffAccessHelp() {
           sales and shifts are recorded under the right person.
         </p>
         <h3>Adding a new cashier</h3>
-        <p>
-          Give your administrator the cashier’s name, email and branch. Account setup must be
-          completed before the cashier can accept a branch invitation. An invitation alone does not
-          create a sign-in account.
-        </p>
+        {accountSetup ? (
+          <p>
+            Create an invitation in Staff and share it privately. The cashier opens it on their own
+            signed-out device, requests an email verification code, then sets their own password and
+            accepts the branch invitation. Creating the invitation does not send an email.
+          </p>
+        ) : (
+          <p>
+            Give your administrator the cashier’s name, email and branch. Account setup must be
+            completed before the cashier can accept a branch invitation. An invitation alone does
+            not create a sign-in account.
+          </p>
+        )}
         <ol>
-          <li>Confirm with the administrator that the cashier’s account is ready.</li>
+          <li>
+            {accountSetup
+              ? 'The cashier must have access to their own invited email inbox.'
+              : 'Confirm with the administrator that the cashier’s account is ready.'}
+          </li>
           <li>In Staff, create an invitation for that person and share the link privately.</li>
           <li>
             The cashier opens the link on their own device and signs in to accept branch access.

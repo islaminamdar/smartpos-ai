@@ -286,6 +286,20 @@
   color: var(--muted);
   font-size: 12px;
 }
+.lc-product img.lc-illustration {
+  object-fit: contain;
+  background: #fffcf3;
+}
+.lc-illustration-label {
+  display: block;
+  width: 100%;
+  padding: 5px 8px;
+  font-size: 10px;
+  line-height: 1.3;
+  color: #66513b;
+  background: #fff6e5;
+  text-align: center;
+}
 .lc-product > span:not(.lc-photo-empty) {
   padding: 12px 12px 4px;
   font-size: 14px;

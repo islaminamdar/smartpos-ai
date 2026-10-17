@@ -77,6 +77,8 @@ export function publicReleaseAccess(
       '/api/pos/staff/recovery': ['POST'],
       '/api/pos/staff/invitations/revoke': ['POST'],
       '/api/pos/staff/invitations/accept': ['POST'],
+      '/api/pos/staff/setup/request': ['POST'],
+      '/api/pos/staff/setup/complete': ['POST'],
       '/api/pos/account/password': ['POST'],
       '/api/pos/offers/quote': ['POST'],
       '/api/pos/bootstrap': ['GET'],

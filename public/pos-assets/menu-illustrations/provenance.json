@@ -1,0 +1,70 @@
+{
+  "generatedAt": "2026-10-17",
+  "tool": "OpenAI image generation",
+  "kind": "Temporary AI illustration; not an actual restaurant photograph",
+  "assets": [
+    {
+      "asset": "public/pos-assets/menu-illustrations/samosa-pav.webp",
+      "sourceFile": "exec-869dd7aa-83fd-4ba1-b693-0b671c5be03e.png",
+      "sourceSha256": "46a93e4f9b1f019d098125309e72676fbfe456068766506a171a17af614586dc",
+      "sha256": "822fde5cf0d6a3247fc3c3e5b0127df00b2e9113a03862e2a34e79276672c8f5",
+      "width": 512,
+      "height": 512,
+      "bytes": 23328
+    },
+    {
+      "asset": "public/pos-assets/menu-illustrations/vada-pav.webp",
+      "sourceFile": "exec-e4cdb920-774d-403a-a4dd-29816fdb8327.png",
+      "sourceSha256": "5f43534a9690553f95ff3036463f85ac2f1d66124d6ceef05a861052c56f4f3d",
+      "sha256": "219277c0390bd3a8e0e4d464a16482176429a0e2663382dad70be89727a196d2",
+      "width": 512,
+      "height": 512,
+      "bytes": 37426
+    },
+    {
+      "asset": "public/pos-assets/menu-illustrations/matka-lassi.webp",
+      "sourceFile": "exec-4bd8d625-9286-4418-b425-9ec5383abb2e.png",
+      "sourceSha256": "7968d313f665af9cb315cc27d5c32519b434ee5445ee72b89a249427fd98567c",
+      "sha256": "1672353b5809eaf2a42a804618a43954a29d96bd5f43eef99ffda473e558dddf",
+      "width": 512,
+      "height": 512,
+      "bytes": 13192
+    },
+    {
+      "asset": "public/pos-assets/menu-illustrations/toast.webp",
+      "sourceFile": "exec-3c177614-f6a0-4eea-b3e0-e0099597f337.png",
+      "sourceSha256": "26c8b01acf49411aac6605d0b224dd0c5e279eaec4aa1fe1cd00e083e42f490d",
+      "sha256": "6a46d90e74feb86204eb8608a78d4f8a2b9d0f170229045909c25017438caa7b",
+      "width": 512,
+      "height": 512,
+      "bytes": 29268
+    },
+    {
+      "asset": "public/pos-assets/menu-illustrations/kismis-aflatoon.webp",
+      "sourceFile": "exec-6beab47e-c6e2-4683-b9b1-25301d62408e.png",
+      "sourceSha256": "866a52a8d7147e6c09cfd99da287b6bd2cb5bb6c10ba39ee7ba3103740320fa0",
+      "sha256": "0144a50ff0fc31060b35556942ab262b83215acee2fb896504f296f0abe11ef1",
+      "width": 512,
+      "height": 512,
+      "bytes": 32508
+    },
+    {
+      "asset": "public/pos-assets/menu-illustrations/bakery-placeholder.webp",
+      "sourceFile": "exec-18dd0b1b-35a2-41f8-be9d-ac4d3f44ce9b.png",
+      "sourceSha256": "c4d1835f264b4c4724a19b196e1c78b92663f1e3c6f0adb567fb06edc6c0ac83",
+      "sha256": "f587e047dcba121b3869c1a01285f0c06325e15bceffab22c16f2619feffef95",
+      "width": 512,
+      "height": 512,
+      "bytes": 35798
+    },
+    {
+      "asset": "public/pos-assets/menu-illustrations/meal-placeholder.webp",
+      "sourceFile": "exec-d1c51b1e-ddb7-4a3a-a185-9f946e72f99b.png",
+      "sourceSha256": "ec9140b70c4b8429642cb3e115d39ba2b6f7a5eaaa0e4851b36c20a52a929f63",
+      "sha256": "562258d8f2840c47dc85122cecf750a7d5114d3cf8838b0b6fc1108ba5171126",
+      "width": 512,
+      "height": 512,
+      "bytes": 20156
+    }
+  ]
+}

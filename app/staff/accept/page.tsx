@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { staffAccountSetupAvailable } from '@/lib/pos/server/staff-mail'
 import StaffInvitation from '@/components/pos/staff/StaffInvitation'
 
 export const metadata: Metadata = {
@@ -8,5 +9,5 @@ export const metadata: Metadata = {
 }
 export const dynamic = 'force-dynamic'
 export default function StaffAcceptPage() {
-  return <StaffInvitation />
+  return <StaffInvitation accountSetup={staffAccountSetupAvailable()} />
 }

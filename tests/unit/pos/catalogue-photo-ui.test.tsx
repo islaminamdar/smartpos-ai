@@ -139,9 +139,7 @@ describe('menu photo selection and public upload', () => {
     )
     expect(changed).toHaveBeenCalledExactlyOnceWith(uploadedImage)
     expect(pending).toHaveBeenLastCalledWith(false)
-    await waitFor(() =>
-      expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:local-preview')
-    )
+    await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:local-preview'))
   })
 
   it('rejects unsupported, empty and oversized files without sending data', () => {
@@ -391,5 +389,34 @@ describe('catalogue photo assignment and recovery', () => {
     await act(async () => waiting.resolve(response(uploaded)))
     expect(screen.queryByText(/Photo uploaded/)).not.toBeInTheDocument()
     expect(screen.getByText('Add a clear photo of this item.')).toBeInTheDocument()
+  })
+})
+
+describe('temporary illustration in the photo editor', () => {
+  it('labels a fallback and immediately gives an uploaded real photo precedence', () => {
+    const props = {
+      productId: 'dc0f1421-33f2-55a5-bf17-eee5d3236d7c',
+      branchId: '79d4b844-1fd4-4cdf-a32f-db9329d75f3a',
+      deviceId: device,
+      itemName: 'SAMOSA PAV',
+      savedImageUrl: null,
+      imageUrl: null as string | null,
+      disabled: false,
+      onChange: vi.fn(),
+      onBusyChange: vi.fn(),
+      onFilePending: vi.fn(),
+    }
+    const { rerender } = render(<MenuPhotoEditor {...props} />)
+    expect(screen.getByAltText(/Temporary illustration: Samosa/)).toHaveAttribute(
+      'src',
+      '/pos-assets/menu-illustrations/samosa-pav.webp'
+    )
+    expect(screen.getByText('Temporary illustration')).toBeVisible()
+    expect(screen.getByText(/not a photograph of your serving/)).toBeVisible()
+    expect(props.onChange).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Remove photo' })).toBeNull()
+    rerender(<MenuPhotoEditor {...props} imageUrl={uploadedImage} />)
+    expect(screen.getByAltText('Menu photo for SAMOSA PAV')).toHaveAttribute('src', uploadedImage)
+    expect(screen.queryByText('Temporary illustration')).toBeNull()
   })
 })

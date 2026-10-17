@@ -5,7 +5,8 @@ import { readPendingRequest } from '@/lib/pos/online-journal'
 import { staffAcceptResultSchema } from '@/lib/pos/server/staff'
 import styles from './staff.module.css'
 import StaffAccessHelp from './StaffAccessHelp'
-export default function StaffInvitation() {
+import StaffAccountSetup from './StaffAccountSetup'
+export default function StaffInvitation({ accountSetup = false }: { accountSetup?: boolean }) {
   const [token, setToken] = useState(''),
     [ready, setReady] = useState(false),
     [busy, setBusy] = useState(false),
@@ -169,13 +170,28 @@ export default function StaffInvitation() {
               </button>
             </fieldset>
           </form>
-          <h2>Need a new account?</h2>
-          <p>
-            Email verification and password recovery are not enabled yet. Ask your manager or
-            administrator to arrange account setup. An invitation link alone cannot activate an
-            account.
-          </p>
-          <StaffAccessHelp />
+          {accountSetup ? (
+            <StaffAccountSetup
+              token={token}
+              ready={ready && !busy}
+              onBusyChange={setBusy}
+              onAccepted={() => {
+                setAccepted(true)
+                setToken('')
+                incomingToken.current = ''
+              }}
+            />
+          ) : (
+            <>
+              <h2>Need a new account?</h2>
+              <p>
+                Email verification and password recovery are not enabled yet. Ask your manager or
+                administrator to arrange account setup. An invitation link alone cannot activate an
+                account.
+              </p>
+            </>
+          )}
+          <StaffAccessHelp accountSetup={accountSetup} />
           <a href="/counter">Back to counter</a>
         </>
       )}

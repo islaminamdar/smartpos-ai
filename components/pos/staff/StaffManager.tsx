@@ -362,10 +362,11 @@ function Manager({
         </button>
       </div>
       <p className={styles.help}>
-        Invitation links work for existing accounts with verified email addresses. New account
-        verification and email recovery are not configured yet. No email is sent by this screen.
+        {data?.capabilities.accountSetup
+          ? 'Share the invitation privately. New cashiers can verify their own email and choose a password; existing accounts sign in. No email is sent by this screen.'
+          : 'Invitation links work for existing accounts with verified email addresses. New account verification and email recovery are not configured yet. No email is sent by this screen.'}
       </p>
-      <StaffAccessHelp />
+      <StaffAccessHelp accountSetup={data?.capabilities.accountSetup} />
       {data && !data.capabilities.inviteLinks && (
         <p className={styles.pending}>
           Invitation links are not enabled yet. Existing staff access can still be reviewed.

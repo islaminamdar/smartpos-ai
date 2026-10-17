@@ -61,7 +61,13 @@ export const staffListSchema = z
       .max(500),
     invitations: z.array(staffInvitationSchema).max(200),
     invitationHistoryTruncated: z.boolean(),
-    capabilities: z.object({ inviteLinks: z.boolean(), emailDelivery: z.literal(false) }).strict(),
+    capabilities: z
+      .object({
+        inviteLinks: z.boolean(),
+        emailDelivery: z.boolean(),
+        accountSetup: z.boolean().default(false),
+      })
+      .strict(),
   })
   .strict()
 export const staffUpdateSchema = z

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import Link from 'next/link'
 import { formatFils, parseMoney } from '@/lib/pos/money'
+import { temporaryMenuIllustration } from '@/lib/pos/menu-illustrations'
 import { catalogueLineTotals } from '@/lib/pos/server/contracts'
 import {
   liveBootstrapSchema,
@@ -1800,25 +1801,38 @@ export default function LiveCounter({
                     />
                   </div>
                   <div className="lc-products">
-                    {visibleProducts.map((product) => (
-                      <button
-                        key={product.id}
-                        className="lc-product"
-                        disabled={basketLocked || product.unitPriceFils <= 0}
-                        onClick={() => add(product)}
-                      >
-                        {product.imageUrl?.startsWith('/pos-assets/') ? (
-                          <img src={product.imageUrl} alt="" loading="lazy" />
-                        ) : (
-                          <span className="lc-photo-empty">Photo to add</span>
-                        )}
-                        <span>{product.name}</span>
-                        <strong>
-                          {currency(product.unitPriceFils)}
-                          {product.unit === 'kg' ? ' / kg' : ''}
-                        </strong>
-                      </button>
-                    ))}
+                    {visibleProducts.map((product) => {
+                      const illustration = temporaryMenuIllustration(product)
+                      return (
+                        <button
+                          key={product.id}
+                          className="lc-product"
+                          disabled={basketLocked || product.unitPriceFils <= 0}
+                          onClick={() => add(product)}
+                        >
+                          {product.imageUrl?.startsWith('/pos-assets/') ? (
+                            <img src={product.imageUrl} alt="" loading="lazy" />
+                          ) : illustration ? (
+                            <>
+                              <img
+                                src={illustration.src}
+                                alt={illustration.alt}
+                                loading="lazy"
+                                className="lc-illustration"
+                              />
+                              <small className="lc-illustration-label">{illustration.label}</small>
+                            </>
+                          ) : (
+                            <span className="lc-photo-empty">Photo to add</span>
+                          )}
+                          <span>{product.name}</span>
+                          <strong>
+                            {currency(product.unitPriceFils)}
+                            {product.unit === 'kg' ? ' / kg' : ''}
+                          </strong>
+                        </button>
+                      )
+                    })}
                   </div>
                   {!visibleProducts.length && <p>No available items match your search.</p>}
                 </section>

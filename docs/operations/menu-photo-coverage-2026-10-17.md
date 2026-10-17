@@ -4,16 +4,16 @@ The Bur Dubai branch has 133 catalogue entries. Read-only production inspection 
 
 ## Missing photographs
 
-| Archived item ID | Item | Category | Selling status |
-| --- | --- | --- | --- |
-| I631882169A | SAMOSA PAV | Chaat Special | Available |
-| I329384297A | VADA PAV | Chaat Special | Available |
-| I070883924A | Matka lassi | Beverages Hot/cold | Available |
-| I206529090A | TOAST | Sweets & Bakery | Unpriced; unavailable |
-| I353644836A | Kismis Aflatoon | Sweets & Bakery | Unpriced; unavailable |
-| I545759684A | Matka Lassi | Sweets & Bakery | Available |
-| I388674014A | Maska butter | Sweets & Bakery | Available |
-| I709334254A | Meal | Meal for 2 | Available |
+| Archived item ID | Item            | Category           | Selling status        |
+| ---------------- | --------------- | ------------------ | --------------------- |
+| I631882169A      | SAMOSA PAV      | Chaat Special      | Available             |
+| I329384297A      | VADA PAV        | Chaat Special      | Available             |
+| I070883924A      | Matka lassi     | Beverages Hot/cold | Available             |
+| I206529090A      | TOAST           | Sweets & Bakery    | Unpriced; unavailable |
+| I353644836A      | Kismis Aflatoon | Sweets & Bakery    | Unpriced; unavailable |
+| I545759684A      | Matka Lassi     | Sweets & Bakery    | Available             |
+| I388674014A      | Maska butter    | Sweets & Bakery    | Available             |
+| I709334254A      | Meal            | Meal for 2         | Available             |
 
 The two Matka Lassi records are distinct catalogue entries. Do not merge them or change their prices when adding photographs. Eight entries represent seven dish names, but any shared photograph must match both actual servings.
 
@@ -34,3 +34,7 @@ Separate samosa-pav and vada-pav PNG files have no established provenance. Exist
 Obtain photographs of the actual seven dishes, confirm Maska butter's identity and the Meal's contents/portion, and attach them to the eight records through the manager's menu-photo controls. Any temporary illustration must be approved and visibly identified as an illustration. A placeholder or illustration does not count as verified restaurant-photo coverage.
 
 This audit changed no catalogue records, prices, product availability, or source assets. Exact production IDs, revisions and per-image verification evidence are retained in the private task record.
+
+## Approved temporary display update — 17 October 2026
+
+The user subsequently approved clearly labelled temporary illustrations. [The illustration record](menu-illustrations-2026-10-17.md) documents seven generated assets and the exact eight product mappings. These are display-only fallbacks; actual photographs always take precedence. The original audit remains valid: eight actual restaurant photographs are still missing, while the temporary images remove blank menu tiles. No prices, availability or archived photo provenance are changed.

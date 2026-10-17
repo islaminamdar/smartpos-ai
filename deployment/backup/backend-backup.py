@@ -107,6 +107,12 @@ def create_backup():
     write_sync(directory / 'manifest.json', (json.dumps({'createdAt': stamp, 'sha256': hashes, 'encryption': encryption, 'retention': 'No automatic deletion; private daily archives retained.', 'scopeVersion': 3}, indent=2) + '\n').encode())
     if not all(digest(directory / name) == expected for name, expected in hashes.items()):
         raise RuntimeError('Archive checksum verification failed')
+    # Persist the archive's child entries before making the durable root pointer refer to it.
+    archive_fd = os.open(directory, os.O_DIRECTORY)
+    try:
+        os.fsync(archive_fd)
+    finally:
+        os.close(archive_fd)
     pending = BASE / ('daily-current.' + str(os.getpid()) + '.tmp')
     write_sync(pending, (str(directory) + '\n').encode())
     os.replace(pending, BASE / 'daily-current')

@@ -380,6 +380,7 @@ function ScopedCatalogueManager({
               <MenuPhotoEditor
                 key={selected ? `${selected.id}:${selected.revision}` : 'new'}
                 branchId={branchId}
+                productId={selected?.id}
                 deviceId={deviceId}
                 itemName={selected?.name ?? 'new item'}
                 savedImageUrl={selected?.imageUrl ?? null}
