@@ -52,6 +52,7 @@ public final class CounterActivity extends ComponentActivity {
     private boolean callbackRegistered;
     private boolean networkWasUnavailable;
     private PrintJob printJob;
+    private CounterUpdater updater;
 
     private final ConnectivityManager.NetworkCallback networkCallback = new ConnectivityManager.NetworkCallback() {
         @Override public void onAvailable(Network network) { updateConnectionOnUi(); }
@@ -97,6 +98,18 @@ public final class CounterActivity extends ComponentActivity {
         print.setOnClickListener(v -> printReceipt());
         toolbar.addView(print);
         root.addView(toolbar);
+
+        LinearLayout updateBar = new LinearLayout(this);
+        updateBar.setGravity(Gravity.CENTER_VERTICAL);
+        updateBar.setPadding(dp(12), 0, dp(8), 0);
+        TextView updateStatus = new TextView(this);
+        updateStatus.setTextSize(13);
+        updateStatus.setTextColor(Color.rgb(19, 54, 65));
+        updateBar.addView(updateStatus, new LinearLayout.LayoutParams(0, -2, 1));
+        Button updateAction = button("Check updates");
+        updateBar.addView(updateAction);
+        root.addView(updateBar);
+        updater = new CounterUpdater(this, updateStatus, updateAction, this::checkUpdateSafety);
 
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         root.addView(progress, new LinearLayout.LayoutParams(-1, dp(3)));
@@ -314,12 +327,41 @@ public final class CounterActivity extends ComponentActivity {
                 .setNegativeButton("Stay", null).setPositiveButton("Leave", (dialog, which) -> finish()).show();
     }
 
-    @Override public void onResume() { super.onResume(); updateConnection(); }
+    private void checkUpdateSafety(Runnable whenReady) {
+        if (printJob != null && !(printJob.isCompleted() || printJob.isCancelled() || printJob.isFailed())) {
+            Toast.makeText(this, "Finish or cancel printing before updating.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (!pageReady || web == null || !CounterOrigin.allowed(web.getUrl())
+                || !"/counter".equals(android.net.Uri.parse(web.getUrl()).getPath())) {
+            Toast.makeText(this, "Open the counter and finish any pending bill before updating.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        WebView checkedWeb = web;
+        String checkedUrl = web.getUrl();
+        // Read-only first-party readiness signal. No native interface is exposed to JavaScript.
+        web.evaluateJavascript("document.querySelectorAll('[data-counter-update-ready]').length === 1 && document.querySelector('[data-counter-update-ready]').getAttribute('data-counter-update-ready') === 'true'", result -> {
+            if ("true".equals(result) && web == checkedWeb && pageReady && checkedUrl.equals(web.getUrl())
+                    && (printJob == null || printJob.isCompleted() || printJob.isCancelled() || printJob.isFailed())) {
+                whenReady.run();
+            } else {
+                Toast.makeText(this, "Finish or recover any bill, clear the basket, close the shift, and return to Sell before updating.", Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    @Override public void onResume() {
+        super.onResume();
+        updateConnection();
+        if (updater != null) updater.resume();
+    }
     @Override public void onPause() {
+        if (updater != null) updater.pause();
         CookieManager.getInstance().flush();
         super.onPause();
     }
     @Override public void onDestroy() {
+        if (updater != null) updater.destroy();
         if (callbackRegistered && connectivity != null) connectivity.unregisterNetworkCallback(networkCallback);
         if (web != null) { page.removeView(web); web.destroy(); web = null; }
         super.onDestroy();

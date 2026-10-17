@@ -132,7 +132,9 @@ it('allows manager operations without registering a counter and returns to expli
   await screen.findByRole('heading', { name: 'Set up this counter' })
   fireEvent.click(screen.getByRole('button', { name: 'Operations' }))
   await screen.findByRole('region', { name: 'Operations integration' })
-  expect(screen.getByText(/You can review branch activity without registering this browser/)).toBeVisible()
+  expect(
+    screen.getByText(/You can review branch activity without registering this browser/)
+  ).toBeVisible()
   expect(screen.getByRole('button', { name: 'Reports shortcut' })).toBeDisabled()
   expect(fetchMock.mock.calls.some(([url]) => url === '/api/pos/devices')).toBe(false)
   fireEvent.click(screen.getByRole('button', { name: 'Set up counter' }))
@@ -170,6 +172,77 @@ it('does not offer operations to cashier-only accounts', async () => {
   await screen.findByRole('button', { name: 'Sell' })
   expect(screen.queryByRole('button', { name: 'Operations' })).toBeNull()
 })
+
+it('allows Android update handoff only on an idle closed-shift Sell screen', async () => {
+  boot.shifts = []
+  const { container } = render(<LiveCounter />)
+  const ready = () =>
+    container
+      .querySelector('[data-counter-update-ready]')
+      ?.getAttribute('data-counter-update-ready')
+  expect(ready()).toBe('false')
+  await waitFor(() => expect(ready()).toBe('true'))
+  fireEvent.click(screen.getByRole('button', { name: 'Operations' }))
+  expect(ready()).toBe('false')
+  fireEvent.click(screen.getByRole('button', { name: 'Sell' }))
+  await waitFor(() => expect(ready()).toBe('true'))
+  fireEvent.click(screen.getByRole('button', { name: /Test tea/ }))
+  expect(ready()).toBe('false')
+})
+
+it('blocks Android update handoff during an open counter shift', async () => {
+  const { container } = render(<LiveCounter />)
+  await screen.findByRole('button', { name: 'Sell' })
+  expect(container.querySelector('[data-counter-update-ready]')).toHaveAttribute(
+    'data-counter-update-ready',
+    'false'
+  )
+})
+
+it('allows a fresh login screen update but blocks the login request in flight', async () => {
+  let finishLogin: ((value: Response) => void) | undefined
+  fetchMock.mockImplementation((url: string) => {
+    if (url === '/api/pos/bootstrap') return Promise.resolve(new Response('{}', { status: 401 }))
+    if (url === '/api/pos/session')
+      return new Promise<Response>((resolve) => {
+        finishLogin = resolve
+      })
+    throw new Error(`Unexpected request ${url}`)
+  })
+  const { container } = render(<LiveCounter />)
+  await screen.findByRole('heading', { name: 'Your counter starts here.' })
+  expect(container.querySelector('[data-counter-update-ready]')).toHaveAttribute(
+    'data-counter-update-ready',
+    'true'
+  )
+  fireEvent.submit(screen.getByRole('button', { name: 'Sign in' }).closest('form')!)
+  expect(container.querySelector('[data-counter-update-ready]')).toHaveAttribute(
+    'data-counter-update-ready',
+    'false'
+  )
+  finishLogin!(new Response('{}', { status: 401 }))
+  await screen.findByText(/Sign in again/)
+})
+
+it.each([200, 401])(
+  'distinguishes completed signout from an expired loaded session for updates (%s)',
+  async (status) => {
+    boot.shifts = []
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/pos/bootstrap') return new Response(JSON.stringify(boot))
+      if (url === '/api/pos/session') return new Response('{}', { status })
+      throw new Error(`Unexpected request ${url}`)
+    })
+    const { container } = render(<LiveCounter />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sign out' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+    await screen.findByRole('heading', { name: 'Your counter starts here.' })
+    expect(container.querySelector('[data-counter-update-ready]')).toHaveAttribute(
+      'data-counter-update-ready',
+      status === 200 ? 'true' : 'false'
+    )
+  }
+)
 
 // These feature tests isolate empty station journals; station custody has its own race tests.
 vi.mock('@/lib/pos/kitchen-station-journal', () => ({

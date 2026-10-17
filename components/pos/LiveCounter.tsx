@@ -69,6 +69,7 @@ import { readPendingKitchenRequests, kitchenJournalEvent } from '@/lib/pos/kitch
 import { tabKitchenTabSchema } from '@/lib/pos/server/tab-kitchen'
 import type { OfferSelection, EligibleOfferQuote } from '@/lib/pos/server/offers'
 import { invoiceMatchesSale, settlementMatchesSale } from '@/lib/pos/server/sale-ack'
+import { counterUpdateReady } from '@/lib/pos/counter-update-readiness'
 
 type Product = LiveBootstrap['catalogue'][number]
 type BasketLine = { product: Product; quantityMilli: number }
@@ -159,6 +160,7 @@ export default function LiveCounter({
   const stationInteractionHeld = stationEditorBlocked || stationWorkBlocked
   const stationHeld = stationCustody.held || stationInteractionHeld
   const [needsLogin, setNeedsLogin] = useState(false)
+  const [updateSignedOut, setUpdateSignedOut] = useState(false)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const locked = useRef(false)
@@ -543,6 +545,7 @@ export default function LiveCounter({
       actorScope.current = scope
     }
     setBoot(next)
+    setUpdateSignedOut(false)
     setNeedsLogin(false)
     setPending(journal)
     setBranchId(
@@ -986,15 +989,59 @@ export default function LiveCounter({
       setNeedsLogin(false)
     })
   }
+  const updateReady = counterUpdateReady({
+    loading,
+    online,
+    needsLogin,
+    authenticated: !!boot,
+    hasSessionHistory: actorScope.current !== '',
+    guardedSignedOut: updateSignedOut,
+    busy:
+      busy ||
+      locked.current ||
+      stockBusy ||
+      reviewBusy ||
+      openOrderBusy ||
+      tabKitchenBusy ||
+      stationInteractionHeld,
+    knownPending:
+      !!pending ||
+      reviewPending.length > 0 ||
+      tabKitchenPending ||
+      kitchenPending ||
+      openOrderPending ||
+      stationCustody.configuration ||
+      stationCustody.work,
+    unsavedWork:
+      basket.length > 0 ||
+      !!sourceTab ||
+      !!initialTableId ||
+      openOrderMetadataDirty ||
+      !!replacement ||
+      !!chosenOffer ||
+      !!cashInput ||
+      !!cardInput ||
+      !!buyerName ||
+      !!buyerAddress ||
+      !!buyerTrn,
+    idleCounter: view === 'sell',
+    checksReady:
+      reviewReady &&
+      tabKitchenJournalReady &&
+      kitchenJournalReady &&
+      openOrderJournalReady &&
+      stationCustody.ready,
+    shiftOpen: !!shift || !!otherShift,
+  })
   if (loading)
     return (
-      <main className="lc-app lc-centre">
+      <main className="lc-app lc-centre" data-counter-update-ready="false">
         <p role="status">Opening your counter…</p>
       </main>
     )
   if (needsLogin)
     return (
-      <main className="lc-app lc-centre">
+      <main className="lc-app lc-centre" data-counter-update-ready={String(updateReady)}>
         <form className="lc-login" onSubmit={login}>
           <Link href="/" className="lc-wordmark">
             Internext <strong>POS</strong>
@@ -1031,7 +1078,7 @@ export default function LiveCounter({
     )
   if (!boot)
     return (
-      <main className="lc-app lc-centre">
+      <main className="lc-app lc-centre" data-counter-update-ready="false">
         <section className="lc-login">
           <h1>Counter setup</h1>
           <p role="alert">{error || 'The account service is not ready yet.'}</p>
@@ -1056,7 +1103,11 @@ export default function LiveCounter({
       </main>
     )
   return (
-    <div className="lc-app" data-merchant-theme={branding?.theme}>
+    <div
+      className="lc-app"
+      data-merchant-theme={branding?.theme}
+      data-counter-update-ready={String(updateReady)}
+    >
       <header className="lc-top lc-noprint">
         <Link href="/" className={branding ? 'lc-merchant-identity' : 'lc-wordmark'}>
           <MerchantIdentity branding={branding} />
@@ -1115,6 +1166,7 @@ export default function LiveCounter({
               setInitialTableId(null)
               setOpenOrderMetadataDirty(false)
               setChosenOffer(null)
+              setUpdateSignedOut(true)
               setNeedsLogin(true)
             })
           }
