@@ -1,3 +1,4 @@
+import { resolveMerchantBranding } from '@/lib/pos/server/branding'
 import { NextResponse } from 'next/server'
 import { authenticatedPosClient, PosServerError } from '@/lib/pos/server/client'
 import { posFailure, privateHeaders } from '@/lib/pos/server/http'
@@ -73,6 +74,11 @@ export async function GET() {
           organizationId: b.organization_id,
           name: b.name,
           role: member?.role,
+          branding: resolveMerchantBranding({
+            organizationId: b.organization_id,
+            branchId: b.id,
+            profileId: p?.id ?? null,
+          }),
           canRefund: canManage,
           canManageCash: canManage,
           canSell: Boolean(

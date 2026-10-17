@@ -11,6 +11,12 @@ export default defineConfig({
     globals: true,
   },
   resolve: {
-    alias: { '@': path.resolve(__dirname, '.') },
+    alias: {
+      '@': path.resolve(__dirname, '.'),
+      'server-only': path.resolve(
+        __dirname,
+        'node_modules/next/dist/compiled/server-only/empty.js'
+      ),
+    },
   },
 })

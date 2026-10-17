@@ -252,3 +252,45 @@
 .join p {
   margin: 12px 0;
 }
+
+.accessHelp {
+  margin: 16px 0;
+  border: 1px solid #bccbdc;
+  border-radius: 10px;
+  background: #f5f8fc;
+  color: #142d4e;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.accessHelp summary {
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.accessHelp summary:focus-visible {
+  outline: 3px solid #165dcc;
+  outline-offset: 3px;
+}
+.accessHelp > div {
+  padding: 0 14px 16px;
+}
+.accessHelp h3 {
+  margin: 16px 0 6px;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.accessHelp p {
+  margin: 0 0 10px;
+}
+.accessHelp ol {
+  list-style: decimal;
+  padding-left: 22px;
+  margin: 10px 0 16px;
+}
+.accessHelp li + li {
+  margin-top: 7px;
+}

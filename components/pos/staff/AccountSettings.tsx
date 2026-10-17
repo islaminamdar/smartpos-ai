@@ -2,6 +2,7 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { passwordChangeSchema } from '@/lib/pos/server/staff'
 import styles from './staff.module.css'
+import StaffAccessHelp from './StaffAccessHelp'
 export default function AccountSettings({ disabled }: { disabled: boolean }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
@@ -153,10 +154,7 @@ export default function AccountSettings({ disabled }: { disabled: boolean }) {
           {error}
         </p>
       )}
-      <p className={styles.help}>
-        Forgot your password? Email recovery is not enabled yet. Contact your administrator for
-        setup assistance. Managers cannot see or reset your password here.
-      </p>
+      <StaffAccessHelp />
     </section>
   )
 }

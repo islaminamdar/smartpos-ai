@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { readPendingRequest } from '@/lib/pos/online-journal'
 import { staffAcceptResultSchema } from '@/lib/pos/server/staff'
 import styles from './staff.module.css'
+import StaffAccessHelp from './StaffAccessHelp'
 export default function StaffInvitation() {
   const [token, setToken] = useState(''),
     [ready, setReady] = useState(false),
@@ -174,6 +175,7 @@ export default function StaffInvitation() {
             administrator to arrange account setup. An invitation link alone cannot activate an
             account.
           </p>
+          <StaffAccessHelp />
           <a href="/counter">Back to counter</a>
         </>
       )}

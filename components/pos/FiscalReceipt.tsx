@@ -1,9 +1,21 @@
 'use client'
 
+import { matchingMerchantBranding, type MerchantBranding } from '@/lib/pos/branding'
 import { formatFils } from '@/lib/pos/money'
 import type { FiscalDocument } from '@/lib/pos/server/documents'
 
-export default function FiscalReceipt({ document: bill }: { document: FiscalDocument }) {
+export default function FiscalReceipt({
+  document: bill,
+  branding,
+}: {
+  document: FiscalDocument
+  branding?: MerchantBranding | null
+}) {
+  const receiptBranding = matchingMerchantBranding(branding, {
+    organizationId: bill.merchant.organizationId,
+    branchId: bill.merchant.branchId,
+    profileId: bill.merchant.id,
+  })
   const credit = bill.kind === 'tax_credit_note'
   const itemReturn = bill.schemaVersion === 3
   const offer =
@@ -17,6 +29,16 @@ export default function FiscalReceipt({ document: bill }: { document: FiscalDocu
   return (
     <article className="lc-receipt" aria-label={credit ? 'Tax credit note' : 'Tax invoice'}>
       <header>
+        {receiptBranding && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            className="lc-receipt-logo"
+            src={receiptBranding.logoPath}
+            width={80}
+            height={80}
+            alt={`${receiptBranding.displayName} logo`}
+          />
+        )}
         <h2>{bill.merchant.legalName}</h2>
         <p>
           {bill.merchant.branchName}

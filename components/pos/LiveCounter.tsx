@@ -20,6 +20,8 @@ import {
   type PendingOnlineRequest,
 } from '@/lib/pos/online-journal'
 import FiscalReceipt from './FiscalReceipt'
+import MerchantIdentity from './branding/MerchantIdentity'
+import { matchingMerchantBranding } from '@/lib/pos/branding'
 import PartialReturnPanel from './returns/PartialReturnPanel'
 import KitchenReturnNotices from './KitchenReturnNotices'
 import { returnCreditMatchesCommand } from '@/lib/pos/server/returns'
@@ -35,6 +37,7 @@ import BranchOperations from './operations/BranchOperations'
 import OfferManager from './offers/OfferManager'
 import OfferPicker from './offers/OfferPicker'
 import StaffManager from './staff/StaffManager'
+import StaffAccessHelp from './staff/StaffAccessHelp'
 import AccountSettings from './staff/AccountSettings'
 import PendingAccessRecovery from './staff/PendingAccessRecovery'
 import StockManager from './inventory/StockManager'
@@ -220,6 +223,16 @@ export default function LiveCounter({
   const [selected, setSelected] = useState<FiscalDocument | null>(null)
   const orderRef = useRef<HTMLElement>(null)
   const branch = boot?.branches.find((item) => item.id === branchId)
+  const branding = matchingMerchantBranding(
+    branch?.branding,
+    branch?.profile
+      ? {
+          organizationId: branch.organizationId,
+          branchId: branch.id,
+          profileId: branch.profile.id,
+        }
+      : null
+  )
   const shift = boot?.shifts.find(
     (item) => item.deviceId === boot.device?.id && item.openedBy === boot.userId
   )
@@ -1011,6 +1024,7 @@ export default function LiveCounter({
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
           <Link href="/pos">Open the separate training workspace</Link>
+          <StaffAccessHelp />
         </form>
       </main>
     )
@@ -1041,10 +1055,10 @@ export default function LiveCounter({
       </main>
     )
   return (
-    <div className="lc-app">
+    <div className="lc-app" data-merchant-theme={branding?.theme}>
       <header className="lc-top lc-noprint">
-        <Link href="/" className="lc-wordmark">
-          Internext <strong>POS</strong>
+        <Link href="/" className={branding ? 'lc-merchant-identity' : 'lc-wordmark'}>
+          <MerchantIdentity branding={branding} />
         </Link>
         <div>
           <strong>{branch?.name || 'Your restaurant'}</strong>
@@ -1560,6 +1574,12 @@ export default function LiveCounter({
                 }
                 onBlockedChange={setStationEditorBlocked}
               />
+            )}
+            {view === 'kitchen' && branch && branding && (
+              <div className="lc-kitchen-identity lc-noprint">
+                <MerchantIdentity branding={branding} kitchen />
+                <span>{branch.name}</span>
+              </div>
             )}
             {view === 'kitchen' && branch && kitchenStationsEnabled && (
               <StationWorkBoard
@@ -2141,7 +2161,7 @@ export default function LiveCounter({
                 </div>
                 {selected && (
                   <div className="lc-document-detail">
-                    <FiscalReceipt document={selected} />
+                    <FiscalReceipt document={selected} branding={branding} />
                     <div className="lc-noprint">
                       <button className="lc-primary" onClick={() => window.print()}>
                         Print / save PDF

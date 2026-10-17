@@ -773,3 +773,96 @@
   min-height: 44px;
   align-items: center;
 }
+
+/* Authenticated tenant identity. The shared sign-in screen keeps Internext branding. */
+.lc-app[data-merchant-theme='mithaiwala'] {
+  --blue: #b80066;
+  --navy: #201822;
+  --line: #e7dce3;
+  --muted: #65515e;
+  background: #fff7fb;
+  color: #201822;
+}
+.lc-merchant-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  max-width: 420px;
+  text-decoration: none;
+  color: inherit !important;
+}
+.lc-merchant-identity img,
+.lc-kitchen-identity img {
+  object-fit: contain;
+  flex: 0 0 48px;
+  background: white;
+}
+.lc-merchant-name {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.lc-merchant-name strong {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+.lc-merchant-name small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+.lc-kitchen-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 20px;
+}
+.lc-kitchen-identity > span:last-child {
+  margin-left: auto;
+  font-size: 14px;
+  font-weight: 600;
+}
+.lc-receipt-logo {
+  display: block;
+  object-fit: contain;
+  margin: 0 auto 10px;
+  max-width: 100%;
+}
+@media (max-width: 650px) {
+  .lc-merchant-identity {
+    flex: 1 1 180px;
+    gap: 8px;
+  }
+  .lc-merchant-name strong {
+    font-size: 16px;
+  }
+  .lc-merchant-identity img {
+    width: 42px;
+    height: 42px;
+    flex-basis: 42px;
+  }
+  .lc-kitchen-identity {
+    flex-wrap: wrap;
+  }
+  .lc-kitchen-identity > span:last-child {
+    margin-left: 60px;
+    flex-basis: 100%;
+  }
+}
+@media print {
+  .lc-receipt-logo {
+    width: 18mm;
+    height: 18mm;
+    filter: grayscale(1);
+    margin-bottom: 2mm;
+  }
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-tabs button[aria-current='page'] {
+  background: #fce8f3;
+}

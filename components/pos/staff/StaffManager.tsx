@@ -13,6 +13,7 @@ import {
 } from '@/lib/pos/server/staff'
 import { formatFils } from '@/lib/pos/money'
 import styles from './staff.module.css'
+import StaffAccessHelp from './StaffAccessHelp'
 const pendingSchema = z.discriminatedUnion('endpoint', [
   z.object({ endpoint: z.literal('/api/pos/staff'), body: staffUpdateSchema }),
   z.object({ endpoint: z.literal('/api/pos/staff/invitations'), body: staffInviteCommandSchema }),
@@ -364,6 +365,7 @@ function Manager({
         Invitation links work for existing accounts with verified email addresses. New account
         verification and email recovery are not configured yet. No email is sent by this screen.
       </p>
+      <StaffAccessHelp />
       {data && !data.capabilities.inviteLinks && (
         <p className={styles.pending}>
           Invitation links are not enabled yet. Existing staff access can still be reviewed.

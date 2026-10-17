@@ -1,3 +1,4 @@
+import { merchantBrandingSchema } from '../branding'
 import { z } from 'zod'
 import { syncOrderSchema } from './contracts'
 import { merchantProfileSchema, receiptCustomerSchema } from './documents'
@@ -137,6 +138,7 @@ export const liveBootstrapSchema = z.object({
       canRefund: z.boolean(),
       canManageCash: z.boolean(),
       profile: merchantProfileSchema.nullable(),
+      branding: merchantBrandingSchema.nullable().optional(),
     })
   ),
   catalogue: z.array(
