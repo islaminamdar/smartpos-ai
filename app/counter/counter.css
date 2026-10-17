@@ -252,7 +252,7 @@
 }
 .lc-filters {
   display: grid;
-  grid-template-columns: 1fr 230px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
   margin-bottom: 16px;
 }
@@ -865,4 +865,85 @@
 }
 .lc-app[data-merchant-theme='mithaiwala'] .lc-tabs button[aria-current='page'] {
   background: #fce8f3;
+}
+
+/* Direct choices stay visible so cashiers can select in one tap. */
+.lc-app .lc-tap-choices {
+  border: 0;
+  min-width: 0;
+  padding: 0;
+  margin: 12px 0;
+}
+.lc-tap-choices legend {
+  padding: 0;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.lc-tap-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.lc-app .lc-tap-choice {
+  position: relative;
+  margin: 0;
+  min-width: 0;
+  max-width: 100%;
+  cursor: pointer;
+}
+.lc-app .lc-tap-choice input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.lc-tap-choice span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 10px 14px;
+  border: 1px solid #aebccd;
+  border-radius: 9px;
+  background: white;
+  color: var(--navy);
+  overflow-wrap: anywhere;
+}
+.lc-tap-choice input:checked + span {
+  color: white;
+  background: var(--blue);
+  border-color: var(--blue);
+  box-shadow: inset 0 0 0 1px var(--blue);
+}
+.lc-tap-choice input:focus-visible + span {
+  outline: 3px solid var(--blue);
+  outline-offset: 3px;
+}
+.lc-tap-choice input:disabled + span {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.lc-filters > .lc-tap-choices {
+  margin-top: 0;
+}
+
+.lc-app .lc-tap-hint {
+  margin: -4px 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.lc-tap-choices-scroll .lc-tap-options {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding: 4px 4px 10px;
+  scroll-padding-inline: 4px;
+}
+.lc-app .lc-tap-choices-scroll .lc-tap-choice {
+  flex: 0 0 auto;
+  max-width: min(240px, 85%);
 }

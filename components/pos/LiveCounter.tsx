@@ -20,6 +20,7 @@ import {
   type PendingOnlineRequest,
 } from '@/lib/pos/online-journal'
 import FiscalReceipt from './FiscalReceipt'
+import TapChoices from './TapChoices'
 import MerchantIdentity from './branding/MerchantIdentity'
 import { matchingMerchantBranding } from '@/lib/pos/branding'
 import PartialReturnPanel from './returns/PartialReturnPanel'
@@ -1388,20 +1389,13 @@ export default function LiveCounter({
                   })
                 }}
               >
-                <label>
-                  Branch
-                  <select
-                    value={branchId}
-                    disabled={reviewHeld}
-                    onChange={(event) => setBranchId(event.target.value)}
-                  >
-                    {boot.branches.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <TapChoices
+                  label="Branch"
+                  value={branchId}
+                  disabled={reviewHeld}
+                  onChange={setBranchId}
+                  options={boot.branches.map((item) => ({ value: item.id, label: item.name }))}
+                />
                 <label>
                   Counter name
                   <input
@@ -1745,18 +1739,13 @@ export default function LiveCounter({
                         placeholder="Find a dish or sweet"
                       />
                     </label>
-                    <label>
-                      Category
-                      <select
-                        value={category}
-                        onChange={(event) => setCategory(event.target.value)}
-                      >
-                        <option>All</option>
-                        {categories.map((item) => (
-                          <option key={item}>{item}</option>
-                        ))}
-                      </select>
-                    </label>
+                    <TapChoices
+                      label="Category"
+                      scrollable={categories.length > 6}
+                      value={category}
+                      onChange={setCategory}
+                      options={['All', ...categories].map((item) => ({ value: item, label: item }))}
+                    />
                   </div>
                   <div className="lc-products">
                     {visibleProducts.map((product) => (
@@ -1831,20 +1820,17 @@ export default function LiveCounter({
                     </p>
                   )}
                   <p>{shift ? 'Shift open' : 'Open your shift before checkout'}</p>
-                  <label>
-                    Order type
-                    <select
-                      value={serviceType}
-                      disabled={basketLocked}
-                      onChange={(event) =>
-                        setServiceType(event.target.value as LiveOrder['serviceType'])
-                      }
-                    >
-                      <option value="takeaway">Takeaway</option>
-                      <option value="dine_in">Dine-in</option>
-                      <option value="delivery">Delivery</option>
-                    </select>
-                  </label>
+                  <TapChoices<LiveOrder['serviceType']>
+                    label="Order type"
+                    value={serviceType}
+                    disabled={basketLocked}
+                    onChange={setServiceType}
+                    options={[
+                      { value: 'takeaway', label: 'Takeaway' },
+                      { value: 'dine_in', label: 'Dine-in' },
+                      { value: 'delivery', label: 'Delivery' },
+                    ]}
+                  />
                   {!basket.length && <p className="lc-empty">Choose an item to start an order.</p>}
                   {basket.map((line) => (
                     <div className="lc-basket-line" key={line.product.id}>
@@ -2003,20 +1989,17 @@ export default function LiveCounter({
                       <dd>{currency(total)}</dd>
                     </div>
                   </dl>
-                  <label>
-                    Payment
-                    <select
-                      value={paymentMethod}
-                      disabled={basketLocked}
-                      onChange={(event) =>
-                        setPaymentMethod(event.target.value as typeof paymentMethod)
-                      }
-                    >
-                      <option value="cash">Cash</option>
-                      <option value="card">Card recorded</option>
-                      <option value="split">Cash + card</option>
-                    </select>
-                  </label>
+                  <TapChoices<typeof paymentMethod>
+                    label="Payment"
+                    value={paymentMethod}
+                    disabled={basketLocked}
+                    onChange={setPaymentMethod}
+                    options={[
+                      { value: 'cash', label: 'Cash' },
+                      { value: 'card', label: 'Card recorded' },
+                      { value: 'split', label: 'Cash + card' },
+                    ]}
+                  />
                   {paymentMethod === 'split' && (
                     <label>
                       Card amount (AED)
@@ -2295,13 +2278,16 @@ export default function LiveCounter({
                         }}
                       >
                         <h2>Cash movement</h2>
-                        <label>
-                          Direction
-                          <select name="direction">
-                            <option value="in">Cash in</option>
-                            <option value="out">Cash out</option>
-                          </select>
-                        </label>
+                        <TapChoices
+                          label="Direction"
+                          name="direction"
+                          defaultValue="in"
+                          disabled={!mayWrite}
+                          options={[
+                            { value: 'in', label: 'Cash in' },
+                            { value: 'out', label: 'Cash out' },
+                          ]}
+                        />
                         <label>
                           Amount (AED)
                           <input name="amount" inputMode="decimal" required />

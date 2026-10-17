@@ -375,6 +375,49 @@ it('occupied table assigned to another order cannot be selected or saved', async
   fireEvent.change(screen.getByLabelText('Order label'), { target: { value: 'New table order' } })
   expect(screen.getByRole('button', { name: 'Save unpaid order' })).toBeDisabled()
 })
+it('table tiles select a free table without submitting and preserve the selected table in the save', async () => {
+  const sent: OpenOrderCommand[] = []
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url, options) => {
+      if (options?.method === 'POST') {
+        const command = JSON.parse(options.body)
+        sent.push(command)
+        return response(ack(command))
+      }
+      return response({
+        ...list,
+        tables: [...list.tables, { ...freeTable, id: actor, name: 'Closed table', active: false }],
+      })
+    })
+  )
+  render(<OpenOrderSave {...saveProps} serviceType="dine_in" />)
+  await newForm()
+  const group = screen.getByRole('group', { name: 'Table' })
+  expect(within(group).getByRole('radio', { name: 'No table assigned' })).toBeChecked()
+  expect(within(group).queryByRole('radio', { name: '4 — Main hall' })).not.toBeInTheDocument()
+  expect(within(group).queryByRole('radio', { name: /Closed table/ })).not.toBeInTheDocument()
+  fireEvent.click(within(group).getByRole('radio', { name: '5 — Main hall' }))
+  expect(within(group).getByRole('radio', { name: '5 — Main hall' })).toBeChecked()
+  expect(sent).toHaveLength(0)
+  fireEvent.click(screen.getByRole('button', { name: 'Save unpaid order' }))
+  await waitFor(() => expect(sent).toHaveLength(1))
+  expect(sent[0]).toMatchObject({ type: 'tab.save', serviceType: 'dine_in', tableId: freeTable.id })
+})
+it('table tiles preserve an order own table and disable every choice when availability is stale', async () => {
+  const fetcher = vi.fn(async () => response(list))
+  vi.stubGlobal('fetch', fetcher)
+  render(<OpenOrderSave {...saveProps} sourceTab={tab} serviceType="dine_in" />)
+  const ownTable = await screen.findByRole('radio', { name: '4 — Main hall' })
+  expect(ownTable).toBeChecked()
+  expect(ownTable).toBeEnabled()
+  fireEvent(window, new Event('offline'))
+  for (const radio of within(screen.getByRole('group', { name: 'Table' })).getAllByRole('radio')) {
+    expect(radio).toBeDisabled()
+  }
+  expect(screen.getByRole('button', { name: 'Save order changes' })).toBeDisabled()
+  expect(ownTable).toBeChecked()
+})
 it('board opens latest server detail and explains explicit kitchen dispatch', async () => {
   vi.stubGlobal(
     'fetch',

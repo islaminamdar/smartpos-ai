@@ -8,6 +8,7 @@ import {
 import { useOpenOrderCommands, OpenOrderPendingPanel, type OpenOrderScope } from './transport'
 import { useOpenOrderList } from './useOpenOrderList'
 import styles from './open-orders.module.css'
+import TapChoices from '@/components/pos/TapChoices'
 type SaveCommand = Extract<OpenOrderCommand, { type: 'tab.save' }>
 type Props = OpenOrderScope & {
   deviceId: string
@@ -194,31 +195,25 @@ function Save(props: Props) {
             />
           </label>
           {props.serviceType === 'dine_in' && (
-            <label>
-              Table
-              <select
-                value={tableId}
-                disabled={props.disabled || state.busy || !!state.pending || !list.fresh}
-                onChange={(event) => setTableId(event.target.value)}
-              >
-                <option value="">No table assigned</option>
-                {!permittedTable && tableId && (
-                  <option value={tableId}>Assigned table unavailable — choose another</option>
-                )}
-                {list.data?.tables
+            <TapChoices
+              label="Table"
+              value={tableId}
+              disabled={props.disabled || state.busy || !!state.pending || !list.fresh}
+              onChange={setTableId}
+              options={[
+                { value: '', label: 'No table assigned' },
+                ...(list.data?.tables
                   .filter(
                     (table) =>
                       table.active &&
                       (!table.occupiedTabId || table.occupiedTabId === props.sourceTab?.id)
                   )
-                  .map((table) => (
-                    <option key={table.id} value={table.id}>
-                      {table.name}
-                      {table.area ? ` — ${table.area}` : ''}
-                    </option>
-                  ))}
-              </select>
-            </label>
+                  .map((table) => ({
+                    value: table.id,
+                    label: `${table.name}${table.area ? ` — ${table.area}` : ''}`,
+                  })) ?? []),
+              ]}
+            />
           )}
           {!permittedTable && (
             <p className={styles.error}>

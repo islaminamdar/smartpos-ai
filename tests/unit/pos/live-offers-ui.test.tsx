@@ -257,8 +257,7 @@ it.each(['basket', 'service', 'coupon'] as const)(
     await selectOffer()
     if (change === 'basket')
       fireEvent.change(screen.getByLabelText('Quantity'), { target: { value: '2' } })
-    if (change === 'service')
-      fireEvent.change(screen.getByLabelText('Order type'), { target: { value: 'delivery' } })
+    if (change === 'service') fireEvent.click(screen.getByRole('radio', { name: 'Delivery' }))
     if (change === 'coupon')
       fireEvent.change(screen.getByLabelText('Coupon code (optional)'), {
         target: { value: 'OTHER' },
@@ -395,3 +394,25 @@ vi.mock('@/lib/pos/kitchen-station-work-journal', () => ({
   stationWorkJournalEvent: 'station-work-test',
   readPendingStationWorkRequests: async () => [],
 }))
+
+it('exposes one-tap categories and payment modes while preserving checkout fields', async () => {
+  vi.stubGlobal(
+    'fetch',
+    api(() => response({}, 503))
+  )
+  render(<LiveCounter />)
+  const product = await screen.findByRole('button', { name: /Test tea/ })
+  await waitFor(() => expect(product).toBeEnabled())
+  fireEvent.click(screen.getByRole('radio', { name: 'Drinks' }))
+  expect(product).toBeVisible()
+  fireEvent.click(product)
+  fireEvent.click(screen.getByRole('radio', { name: 'Card recorded' }))
+  expect(screen.queryByLabelText('Cash received (AED)')).toBeNull()
+  expect(screen.getByText(/Complete the card payment on your terminal first/)).toBeVisible()
+  fireEvent.click(screen.getByRole('radio', { name: 'Cash + card' }))
+  expect(screen.getByLabelText('Card amount (AED)')).toBeVisible()
+  expect(screen.getByLabelText('Cash received (AED)')).toBeVisible()
+  fireEvent.click(screen.getByRole('radio', { name: 'Cash' }))
+  expect(screen.queryByLabelText('Card amount (AED)')).toBeNull()
+  expect(screen.getByRole('button', { name: 'Save sale · AED 5.00' })).toBeEnabled()
+})
