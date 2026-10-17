@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+from backup_crypto import seal_archive
 
 BASE = Path('/var/lib/internext-pos-backups')
 CURRENT = Path('/opt/internext-pos/current')
@@ -101,8 +102,9 @@ def create_backup():
                         'Root config includes credentials and must remain private; never restore over a running production database.'],
     }
     write_sync(directory / 'restore-inventory.json', (json.dumps(inventory, indent=2) + '\n').encode())
+    encryption = seal_archive(directory)
     hashes = {p.name: digest(p) for p in directory.iterdir() if p.is_file()}
-    write_sync(directory / 'manifest.json', (json.dumps({'createdAt': stamp, 'sha256': hashes, 'retention': 'No automatic deletion; private daily archives retained.', 'scopeVersion': 2}, indent=2) + '\n').encode())
+    write_sync(directory / 'manifest.json', (json.dumps({'createdAt': stamp, 'sha256': hashes, 'encryption': encryption, 'retention': 'No automatic deletion; private daily archives retained.', 'scopeVersion': 3}, indent=2) + '\n').encode())
     if not all(digest(directory / name) == expected for name, expected in hashes.items()):
         raise RuntimeError('Archive checksum verification failed')
     pending = BASE / ('daily-current.' + str(os.getpid()) + '.tmp')
