@@ -1,4 +1,6 @@
 'use client'
+
+import { browserUuid } from '@/lib/pos/browser-uuid'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   tabKitchenCommandSchema,
@@ -352,7 +354,7 @@ function Dispatch(props: Props) {
                 if (!data) return
                 void execute(
                   tabKitchenCommandSchema.parse({
-                    id: crypto.randomUUID(),
+                    id: browserUuid(),
                     branchId: props.branchId,
                     deviceId: props.deviceId,
                     type: 'dispatch',

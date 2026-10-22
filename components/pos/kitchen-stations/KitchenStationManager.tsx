@@ -1,4 +1,6 @@
 'use client'
+
+import { browserUuid } from '@/lib/pos/browser-uuid'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { z } from 'zod'
 import { catalogueProductSchema, type CatalogueProduct } from '@/lib/pos/server/catalogue'
@@ -332,12 +334,12 @@ function Manager({
     event.preventDefault()
     if (paused || !snapshot || (productId && stationId !== originalRoute)) return
     const parsed = stationCommandSchema.safeParse({
-      id: crypto.randomUUID(),
+      id: browserUuid(),
       branchId,
       deviceId,
       expectedRevision: snapshot.revision,
       type: 'station.save',
-      station: { id: editing ?? crypto.randomUUID(), name, active: original?.active ?? true },
+      station: { id: editing ?? browserUuid(), name, active: original?.active ?? true },
     })
     if (!parsed.success) {
       setError(
@@ -479,7 +481,7 @@ function Manager({
                         }
                         onClick={() =>
                           void execute({
-                            id: crypto.randomUUID(),
+                            id: browserUuid(),
                             branchId,
                             deviceId,
                             expectedRevision: snapshot.revision,
@@ -593,7 +595,7 @@ function Manager({
                 onClick={() =>
                   snapshot &&
                   void execute({
-                    id: crypto.randomUUID(),
+                    id: browserUuid(),
                     branchId,
                     deviceId,
                     expectedRevision: snapshot.revision,

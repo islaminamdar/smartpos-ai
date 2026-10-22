@@ -1,5 +1,7 @@
 'use client'
 
+import { browserUuid } from '@/lib/pos/browser-uuid'
+
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   inventoryCommandSchema,
@@ -444,14 +446,14 @@ function Manager({ actorId, branchId, branchName, deviceId, disabled, onBusyChan
       const data = new FormData(event.currentTarget)
       const unit = item && !adding ? item.unit : (String(data.get('unit')) as StockItem['unit'])
       const command = inventoryCommandSchema.parse({
-        id: crypto.randomUUID(),
+        id: browserUuid(),
         type: 'item.save',
         branchId,
         deviceId,
         expectedRevision: adding ? 0 : item!.revision,
         reason: String(data.get('reason') || '').trim(),
         item: {
-          id: adding ? crypto.randomUUID() : item!.id,
+          id: adding ? browserUuid() : item!.id,
           name: String(data.get('name') || '').trim(),
           sku:
             String(data.get('sku') || '')
@@ -475,7 +477,7 @@ function Manager({ actorId, branchId, branchName, deviceId, disabled, onBusyChan
     try {
       const data = new FormData(event.currentTarget)
       const command = inventoryCommandSchema.parse({
-        id: crypto.randomUUID(),
+        id: browserUuid(),
         type: movementType,
         branchId,
         deviceId,

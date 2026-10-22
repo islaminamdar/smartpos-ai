@@ -1,14 +1,15 @@
+import { browserClone } from './browser-clone';
+import { browserUuid } from './browser-uuid';
 import { assertMoney, calculateTotals, validatePayment } from './money';
 import type { CashMovement, CashMovementInput, HeldOrder, HoldInput, OutboxEvent, PosScope, PosSnapshot, Refund, RefundInput, Sale, SaleInput, Shift } from './types';
 
 const DATABASE_NAME = 'internext-pos-local-v1';
 const OBJECT_STORE = 'branch_device_state';
 export function createId(): string {
-  if (typeof crypto === 'undefined' || !crypto.randomUUID) throw new Error('Secure local storage requires HTTPS or localhost.');
-  return crypto.randomUUID();
+  return browserUuid();
 }
 export function scopeKey(scope: PosScope): string { return JSON.stringify([scope.mode, scope.organisationId, scope.branchId, scope.deviceId]); }
-function clone<T>(value: T): T { return structuredClone(value); }
+function clone<T>(value: T): T { return browserClone(value); }
 function stable(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;

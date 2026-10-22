@@ -1,5 +1,7 @@
 'use client'
 
+import { browserUuid } from '@/lib/pos/browser-uuid'
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { z } from 'zod'
 import {
@@ -506,7 +508,7 @@ function Board(props: Props) {
   ) {
     if (!mayAct) return
     const command = kitchenCommandSchema.parse({
-      id: crypto.randomUUID(),
+      id: browserUuid(),
       branchId,
       deviceId,
       orderId: ticket.orderId,

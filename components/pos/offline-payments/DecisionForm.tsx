@@ -1,4 +1,6 @@
 'use client'
+
+import { browserUuid } from '@/lib/pos/browser-uuid'
 import { useEffect, useState } from 'react'
 import type {
   PaymentDecisionRequest,
@@ -28,7 +30,7 @@ export default function DecisionForm({
   const [consent, setConsent] = useState(false),
     [password, setPassword] = useState(''),
     [error, setError] = useState('')
-  const [requestId] = useState(() => crypto.randomUUID())
+  const [requestId] = useState(() => browserUuid())
   const s = detail.summary
   const clearConsent = () => {
     setConsent(false)

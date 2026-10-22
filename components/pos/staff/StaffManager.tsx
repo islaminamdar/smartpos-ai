@@ -1,4 +1,6 @@
 'use client'
+
+import { browserUuid } from '@/lib/pos/browser-uuid'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { z } from 'zod'
 import {
@@ -297,7 +299,7 @@ function Manager({
         role = String(values.get('role') ?? 'cashier'),
         scope = String(values.get('scope') ?? branchId),
         common = {
-          id: crypto.randomUUID(),
+          id: browserUuid(),
           branchId,
           deviceId,
           reason: String(values.get('reason') ?? ''),
@@ -605,7 +607,7 @@ function Manager({
                           pendingSchema.parse({
                             endpoint: '/api/pos/staff/invitations/revoke',
                             body: {
-                              id: crypto.randomUUID(),
+                              id: browserUuid(),
                               branchId,
                               deviceId,
                               invitationId: invitation.id,

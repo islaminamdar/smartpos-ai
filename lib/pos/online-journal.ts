@@ -1,3 +1,4 @@
+import { browserClone } from './browser-clone'
 /** Online requests are persisted before dispatch. An uncertain response never
  * authorizes a new payment request or a success receipt. No credentials stored. */
 export type PendingOnlineRequest = {
@@ -52,7 +53,7 @@ export async function savePendingRequest(value: PendingOnlineRequest): Promise<v
   return new Promise((resolve, reject) => {
     const tx = db.transaction(table, 'readwrite')
     // add (not put) prevents a second tab from overwriting an uncertain payment.
-    tx.objectStore(table).add(structuredClone(value))
+    tx.objectStore(table).add(browserClone(value))
     tx.oncomplete = () => {
       db.close()
       resolve()

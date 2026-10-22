@@ -1,4 +1,6 @@
 'use client'
+
+import { browserUuid } from '@/lib/pos/browser-uuid'
 import { useEffect, useRef, useState } from 'react'
 import { z } from 'zod'
 import {
@@ -126,7 +128,7 @@ function Board(props: Props) {
     if (!mayAct || ticket.pendingChangeCount) return
     void execute(
       tabKitchenCommandSchema.parse({
-        id: crypto.randomUUID(),
+        id: browserUuid(),
         branchId: props.branchId,
         deviceId: props.deviceId,
         type: 'stage',
@@ -537,7 +539,7 @@ function Board(props: Props) {
                           if (last)
                             void execute(
                               tabKitchenCommandSchema.parse({
-                                id: crypto.randomUUID(),
+                                id: browserUuid(),
                                 branchId: props.branchId,
                                 deviceId: props.deviceId,
                                 type: 'acknowledge',

@@ -2271,7 +2271,7 @@ export default function LiveCounter({
                           onCommit={(request, quoteHash) =>
                             run(async () => {
                               await command({
-                                id: crypto.randomUUID(),
+                                id: browserUuid(),
                                 type: 'refund.items',
                                 ...request,
                                 quoteHash,
@@ -2334,7 +2334,7 @@ export default function LiveCounter({
                               'Finish or remove the current order before closing your shift.'
                             )
                           await command({
-                            id: crypto.randomUUID(),
+                            id: browserUuid(),
                             type: 'shift.close',
                             branchId,
                             deviceId: boot.device.id,
@@ -2364,7 +2364,7 @@ export default function LiveCounter({
                             const amount = parseMoney(String(data.get('amount')))
                             if (amount <= 0) throw new Error('Enter an amount above zero.')
                             await command({
-                              id: crypto.randomUUID(),
+                              id: browserUuid(),
                               type: 'cash.move',
                               branchId,
                               deviceId: boot.device.id,
@@ -2408,11 +2408,11 @@ export default function LiveCounter({
                         void run(async () => {
                           if (!boot.device) return
                           await command({
-                            id: crypto.randomUUID(),
+                            id: browserUuid(),
                             type: 'shift.open',
                             branchId,
                             deviceId: boot.device.id,
-                            shiftId: crypto.randomUUID(),
+                            shiftId: browserUuid(),
                             openingCashFils: parseMoney(String(data.get('opening'))),
                           })
                         })

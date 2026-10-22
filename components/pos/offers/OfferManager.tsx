@@ -1,4 +1,6 @@
 'use client'
+
+import { browserUuid } from '@/lib/pos/browser-uuid'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { z } from 'zod'
 import { offerSchema, type Offer } from '@/lib/pos/offers'
@@ -305,7 +307,7 @@ function Manager({
               onSave={(offer, reason) =>
                 void execute(
                   offerUpdateSchema.parse({
-                    id: crypto.randomUUID(),
+                    id: browserUuid(),
                     branchId,
                     deviceId,
                     expectedRevision: editing?.revision ?? 0,
@@ -410,7 +412,7 @@ function OfferEditor({
       const starts = text('starts'),
         ends = text('ends')
       const parsed = offerSchema.parse({
-        id: offer?.id ?? crypto.randomUUID(),
+        id: offer?.id ?? browserUuid(),
         branchId: offer?.branchId ?? '00000000-0000-4000-8000-000000000001',
         revision: 1,
         name: text('name'),

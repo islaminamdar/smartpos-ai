@@ -1,4 +1,6 @@
 'use client'
+
+import { browserUuid } from '@/lib/pos/browser-uuid'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { z } from 'zod'
@@ -136,7 +138,7 @@ export default function BillingClient() {
       const key = `pos-paypal-request:${actor}:${branch}`
       let requestId = localStorage.getItem(key)
       if (!requestId) {
-        requestId = crypto.randomUUID()
+        requestId = browserUuid()
         localStorage.setItem(key, requestId)
       }
       const body =

@@ -1,4 +1,6 @@
 'use client'
+
+import { browserUuid } from '@/lib/pos/browser-uuid'
 import { useEffect, useRef, useState } from 'react'
 import {
   openOrderCommandSchema,
@@ -232,7 +234,7 @@ function Board(props: Props) {
                   onSave={(table, expectedRevision, changeReason) =>
                     void execute(
                       openOrderCommandSchema.parse({
-                        id: crypto.randomUUID(),
+                        id: browserUuid(),
                         branchId: props.branchId,
                         deviceId: props.deviceId,
                         type: 'table.save',
@@ -402,7 +404,7 @@ function Board(props: Props) {
                             onClick={() =>
                               void execute(
                                 openOrderCommandSchema.parse({
-                                  id: crypto.randomUUID(),
+                                  id: browserUuid(),
                                   branchId: props.branchId,
                                   deviceId: props.deviceId,
                                   type: 'tab.void',
@@ -514,7 +516,7 @@ function TableEditor({
         if (!disabled)
           onSave(
             {
-              id: table?.id ?? crypto.randomUUID(),
+              id: table?.id ?? browserUuid(),
               name: name.trim(),
               area: area.trim(),
               seats: Number(seats),

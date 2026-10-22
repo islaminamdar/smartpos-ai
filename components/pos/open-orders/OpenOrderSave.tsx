@@ -1,4 +1,6 @@
 'use client'
+
+import { browserUuid } from '@/lib/pos/browser-uuid'
 import { useEffect, useRef, useState } from 'react'
 import {
   openOrderCommandSchema,
@@ -116,11 +118,11 @@ function Save(props: Props) {
   function submit() {
     if (!maySave) return
     const parsed = openOrderCommandSchema.safeParse({
-      id: crypto.randomUUID(),
+      id: browserUuid(),
       branchId: props.branchId,
       deviceId: props.deviceId,
       type: reopening ? 'tab.reopen' : 'tab.save',
-      tabId: props.sourceTab?.id ?? crypto.randomUUID(),
+      tabId: props.sourceTab?.id ?? browserUuid(),
       expectedRevision: props.sourceTab?.revision ?? 0,
       label: label.trim(),
       note: note.trim(),

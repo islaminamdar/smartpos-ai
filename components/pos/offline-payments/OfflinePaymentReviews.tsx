@@ -525,8 +525,8 @@ function ScopedReviews({
                     Do not perform the external action again.
                   </p>
                   <p className={styles.warning}>
-                    Check the original Android device for confirmation. This screen cannot tell whether its
-                    payment hold has been resolved.
+                    Check the original Android device for confirmation. This screen cannot tell
+                    whether its payment hold has been resolved.
                   </p>
                 </section>
               )}

@@ -1,4 +1,6 @@
 'use client'
+
+import { browserUuid } from '@/lib/pos/browser-uuid'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { z } from 'zod'
 import { formatFils, parseMoney } from '@/lib/pos/money'
@@ -210,13 +212,13 @@ function ScopedCatalogueManager({
     try {
       const values = new FormData(event.currentTarget)
       const command = catalogueUpdateSchema.parse({
-        id: crypto.randomUUID(),
+        id: browserUuid(),
         branchId,
         deviceId,
         expectedRevision: selected?.revision ?? 0,
         reason: String(values.get('reason') || ''),
         product: {
-          id: selected?.id ?? crypto.randomUUID(),
+          id: selected?.id ?? browserUuid(),
           name: String(values.get('name') || ''),
           category: String(values.get('category') || ''),
           imageUrl: draftImage,

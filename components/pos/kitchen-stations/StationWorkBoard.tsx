@@ -1,4 +1,6 @@
 'use client'
+
+import { browserUuid } from '@/lib/pos/browser-uuid'
 import { useEffect, useRef, useState } from 'react'
 import {
   stationWorkListSchema,
@@ -429,7 +431,7 @@ function Board({
   ) => {
     if (work)
       void execute({
-        id: crypto.randomUUID(),
+        id: browserUuid(),
         branchId,
         deviceId,
         workId: work.id,
