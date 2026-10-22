@@ -37,6 +37,4 @@ export function installBrowserAbortSignalCompatibility(
 
 installBrowserAbortSignalCompatibility(AbortSignal as AbortSignalWithCompatibility)
 installBrowserUuidCompatibility(globalThis.crypto)
-installBrowserCloneCompatibility()
 import { installBrowserUuidCompatibility } from './browser-uuid'
-import { installBrowserCloneCompatibility } from './browser-clone'
