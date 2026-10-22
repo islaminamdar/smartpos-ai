@@ -881,6 +881,286 @@
   background: #fce8f3;
 }
 
+/* Suleman Usman Mithaiwala counter: a quiet workspace around the heritage mark. */
+.lc-app[data-merchant-theme='mithaiwala'] {
+  --saffron: #8a4b08;
+  background: #fff8fb;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-top {
+  min-height: 76px;
+  padding: 12px 28px;
+  border-top: 4px solid #b80066;
+  background: #fff;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-top > div {
+  gap: 12px;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-online,
+.lc-app[data-merchant-theme='mithaiwala'] .lc-offline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  font-weight: 700;
+  padding: 5px 10px;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-online::before,
+.lc-app[data-merchant-theme='mithaiwala'] .lc-offline::before {
+  content: '';
+  inline-size: 7px;
+  block-size: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  min-height: 58px;
+  padding: 8px 28px;
+  background: #fffdfd;
+  box-shadow: 0 4px 14px #20182208;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-tabs button,
+.lc-app[data-merchant-theme='mithaiwala'] .lc-more-nav summary {
+  min-height: 40px;
+  border-radius: 999px;
+  font-size: 13px;
+  padding: 8px 13px;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-tabs button[aria-current='page'] {
+  background: #b80066;
+  color: #fff;
+  box-shadow: 0 2px 8px #b8006630;
+}
+.lc-more-nav {
+  position: relative;
+  margin: 0 !important;
+}
+.lc-more-nav summary {
+  align-items: center;
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--navy);
+  cursor: pointer;
+  display: inline-flex;
+  font-weight: 700;
+  list-style: none;
+}
+.lc-more-nav summary::-webkit-details-marker {
+  display: none;
+}
+.lc-more-nav summary::after {
+  content: '⌄';
+  font-size: 15px;
+  margin-left: 7px;
+}
+.lc-more-nav[open] summary::after {
+  content: '⌃';
+}
+.lc-more-nav > div {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  min-width: 210px;
+  max-height: min(70vh, 480px);
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 18px 36px #20182224;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-more-nav > div button {
+  justify-content: flex-start;
+  border-radius: 8px;
+  text-align: left;
+  width: 100%;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-main {
+  max-width: 1680px;
+  padding: 22px 28px 30px;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-sell {
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 31%);
+  gap: 22px;
+  align-items: stretch;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-menu {
+  min-width: 0;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-section-heading {
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 14px;
+  padding: 5px 0 14px;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-section-heading h1 {
+  font-size: clamp(26px, 2.3vw, 34px);
+  letter-spacing: -1.15px;
+  margin-bottom: 0;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-section-heading > button {
+  background: #fff;
+  border-color: #e5ccd9;
+  color: #8d0050;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-filters label > input {
+  border-color: #d9bacb;
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 #20182208;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-products {
+  grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+  align-content: start;
+  gap: 12px;
+  max-height: calc(100dvh - 272px);
+  padding: 2px 4px 12px 2px;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-product {
+  position: relative;
+  border-color: #ead8e2;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 4px 12px #20182209;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-product:hover:not(:disabled) {
+  border-color: #b80066;
+  box-shadow: 0 8px 20px #b8006620;
+  transform: translateY(-1px);
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-product:active:not(:disabled) {
+  transform: translateY(0);
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-product img,
+.lc-app[data-merchant-theme='mithaiwala'] .lc-photo-empty {
+  aspect-ratio: 1 / 0.78;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-product > span:not(.lc-photo-empty) {
+  padding: 11px 11px 3px;
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.3;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-product > strong {
+  color: #a5005b;
+  font-size: 14px;
+  padding: 3px 11px 12px;
+}
+.lc-product-unavailable {
+  display: block;
+  background: #fff0f6;
+  border-top: 1px solid #f1d3e1;
+  color: #7d1748;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 6px 9px;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-product:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+  filter: grayscale(0.25);
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-order {
+  border: 1px solid #e6ccda;
+  border-top: 4px solid #b80066;
+  border-radius: 16px;
+  box-shadow: 0 14px 34px #20182212;
+  padding: 20px;
+  top: 72px;
+  max-height: calc(100dvh - 96px);
+  overflow-y: auto;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-order h2 {
+  font-size: 22px;
+  letter-spacing: -0.5px;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-basket-line {
+  border-color: #f0e0e8;
+  padding: 12px 0;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-totals {
+  margin-top: 16px;
+  border-top: 1px solid #e9d3df;
+  padding: 12px 14px 4px;
+  background: #fff4f9;
+  border-radius: 12px;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-totals > div:last-child {
+  color: #84004a;
+  font-size: 25px;
+  padding-top: 8px;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-primary {
+  border-radius: 11px;
+  box-shadow: 0 5px 12px #b8006630;
+  font-size: 16px;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-tap-choice input:checked + span {
+  background: #b80066;
+  border-color: #b80066;
+}
+.lc-app[data-merchant-theme='mithaiwala'] .lc-tap-choice input:checked + span::before {
+  content: '✓';
+  font-weight: 800;
+  margin-right: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-app[data-merchant-theme='mithaiwala'] .lc-product {
+    transition: none;
+  }
+}
+@media (max-width: 900px) {
+  .lc-app[data-merchant-theme='mithaiwala'] .lc-sell {
+    grid-template-columns: minmax(0, 1fr) 340px;
+  }
+  .lc-app[data-merchant-theme='mithaiwala'] .lc-products {
+    grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+  }
+}
+@media (max-width: 650px) {
+  .lc-app[data-merchant-theme='mithaiwala'] .lc-top {
+    padding: 10px 16px;
+  }
+  .lc-app[data-merchant-theme='mithaiwala'] .lc-tabs {
+    overflow-x: auto;
+    padding: 8px 12px;
+    flex-wrap: nowrap;
+  }
+  .lc-app[data-merchant-theme='mithaiwala'] .lc-tabs > span {
+    display: none;
+  }
+  .lc-app[data-merchant-theme='mithaiwala'] .lc-tabs button,
+  .lc-app[data-merchant-theme='mithaiwala'] .lc-more-nav summary {
+    flex: 0 0 auto;
+  }
+  .lc-app[data-merchant-theme='mithaiwala'] .lc-more-nav > div {
+    position: fixed;
+    right: 12px;
+    top: 130px;
+    left: 12px;
+  }
+  .lc-app[data-merchant-theme='mithaiwala'] .lc-main {
+    padding: 14px 12px 30px;
+  }
+  .lc-app[data-merchant-theme='mithaiwala'] .lc-sell {
+    display: block;
+  }
+  .lc-app[data-merchant-theme='mithaiwala'] .lc-products {
+    max-height: 53dvh;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .lc-app[data-merchant-theme='mithaiwala'] .lc-order {
+    margin-top: 16px;
+    max-height: none;
+  }
+}
+
 /* Direct choices stay visible so cashiers can select in one tap. */
 .lc-app .lc-tap-choices {
   border: 0;

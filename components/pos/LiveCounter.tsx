@@ -258,6 +258,41 @@ export default function LiveCounter({
       item.name.toLowerCase().includes(search.toLowerCase().trim())
   )
   const categories = Array.from(new Set(products.map((item) => item.category)))
+  const counterLabels: Record<View, string> = {
+    sell: 'Sell',
+    kitchen: 'Kitchen',
+    'kitchen-stations': 'Kitchen stations',
+    'open-orders': 'Orders & tables',
+    receipts: 'Receipts',
+    shift: 'Shift',
+    branch: 'Branch',
+    menu: 'Menu',
+    stock: 'Stock',
+    offers: 'Offers',
+    reports: 'Reports',
+    staff: 'Staff',
+    account: 'Account',
+    'payment-review': 'Payment review',
+    operations: 'Operations',
+  }
+  const primaryCounterViews: View[] = ['sell', 'kitchen', 'open-orders', 'receipts']
+  const secondaryCounterViews: View[] = [
+    'shift',
+    ...(operationsAccess ? ['operations' as View] : []),
+    ...(manager
+      ? [
+          'menu' as View,
+          'stock' as View,
+          ...(kitchenStationsEnabled ? ['kitchen-stations' as View] : []),
+          'offers' as View,
+          'reports' as View,
+          'staff' as View,
+          ...(offlinePaymentReviewEnabled ? ['payment-review' as View] : []),
+        ]
+      : []),
+    'branch',
+    'account',
+  ]
   const beforeDiscount = basket.reduce(
     (sum, line) =>
       sum +
@@ -1486,56 +1521,31 @@ export default function LiveCounter({
       ) : (
         <>
           <nav className="lc-tabs lc-noprint" aria-label="Counter navigation">
-            {(
-              [
-                'sell',
-                'kitchen',
-                'open-orders',
-                'receipts',
-                'shift',
-                ...(operationsAccess ? ['operations'] : []),
-                ...(manager
-                  ? [
-                      'menu',
-                      'stock',
-                      ...(kitchenStationsEnabled ? ['kitchen-stations'] : []),
-                      'offers',
-                      'reports',
-                      'staff',
-                      ...(offlinePaymentReviewEnabled ? ['payment-review'] : []),
-                    ]
-                  : []),
-                'branch',
-                'account',
-              ] as View[]
-            ).map((item) => (
+            {primaryCounterViews.map((item) => (
               <button
                 key={item}
                 aria-current={view === item ? 'page' : undefined}
                 disabled={openOrderBusy || reviewBusy || stockBusy || stationInteractionHeld}
                 onClick={() => setView(item)}
               >
-                {
-                  {
-                    sell: 'Sell',
-                    kitchen: 'Kitchen',
-                    'kitchen-stations': 'Kitchen stations',
-                    'open-orders': 'Orders & tables',
-                    receipts: 'Receipts',
-                    shift: 'Shift',
-                    branch: 'Branch',
-                    menu: 'Menu',
-                    stock: 'Stock',
-                    offers: 'Offers',
-                    reports: 'Reports',
-                    staff: 'Staff',
-                    account: 'Account',
-                    'payment-review': 'Payment review',
-                    operations: 'Operations',
-                  }[item]
-                }
+                {counterLabels[item]}
               </button>
             ))}
+            <details className="lc-more-nav">
+              <summary aria-label="Open more counter options">More</summary>
+              <div>
+                {secondaryCounterViews.map((item) => (
+                  <button
+                    key={item}
+                    aria-current={view === item ? 'page' : undefined}
+                    disabled={openOrderBusy || reviewBusy || stockBusy || stationInteractionHeld}
+                    onClick={() => setView(item)}
+                  >
+                    {counterLabels[item]}
+                  </button>
+                ))}
+              </div>
+            </details>
             <span>{boot.device.name}</span>
           </nav>
           <main className="lc-main">
@@ -1816,20 +1826,25 @@ export default function LiveCounter({
                             <>
                               <img
                                 src={illustration.src}
-                                alt={illustration.alt}
+                                alt=""
                                 loading="lazy"
                                 className="lc-illustration"
                               />
                               <small className="lc-illustration-label">{illustration.label}</small>
                             </>
                           ) : (
-                            <span className="lc-photo-empty">Photo to add</span>
+                            <span className="lc-photo-empty">Photo pending</span>
                           )}
                           <span>{product.name}</span>
                           <strong>
                             {currency(product.unitPriceFils)}
                             {product.unit === 'kg' ? ' / kg' : ''}
                           </strong>
+                          {product.unitPriceFils <= 0 && (
+                            <small className="lc-product-unavailable">
+                              Price pending · unavailable
+                            </small>
+                          )}
                         </button>
                       )
                     })}
