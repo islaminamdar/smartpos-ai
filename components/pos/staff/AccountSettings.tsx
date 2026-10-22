@@ -1,4 +1,6 @@
 'use client'
+
+import Link from 'next/link'
 import { useRef, useState, type FormEvent } from 'react'
 import { passwordChangeSchema } from '@/lib/pos/server/staff'
 import styles from './staff.module.css'
@@ -97,7 +99,7 @@ export default function AccountSettings({ disabled }: { disabled: boolean }) {
       {changed ? (
         <div className={styles.notice} role="status">
           <p>Password changed. Sign in again with your new password.</p>
-          <a href="/counter">Return to sign in</a>
+          <Link href="/counter">Return to sign in</Link>
         </div>
       ) : (
         <form onSubmit={submit}>

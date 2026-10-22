@@ -139,7 +139,7 @@ export default function StaffInvitation({ accountSetup = false }: { accountSetup
       {accepted ? (
         <div role="status" className={styles.notice}>
           <p>Your branch access has been accepted.</p>
-          <a href="/counter">Open staff counter</a>
+          <Link href="/counter">Open staff counter</Link>
           <p className={styles.help}>Counter enrolment and opening a shift are separate steps.</p>
         </div>
       ) : (
@@ -192,7 +192,7 @@ export default function StaffInvitation({ accountSetup = false }: { accountSetup
             </>
           )}
           <StaffAccessHelp accountSetup={accountSetup} />
-          <a href="/counter">Back to counter</a>
+          <Link href="/counter">Back to counter</Link>
         </>
       )}
       {error && (
