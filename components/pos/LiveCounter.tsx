@@ -1159,7 +1159,10 @@ export default function LiveCounter({
       data-counter-update-ready={String(updateReady)}
     >
       <header className="lc-top lc-noprint">
-        <Link href="/" className={branding ? 'lc-merchant-identity' : 'lc-wordmark'}>
+        <Link
+          href={portal ? `/${portal.slug}` : '/'}
+          className={branding ? 'lc-merchant-identity' : 'lc-wordmark'}
+        >
           <MerchantIdentity branding={branding} />
         </Link>
         <div>

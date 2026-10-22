@@ -5,9 +5,25 @@ import { activeCounterPortal } from '@/lib/pos/server/counter-portal'
 import '../counter/counter.css'
 
 export const dynamic = 'force-dynamic'
-export const metadata: Metadata = { robots: { index: false, follow: false } }
 
-export default async function CounterPortalPage({ params }: { params: Promise<{ portal: string }> }) {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ portal: string }>
+}): Promise<Metadata> {
+  const { portal: slug } = await params
+  const portal = await activeCounterPortal(slug)
+  return {
+    title: portal ? `Staff counter · ${portal.displayName}` : 'Staff counter',
+    robots: { index: false, follow: false },
+  }
+}
+
+export default async function CounterPortalPage({
+  params,
+}: {
+  params: Promise<{ portal: string }>
+}) {
   const { portal: slug } = await params
   const portal = await activeCounterPortal(slug)
   if (!portal) notFound()
