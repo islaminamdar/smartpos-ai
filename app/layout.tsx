@@ -1,5 +1,6 @@
 import './globals.css'
 import type { Metadata } from 'next'
+import BrowserCompatibility from './BrowserCompatibility'
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://pos.internext.info'),
@@ -25,7 +26,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="font-sans antialiased">{children}</body>
+      <body className="font-sans antialiased">
+        <BrowserCompatibility />
+        {children}
+      </body>
     </html>
   )
 }

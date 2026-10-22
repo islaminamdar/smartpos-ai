@@ -73,6 +73,7 @@ import type { OfferSelection, EligibleOfferQuote } from '@/lib/pos/server/offers
 import { invoiceMatchesSale, settlementMatchesSale } from '@/lib/pos/server/sale-ack'
 import { counterUpdateReady } from '@/lib/pos/counter-update-readiness'
 import type { CounterPortal } from '@/lib/pos/counter-portal'
+import { browserUuid } from '@/lib/pos/browser-uuid'
 
 type Product = LiveBootstrap['catalogue'][number]
 type BasketLine = { product: Product; quantityMilli: number }
@@ -914,7 +915,7 @@ export default function LiveCounter({
       if (total > 1_000_000 && !hasCustomer)
         throw new Error('Customer name and address are required above AED 10,000.')
       const order: LiveOrder = {
-        id: crypto.randomUUID(),
+        id: browserUuid(),
         branchId,
         deviceId: boot.device.id,
         shiftId: shift.id,

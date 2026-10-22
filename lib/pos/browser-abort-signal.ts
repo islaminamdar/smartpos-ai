@@ -36,3 +36,5 @@ export function installBrowserAbortSignalCompatibility(
 }
 
 installBrowserAbortSignalCompatibility(AbortSignal as AbortSignalWithCompatibility)
+installBrowserUuidCompatibility(globalThis.crypto)
+import { installBrowserUuidCompatibility } from './browser-uuid'
