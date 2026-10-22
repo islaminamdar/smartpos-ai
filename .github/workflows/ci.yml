@@ -6,10 +6,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v3
-        with: { version: 9 }
+        with: { version: 11.18.0 }
       - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: pnpm }
+        with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      - run: npm ci --prefix apps/android-pos --ignore-scripts
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test

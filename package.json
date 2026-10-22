@@ -2,6 +2,7 @@
   "name": "smartpos-ai",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.18.0",
   "scripts": {
     "dev": "next dev",
     "build": "node scripts/check-pos-build.mjs && node scripts/prepare-pos-worker.mjs && next build",
