@@ -1,5 +1,6 @@
 'use client'
 
+import '@/lib/pos/browser-abort-signal'
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import Link from 'next/link'
 import { formatFils, parseMoney } from '@/lib/pos/money'
