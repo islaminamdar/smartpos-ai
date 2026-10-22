@@ -1,14 +1,18 @@
 import { resolveMerchantBranding } from '@/lib/pos/server/branding'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { authenticatedPosClient, PosServerError } from '@/lib/pos/server/client'
 import { posFailure, privateHeaders } from '@/lib/pos/server/http'
 import { boundDevice, requirePilot } from '@/lib/pos/server/live-access'
 import { liveBootstrapSchema } from '@/lib/pos/server/live-contracts'
+import { activeCounterPortal } from '@/lib/pos/server/counter-portal'
 export const dynamic = 'force-dynamic'
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     requirePilot()
     const { client, user } = await authenticatedPosClient()
+    const portalSlug = request.nextUrl.searchParams.get('portal')
+    const portal = portalSlug ? await activeCounterPortal(portalSlug) : null
+    if (portalSlug && !portal) throw new PosServerError('portal_not_found', 404)
     const results = await Promise.all([
       client.from('pos_branches').select('id,organization_id,name').eq('active', true),
       client
@@ -21,9 +25,15 @@ export async function GET() {
       client.rpc('pos_open_shift_summaries'),
     ])
     if (results.some((result) => result.error)) throw new PosServerError('setup_required', 503)
-    const [branches, staff, configs, profiles] = results
+    const [unscopedBranches, staff, configs, profiles] = results
       .slice(0, 4)
       .map((result) => result.data ?? [])
+    const branches = portal
+      ? unscopedBranches.filter(
+          (branch: { id: string; organization_id: string }) =>
+            branch.id === portal.branchId && branch.organization_id === portal.organizationId
+        )
+      : unscopedBranches
     if (
       !Array.isArray(branches) ||
       !branches.length ||
@@ -31,16 +41,17 @@ export async function GET() {
       !Array.isArray(configs) ||
       !Array.isArray(profiles)
     )
-      throw new PosServerError('setup_required', 503)
+      throw new PosServerError(portal ? 'portal_access_denied' : 'setup_required', portal ? 403 : 503)
     const catalogue = []
     for (let offset = 0; ; offset += 500) {
-      const page = await client
+      let query = client
         .from('pos_products')
         .select('id,branch_id,name,category,image_url,unit,unit_price_fils,tax_rate_bps,revision')
         .eq('active', true)
         .gt('unit_price_fils', 0)
         .order('id')
-        .range(offset, offset + 499)
+      if (portal) query = query.eq('branch_id', portal.branchId)
+      const page = await query.range(offset, offset + 499)
       if (page.error || !page.data) throw new PosServerError('storage_unavailable', 503)
       catalogue.push(
         ...page.data.map((p) => ({
@@ -59,6 +70,8 @@ export async function GET() {
       if (offset >= 100_000) throw new PosServerError('catalogue_too_large', 503)
     }
     const binding = await boundDevice(client, user.id)
+    if (portal && binding?.device.branchId !== portal.branchId)
+      throw new PosServerError('portal_device_mismatch', 403)
     const response = liveBootstrapSchema.parse({
       status: 'ready',
       userId: user.id,
@@ -107,7 +120,9 @@ export async function GET() {
       }),
       catalogue,
       device: binding?.device ?? null,
-      shifts: results[4].data ?? [],
+      shifts: portal
+        ? (results[4].data ?? []).filter((shift: { branchId: string }) => shift.branchId === portal.branchId)
+        : (results[4].data ?? []),
       capabilities: {
         onlineSales: process.env.POS_LIVE_SALES_ENABLED === 'true',
         offlineSales: false,

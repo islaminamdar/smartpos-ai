@@ -1,3 +1,20 @@
+import { validCounterPortalSlug } from './counter-portal'
+
+const reservedTopLevelPaths = new Set([
+  'api',
+  'billing',
+  'counter',
+  'dashboard',
+  'downloads',
+  'kds',
+  'login',
+  'onboarding',
+  'order',
+  'pos',
+  'signup',
+  'staff',
+])
+
 /** Both hosted modes keep every legacy route and Server Action inaccessible. */
 export function publicReleaseAccess(
   path: string,
@@ -10,6 +27,15 @@ export function publicReleaseAccess(
   // is paused. Sign-in and sign-out writes keep their existing online gate.
   if (path === '/api/pos/session' && read) return 'allow'
   if ((path === '/counter' || path === '/counter/') && read) return 'allow'
+  // Customer portals are deliberately limited to a single URL segment. The page
+  // resolves an active portal server-side; this only permits its public shell.
+  if (
+    read &&
+    /^\/[a-z0-9-]+$/.test(path) &&
+    !reservedTopLevelPaths.has(path.slice(1)) &&
+    validCounterPortalSlug(path.slice(1))
+  )
+    return 'allow'
   // Current authenticated manager reads have their own server-side feature gate and
   // permissions. The candidate decision writer is intentionally NOT exposed yet.
   if (

@@ -72,6 +72,7 @@ import { tabKitchenTabSchema } from '@/lib/pos/server/tab-kitchen'
 import type { OfferSelection, EligibleOfferQuote } from '@/lib/pos/server/offers'
 import { invoiceMatchesSale, settlementMatchesSale } from '@/lib/pos/server/sale-ack'
 import { counterUpdateReady } from '@/lib/pos/counter-update-readiness'
+import type { CounterPortal } from '@/lib/pos/counter-portal'
 
 type Product = LiveBootstrap['catalogue'][number]
 type BasketLine = { product: Product; quantityMilli: number }
@@ -154,7 +155,12 @@ async function api(path: string, method = 'GET', body?: unknown): Promise<unknow
 export default function LiveCounter({
   offlinePaymentReviewEnabled = false,
   kitchenStationsEnabled = false,
-}: { offlinePaymentReviewEnabled?: boolean; kitchenStationsEnabled?: boolean } = {}) {
+  portal,
+}: {
+  offlinePaymentReviewEnabled?: boolean
+  kitchenStationsEnabled?: boolean
+  portal?: CounterPortal
+} = {}) {
   const [boot, setBoot] = useState<LiveBootstrap | null>(null)
   const stationCustody = useStationCustody(boot?.userId)
   const [stationEditorBlocked, setStationEditorBlocked] = useState(false)
@@ -551,7 +557,10 @@ export default function LiveCounter({
   }, [boot?.userId])
 
   const refresh = useCallback(async () => {
-    const next = liveBootstrapSchema.parse(await api('/api/pos/bootstrap'))
+    const endpoint = portal
+      ? `/api/pos/bootstrap?portal=${encodeURIComponent(portal.slug)}`
+      : '/api/pos/bootstrap'
+    const next = liveBootstrapSchema.parse(await api(endpoint))
     const journal = await readPendingRequest(next.userId)
     const scope = `${next.userId}:${next.device?.id ?? ''}:${next.device?.branchId ?? ''}`
     const nextShift =
@@ -591,7 +600,7 @@ export default function LiveCounter({
         (next.branches.some((item) => item.id === current) ? current : (next.branches[0]?.id ?? ''))
     )
     return next
-  }, [])
+  }, [portal])
   const loadDocuments = useCallback(async (id: string, cursor?: string) => {
     const scope = actorScope.current
     const data = await api(
@@ -1080,9 +1089,13 @@ export default function LiveCounter({
     return (
       <main className="lc-app lc-centre" data-counter-update-ready={String(updateReady)}>
         <form className="lc-login" onSubmit={login}>
-          <Link href="/" className="lc-wordmark">
-            Internext <strong>POS</strong>
-          </Link>
+          {portal ? (
+            <span className="lc-wordmark">{portal.displayName}</span>
+          ) : (
+            <Link href="/" className="lc-wordmark">
+              Internext <strong>POS</strong>
+            </Link>
+          )}
           <span className="lc-eyebrow">Staff access</span>
           <h1>Your counter starts here.</h1>
           <p>Sign in with the account assigned to your restaurant.</p>

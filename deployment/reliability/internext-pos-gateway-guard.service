@@ -1,0 +1,7 @@
+[Unit]
+Description=Recover the Internext POS gateway after sustained readiness failures
+After=internext-pos.service container-internext-pos-auth.service container-internext-pos-rest.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/internext-pos-gateway-guard
