@@ -10,7 +10,7 @@ let server: Server;
 let page: Page;
 
 beforeAll(async () => {
-  const modules = new Map(['types', 'money', 'local-store', 'sync'].map(name => [name, ts.transpileModule(readFileSync(join(process.cwd(), 'lib/pos', `${name}.ts`), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText.replace(/from '(\.\/[^']+)'/g, (_, path) => `from '${path}.js'`)]));
+  const modules = new Map(['types', 'money', 'browser-clone', 'browser-uuid', 'local-store', 'sync'].map(name => [name, ts.transpileModule(readFileSync(join(process.cwd(), 'lib/pos', `${name}.ts`), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText.replace(/from '(\.\/[^']+)'/g, (_, path) => `from '${path}.js'`)]));
   server = createServer((req, res) => {
     const name = (req.url ?? '').replace(/^\//, '').replace(/\.js$/, '');
     res.setHeader('Content-Type', modules.has(name) ? 'application/javascript' : 'text/html');
