@@ -310,3 +310,36 @@
     width: 100%;
   }
 }
+.watch {
+  border-top-color: #d68b00;
+}
+.late {
+  border-top-color: #c73232;
+  box-shadow: 0 0 0 2px #ffe3e3;
+}
+.watchCount {
+  color: #8a5700;
+}
+.lateCount {
+  color: #a12a2a;
+}
+.watchNotice,
+.lateNotice {
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: -8px 0 18px;
+  font-weight: 600;
+}
+.watchNotice {
+  background: #fff6dd;
+  border: 1px solid #e5ca86;
+  color: #76500b;
+}
+.lateNotice {
+  background: #fff0f0;
+  border: 1px solid #e3aaaa;
+  color: #8d2525;
+}
+.elapsedLate {
+  color: #a12a2a;
+}

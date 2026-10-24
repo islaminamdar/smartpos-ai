@@ -40,6 +40,15 @@ const labels = {
 }
 const actionLabels = { preparing: 'Start preparing', ready: 'Mark ready', served: 'Mark served' }
 const serviceLabels = { dine_in: 'Dine-in', takeaway: 'Takeaway', delivery: 'Delivery' }
+const watchAfterMinutes = 10
+const lateAfterMinutes = 20
+function elapsedMinutes(value: string, now: number) {
+  return Math.max(0, Math.floor((now - new Date(value).getTime()) / 60000))
+}
+function urgency(value: string, now: number) {
+  const minutes = elapsedMinutes(value, now)
+  return minutes >= lateAfterMinutes ? 'late' : minutes >= watchAfterMinutes ? 'watch' : 'normal'
+}
 function time(value: string) {
   return new Date(value).toLocaleTimeString('en-AE', {
     hour: '2-digit',
@@ -48,7 +57,7 @@ function time(value: string) {
   })
 }
 function age(value: string, now: number) {
-  const minutes = Math.max(0, Math.floor((now - new Date(value).getTime()) / 60000))
+  const minutes = elapsedMinutes(value, now)
   return minutes < 1
     ? 'Just received'
     : minutes < 60
@@ -519,6 +528,10 @@ function Board(props: Props) {
     void execute(command)
   }
   const tickets = data ? (terminal ? data.terminalTickets : data.activeTickets) : []
+  const activeAttention = data
+    ? data.activeTickets.filter((ticket) => urgency(ticket.issuedAt, now) !== 'normal')
+    : []
+  const activeLate = activeAttention.filter((ticket) => urgency(ticket.issuedAt, now) === 'late')
   return (
     <section className={styles.board} aria-label="Kitchen board">
       <header className={styles.heading}>
@@ -583,8 +596,24 @@ function Board(props: Props) {
               <span>
                 Ready <strong>{data.activeCounts.ready}</strong>
               </span>
+              {activeAttention.length > 0 && (
+                <span className={activeLate.length > 0 ? styles.lateCount : styles.watchCount}>
+                  {activeLate.length > 0 ? 'Late' : 'Watch'}{' '}
+                  <strong>{activeLate.length || activeAttention.length}</strong>
+                </span>
+              )}
             </div>
           </div>
+          {!terminal && activeAttention.length > 0 && (
+            <p
+              className={activeLate.length > 0 ? styles.lateNotice : styles.watchNotice}
+              role="status"
+            >
+              {activeLate.length > 0
+                ? `${activeLate.length} active ${activeLate.length === 1 ? 'order is' : 'orders are'} over ${lateAfterMinutes} minutes. Check these first and update the customer through the counter.`
+                : `${activeAttention.length} active ${activeAttention.length === 1 ? 'order is' : 'orders are'} over ${watchAfterMinutes} minutes. Keep an eye on preparation time.`}
+            </p>
+          )}
           {terminal && (
             <p className={styles.help}>
               Recent served and refunded orders.
@@ -638,10 +667,11 @@ function Board(props: Props) {
           const selected =
             confirm?.ticket.orderId === ticket.orderId &&
             confirm.ticket.revision === ticket.revision
+          const ticketUrgency = urgency(ticket.issuedAt, now)
           return (
             <article
               key={ticket.orderId}
-              className={`${styles.ticket} ${styles[ticket.status]}`}
+              className={`${styles.ticket} ${styles[ticket.status]} ${ticket.status === 'queued' || ticket.status === 'preparing' ? styles[ticketUrgency] : ''}`}
               aria-label={`Order ${ticket.invoiceNumber}`}
             >
               <div className={styles.ticketTop}>
@@ -652,10 +682,16 @@ function Board(props: Props) {
                 <strong>{serviceLabels[ticket.serviceType]}</strong>
                 <span>{time(ticket.issuedAt)} Dubai time</span>
               </p>
-              <p className={styles.elapsed}>
+              <p
+                className={`${styles.elapsed} ${ticketUrgency === 'late' ? styles.elapsedLate : ''}`}
+              >
                 {ticket.status === 'served' || ticket.status === 'cancelled'
                   ? `${labels[ticket.status]} at ${time(ticket.updatedAt)}`
-                  : age(ticket.issuedAt, now)}
+                  : ticketUrgency === 'late'
+                    ? `Late · ${age(ticket.issuedAt, now)}`
+                    : ticketUrgency === 'watch'
+                      ? `Watch · ${age(ticket.issuedAt, now)}`
+                      : age(ticket.issuedAt, now)}
               </p>
               <ul className={styles.lines}>
                 {ticket.lines.map((line) => (
