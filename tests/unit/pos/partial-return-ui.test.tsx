@@ -81,10 +81,10 @@ describe('partial item return UI', () => {
       expectedRevision: 1,
       lines: [{ lineNumber: 1, quantityMilli: 125 }],
       reason: 'Wrong item received',
+      refundMethod: 'cash',
     })
     expect(screen.getByRole('button', { name: 'Issue credit note' })).toBeDisabled()
-    expect(screen.getByText('Cash to return')).toBeVisible()
-    expect(screen.getByText('Card refund to arrange on terminal')).toBeVisible()
+    expect(screen.getByText('Cash refund')).toBeVisible()
     fireEvent.click(screen.getByRole('checkbox', { name: /I confirm these exact items/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Issue credit note' }))
     await waitFor(() => expect(p.onCommit).toHaveBeenCalledExactlyOnceWith(request, 'a'.repeat(64)))
@@ -271,7 +271,15 @@ describe('actual PostgreSQL return output through the interactive UI', () => {
     const commit = vi.fn(async () => {})
     fetcher.mockImplementation(async (_path, options) =>
       options?.method === 'POST'
-        ? response({ status: 'ready', preview: vector.preview })
+        ? response({
+            status: 'ready',
+            preview: {
+              ...vector.preview,
+              payments: vector.preview.totals.grossFils
+                ? [{ method: 'cash', amountFils: vector.preview.totals.grossFils }]
+                : [],
+            },
+          })
         : response({ status: 'ready', state: original })
     )
     render(
@@ -304,12 +312,12 @@ describe('actual PostgreSQL return output through the interactive UI', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Review return' }))
     await screen.findByRole('heading', { name: 'Review this exact return' })
-    expect(JSON.parse(String(fetcher.mock.calls.at(-1)?.[1]?.body))).toEqual({ request })
+    expect(JSON.parse(String(fetcher.mock.calls.at(-1)?.[1]?.body))).toEqual({ request: { ...request, refundMethod: 'cash' } })
     expect(commit).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('checkbox', { name: /I confirm these exact items/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Issue credit note' }))
     await waitFor(() =>
-      expect(commit).toHaveBeenCalledExactlyOnceWith(request, vector.preview.quoteHash)
+      expect(commit).toHaveBeenCalledExactlyOnceWith({ ...request, refundMethod: 'cash' }, vector.preview.quoteHash)
     )
   })
 })

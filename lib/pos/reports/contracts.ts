@@ -54,13 +54,14 @@ export const branchReportSchema = z
     payments: z
       .array(
         z.object({
-          method: z.enum(['cash', 'card']),
+          method: z.enum(['cash', 'card', 'bank_transfer']),
           salesFils: positive,
           refundsFils: positive,
           netFils: integer,
         })
       )
-      .length(2),
+      .min(2)
+      .max(3),
     vatRates: z
       .array(z.object({ taxRateBps: z.number().int().min(0).max(10000), ...amounts }))
       .max(10001),
@@ -93,7 +94,7 @@ export const branchReportSchema = z
     ] as const
     if (
       report.summary.invoiceCount + report.summary.creditNoteCount !== report.documentCount ||
-      new Set(report.payments.map((p) => p.method)).size !== 2
+      new Set(report.payments.map((p) => p.method)).size !== report.payments.length
     )
       fail()
     const expectedDays = (Date.parse(report.endDate) - Date.parse(report.startDate)) / 86400000 + 1

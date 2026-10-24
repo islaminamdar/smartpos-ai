@@ -140,6 +140,19 @@
   background: white;
   color: #142d4e;
 }
+.method {
+  display: grid;
+  gap: 10px;
+  margin: 20px 0;
+  padding: 14px;
+  border: 1px solid #8aa6c4;
+  border-radius: 10px;
+  background: #fff;
+}
+.method legend { font-weight: 700; padding: 0 4px; }
+.method label { display: flex; align-items: center; gap: 10px; min-height: 36px; cursor: pointer; }
+.method input[type='radio'] { width: 20px; height: 20px; min-height: 20px; margin: 0; accent-color: #1858a4; }
+.method small { color: #52667a; }
 .line input[aria-invalid='true'] {
   border-color: #a12020;
 }

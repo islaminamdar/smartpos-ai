@@ -61,6 +61,9 @@ const lineSchema = z
 const paymentSchema = z
   .object({ method: z.enum(['cash', 'card']), amountFils: fils.refine((value) => value > 0) })
   .strict()
+const refundPaymentSchema = z
+  .object({ method: z.enum(['cash', 'card', 'bank_transfer']), amountFils: fils.refine((value) => value > 0) })
+  .strict()
 const common = {
   schemaVersion: z.literal(1),
   id: uuid,
@@ -259,12 +262,12 @@ const originalInvoiceReference = z
 export const partialCreditDocumentSchema = z
   .object({
     ...common,
-    schemaVersion: z.literal(3),
+    schemaVersion: z.union([z.literal(3), z.literal(4)]),
     kind: z.literal('tax_credit_note'),
     reason: text(240),
     lines: z.array(returnLineSchema).min(1).max(200),
     totals: returnAmountsSchema,
-    payments: z.array(paymentSchema).max(2),
+    payments: z.array(refundPaymentSchema).max(2),
     originalInvoice: originalInvoiceReference,
     originalOffer: offerQuoteSchema.nullable(),
     previousAdjustedTotals: returnAmountsSchema,

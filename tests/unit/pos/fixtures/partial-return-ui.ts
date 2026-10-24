@@ -125,12 +125,16 @@ export function previewFor(state: ReturnState, request: ReturnRequest) {
     previousAdjustedTotals: state.adjustedTotals,
     totals,
     adjustedTotals: subtractReturnAmounts(state.adjustedTotals, totals),
-    payments: allocateReturnPayments(
-      state.invoice.payments,
-      state.invoice.totals.grossFils - state.adjustedTotals.grossFils,
-      totals.grossFils,
-      state.invoice.totals.grossFils
-    ),
+    payments: request.refundMethod
+      ? totals.grossFils
+        ? [{ method: request.refundMethod, amountFils: totals.grossFils }]
+        : []
+      : allocateReturnPayments(
+          state.invoice.payments,
+          state.invoice.totals.grossFils - state.adjustedTotals.grossFils,
+          totals.grossFils,
+          state.invoice.totals.grossFils
+        ),
     fullyReturned: state.invoice.lines.every(
       (line, i) =>
         state.returned[i].quantityMilli +

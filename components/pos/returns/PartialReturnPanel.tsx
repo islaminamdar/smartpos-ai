@@ -108,6 +108,7 @@ export default function PartialReturnPanel({
   const [quantities, setQuantities] = useState<Record<number, string>>({})
   const [reason, setReason] = useState(''),
     [error, setError] = useState('')
+  const [refundMethod, setRefundMethod] = useState<'cash' | 'bank_transfer'>('cash')
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState<{ request: ReturnRequest; value: ReturnPreview } | null>(
     null
@@ -154,6 +155,7 @@ export default function PartialReturnPanel({
     setState(null)
     setQuantities({})
     setReason('')
+    setRefundMethod('cash')
     setError('')
     controller.current?.abort()
     if (online) void read()
@@ -258,6 +260,7 @@ export default function PartialReturnPanel({
         expectedRevision: fresh.revision,
         lines: selections,
         reason: reason.trim(),
+        refundMethod,
       })
       const response = await load('/api/pos/returns', abort.signal, { request })
       const value = returnPreviewSchema.parse(payload(response, 'preview'))
@@ -334,8 +337,8 @@ export default function PartialReturnPanel({
         </button>
       </header>
       <p className={styles.note}>
-        Returns do not restock inventory or send a card refund. Wait for a saved credit note before
-        returning money.
+        Returns do not restock inventory. Select how the customer is refunded, then wait for the
+        saved credit note before returning money.
       </p>
       {error && (
         <p role="alert" className={styles.error}>
@@ -490,6 +493,18 @@ export default function PartialReturnPanel({
                   }}
                 />
               </label>
+              <fieldset className={styles.method}>
+                <legend>Refund method</legend>
+                <label>
+                  <input type="radio" name="refund-method" checked={refundMethod === 'cash'} disabled={paused} onChange={() => { invalidate(); setRefundMethod('cash') }} />
+                  Cash from this drawer
+                </label>
+                <label>
+                  <input type="radio" name="refund-method" checked={refundMethod === 'bank_transfer'} disabled={paused} onChange={() => { invalidate(); setRefundMethod('bank_transfer') }} />
+                  Bank transfer
+                </label>
+                <small>Bank-transfer refunds are recorded as refunded and do not reduce this drawer.</small>
+              </fieldset>
               <button
                 className={styles.primary}
                 disabled={!reviewAllowed}
@@ -558,9 +573,7 @@ export default function PartialReturnPanel({
             {preview.value.payments.map((payment) => (
               <div key={payment.method}>
                 <dt>
-                  {payment.method === 'cash'
-                    ? 'Cash to return'
-                    : 'Card refund to arrange on terminal'}
+                  {payment.method === 'cash' ? 'Cash refund' : 'Refunded by bank transfer'}
                 </dt>
                 <dd>{money(payment.amountFils)}</dd>
               </div>
@@ -588,8 +601,8 @@ export default function PartialReturnPanel({
               onChange={(event) => setConfirmed(event.target.checked)}
             />
             <span>
-              I confirm these exact items, quantities and amounts. Issue one credit note; I will
-              return money only after it is saved.
+              I confirm these exact items, quantities, amounts and refund method. Issue one credit
+              note; I will return money only after it is saved.
             </span>
           </label>
           <button

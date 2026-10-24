@@ -231,7 +231,9 @@ export default function FiscalReceipt({
               {credit
                 ? payment.method === 'cash'
                   ? 'Cash refund recorded'
-                  : 'Card refund to arrange'
+                  : payment.method === 'bank_transfer'
+                    ? 'Refunded by bank transfer'
+                    : 'Card refund to arrange'
                 : payment.method === 'cash'
                   ? 'Cash'
                   : 'Card recorded'}

@@ -48,8 +48,8 @@ const operationsSnapshotShape = z.object({
     legacyOrdersExcluded: count,
     summary,
     payments: z.array(z.object({
-      method: z.enum(['cash', 'card']), salesFils: money, refundsFils: money, netFils: integer,
-    }).strict()).length(2),
+      method: z.enum(['cash', 'card', 'bank_transfer']), salesFils: money, refundsFils: money, netFils: integer,
+    }).strict()).min(2).max(3),
   }).strict(),
   openShifts: z.object({
     ...page,
@@ -111,7 +111,7 @@ export const branchOperationsSchema = operationsSnapshotShape.superRefine((value
     s.invoiceCount + s.creditNoteCount !== sales.documentCount ||
     BigInt(s.salesGrossFils) - BigInt(s.refundGrossFils) !== BigInt(s.netGrossFils) ||
     BigInt(s.netExVatFils) + BigInt(s.vatFils) !== BigInt(s.netGrossFils) ||
-    new Set(sales.payments.map(p => p.method)).size !== 2 ||
+    new Set(sales.payments.map(p => p.method)).size !== sales.payments.length ||
     exactSum(sales.payments.map(p => p.salesFils)) !== BigInt(s.salesGrossFils) ||
     exactSum(sales.payments.map(p => p.refundsFils)) !== BigInt(s.refundGrossFils) ||
     sales.payments.some(p => BigInt(p.salesFils) - BigInt(p.refundsFils) !== BigInt(p.netFils))) fail()

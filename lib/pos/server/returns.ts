@@ -48,13 +48,16 @@ export const returnRequestShape = {
     .min(1)
     .max(240)
     .refine((value) => !value.includes('\u0000'), 'Remove the unsupported hidden character.'),
+  // This is the way money is actually returned, not the original sale tender.
+  // A bank transfer is recorded as completed outside the cash drawer.
+  refundMethod: z.enum(['cash', 'bank_transfer']).optional(),
 }
 export const returnRequestSchema = z.object(returnRequestShape).strict()
 const payments = z
   .array(
     z
       .object({
-        method: z.enum(['cash', 'card']),
+        method: z.enum(['cash', 'card', 'bank_transfer']),
         amountFils: z.number().int().min(1).max(100_000_000),
       })
       .strict()
@@ -96,14 +99,11 @@ export const returnStateSchema = z
       for (const field of returnAmountFields)
         if (remaining[field] !== state.adjustedTotals[field])
           fail('Returned balance does not reconcile.')
-      const expected = allocateReturnPayments(
-        invoice.payments,
-        0,
-        returned.grossFils,
-        invoice.totals.grossFils
+      if (
+        state.refundedPayments.reduce((sum, payment) => sum + payment.amountFils, 0) !==
+        returned.grossFils
       )
-      if (!samePayments(expected, state.refundedPayments))
-        fail('Original returned tenders do not reconcile.')
+        fail('Recorded returned money does not reconcile.')
       if (
         state.fullyReturned !==
         invoice.lines.every((line, i) => line.quantityMilli === state.returned[i].quantityMilli)
@@ -264,13 +264,16 @@ export function validateReturnPreview(
   })
   const totals = sumReturnAmounts(selected)
   const expectedRemaining = subtractReturnAmounts(state.adjustedTotals, totals)
-  const returnedGross = state.invoice.totals.grossFils - state.adjustedTotals.grossFils
-  const expectedPayments = allocateReturnPayments(
-    state.invoice.payments,
-    returnedGross,
-    totals.grossFils,
-    state.invoice.totals.grossFils
-  )
+  const expectedPayments = request.refundMethod
+    ? totals.grossFils
+      ? [{ method: request.refundMethod, amountFils: totals.grossFils }]
+      : []
+    : allocateReturnPayments(
+        state.invoice.payments,
+        state.invoice.totals.grossFils - state.adjustedTotals.grossFils,
+        totals.grossFils,
+        state.invoice.totals.grossFils
+      )
   const fullyReturned = state.invoice.lines.every(
     (line, i) =>
       state.returned[i].quantityMilli +
@@ -317,6 +320,9 @@ export function returnCreditMatchesCommand(
     bill.originalInvoice.documentId === request.invoiceId &&
     bill.returnRevision === request.expectedRevision + 1 &&
     bill.reason === request.reason &&
+    (!request.refundMethod ||
+      (bill.payments.length === (bill.totals.grossFils ? 1 : 0) &&
+        (!bill.payments.length || bill.payments[0].method === request.refundMethod))) &&
     bill.quoteHash === request.quoteHash &&
     bill.lines.length === request.lines.length &&
     request.lines.every(
