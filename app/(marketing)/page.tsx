@@ -24,11 +24,11 @@ export const metadata: Metadata = {
   alternates: { canonical: '/' },
   title: 'Internext POS · From first order to final cash count',
   description:
-    'Restaurant POS with an online counter pilot, a separate training workspace and plans for Android offline use. US$100 per branch per month, multiple devices included.',
+    'Restaurant POS with an online counter pilot, a separate training workspace and plans for Android offline use. AED 100 per branch per month, multiple devices included.',
   openGraph: {
     title: 'Internext POS · Your restaurant, in order',
     description:
-      'Explore the online counter pilot and training workspace. US$100 per branch per month. Android offline use and recurring PayPal billing are in development.',
+      'Explore the online counter pilot and training workspace. AED 100 per branch per month. Android offline use is in development.',
   },
 }
 
@@ -139,7 +139,7 @@ export default function Landing() {
             </p>
             <div className="ip-hero-plan">
               <span>
-                <strong>US$100</strong> / branch / month
+                <strong>AED 100</strong> / branch / month
               </span>
               <span>Multiple devices included</span>
             </div>
@@ -354,7 +354,7 @@ export default function Landing() {
             <div className="ip-billing-note">
               <CreditCard size={21} aria-hidden="true" />
               <p>
-                <strong>Recurring PayPal billing is in development.</strong>
+                <strong>Manual branch subscription collection.</strong>
                 <br />
                 Subscription checkout is not enabled yet.
               </p>
@@ -366,7 +366,7 @@ export default function Landing() {
               <Store size={25} strokeWidth={1.5} aria-hidden="true" />
             </div>
             <div className="ip-price">
-              <span>US$</span>
+              <span>AED</span>
               <strong>100</strong>
             </div>
             <p>per branch, per month</p>
