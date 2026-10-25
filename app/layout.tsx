@@ -6,11 +6,11 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://pos.internext.info'),
   title: 'Internext POS · Your restaurant, in order',
   description:
-    'Restaurant POS for ordering, shifts and branches. AED 100 per branch per month, all features included.',
+    'Restaurant POS for ordering, kitchen workflow, receipts and shifts. US$100 per branch per month, multiple devices included.',
   icons: { icon: '/pos-icon.svg' },
   openGraph: {
     title: 'Internext POS · Your restaurant, in order',
-    description: 'Explore the restaurant POS training preview. AED 100 per branch per month.',
+    description: 'Explore the restaurant POS training preview. US$100 per branch per month.',
     type: 'website',
     images: [
       {

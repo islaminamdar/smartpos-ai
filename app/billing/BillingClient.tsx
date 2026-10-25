@@ -215,7 +215,7 @@ export default function BillingClient() {
             US$100 <span>/ month / branch</span>
           </div>
           <p>
-            All POS features, unlimited staff and multiple counter devices. Features still in
+            Released POS features, multiple staff and multiple counter devices. Features still in
             preparation, including offline live sales and Android deployment, become available when
             released.
           </p>

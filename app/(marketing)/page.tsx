@@ -24,11 +24,11 @@ export const metadata: Metadata = {
   alternates: { canonical: '/' },
   title: 'Internext POS · From first order to final cash count',
   description:
-    'Restaurant POS with an online counter pilot, a separate training workspace and plans for Android offline use. AED 100 per branch per month, multiple devices included.',
+    'Restaurant POS with an online counter, kitchen workflow, receipts, reports and a separate training workspace. US$100 per branch per month, multiple devices included.',
   openGraph: {
     title: 'Internext POS · Your restaurant, in order',
     description:
-      'Explore the online counter pilot and training workspace. AED 100 per branch per month. Android offline use is in development.',
+      'Explore the online restaurant POS and isolated training workspace. US$100 per branch per month. Android offline use is in development.',
   },
 }
 
@@ -127,9 +127,12 @@ export default function Landing() {
               people behind a busy restaurant counter.
             </p>
             <div className="ip-actions">
-              <Link href="/counter" className="ip-button">
-                Open staff counter <ArrowRight size={18} aria-hidden="true" />
-              </Link>
+              <a
+                href="https://wa.me/971557133786?text=Hi%20Internext%2C%20I%27d%20like%20to%20book%20a%20Smart%20AI%20POS%20demo."
+                className="ip-button"
+              >
+                Book a live demo <ArrowRight size={18} aria-hidden="true" />
+              </a>
               <Link href="/pos" className="ip-button ip-button-outline">
                 Explore training
               </Link>
@@ -139,7 +142,7 @@ export default function Landing() {
             </p>
             <div className="ip-hero-plan">
               <span>
-                <strong>AED 100</strong> / branch / month
+                <strong>US$100</strong> / branch / month
               </span>
               <span>Multiple devices included</span>
             </div>
@@ -338,7 +341,7 @@ export default function Landing() {
             </h2>
             <p>
               Start with the branch you have today. Add another when you’re ready. The plan includes
-              multiple devices and all product features as they’re released.
+              multiple staff and devices, plus the product features currently released.
             </p>
             <ul>
               <li>
@@ -366,7 +369,7 @@ export default function Landing() {
               <Store size={25} strokeWidth={1.5} aria-hidden="true" />
             </div>
             <div className="ip-price">
-              <span>AED</span>
+              <span>US$</span>
               <strong>100</strong>
             </div>
             <p>per branch, per month</p>
@@ -375,12 +378,15 @@ export default function Landing() {
               <span>
                 Your branch. Multiple devices.
                 <br />
-                Every product feature as released.
+                Released online POS features.
               </span>
             </div>
-            <Link href="/billing" className="ip-button ip-button-light">
-              Subscription details <ArrowRight size={18} aria-hidden="true" />
-            </Link>
+            <a
+              href="https://wa.me/971557133786?text=Hi%20Internext%2C%20I%27d%20like%20to%20book%20a%20Smart%20AI%20POS%20demo%20for%20US%24100%20per%20branch%20per%20month."
+              className="ip-button ip-button-light"
+            >
+              Book a live demo <ArrowRight size={18} aria-hidden="true" />
+            </a>
             <Link href="/pos" className="ip-price-training">
               Explore the training workspace first
             </Link>
