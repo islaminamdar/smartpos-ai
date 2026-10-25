@@ -37,6 +37,7 @@ describe('training-only hosted release', () => {
       '/pos.webmanifest',
       '/_next/static/app.js',
       '/pos-assets/menu/photo.webp',
+      '/product-previews/restaurant.webp',
       '/api/pos/health',
     ])
       expect(publicReleaseAccess(path, 'GET')).toBe('allow')

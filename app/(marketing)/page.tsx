@@ -37,6 +37,14 @@ const dishes = [
   { image: 'I015725332A', name: 'Pav Bhaji', category: 'Veg special' },
   { image: 'I034443848A', name: 'Malpua with Rabdi', category: 'Sweets & bakery' },
 ]
+const industryPreviews = [
+  { image: 'restaurant', title: 'Restaurants & cafés', text: 'Menus, tables, open orders and kitchen dispatch.', status: 'Available online' },
+  { image: 'grocery', title: 'Grocery & convenience', text: 'Piece, pack, kilogram and litre-based sales.', status: 'Demo configuration' },
+  { image: 'pet-shop', title: 'Pet shops', text: 'Products, stock levels, offers and receipt history.', status: 'Demo configuration' },
+  { image: 'fashion', title: 'Fashion & retail', text: 'Collections, product options, offers and returns.', status: 'Demo configuration' },
+  { image: 'salon', title: 'Salons & services', text: 'Services and retail products in one checkout.', status: 'Workflow review' },
+  { image: 'wholesale', title: 'Wholesale', text: 'Bulk quantities, receiving, adjustments and reports.', status: 'Workflow review' },
+]
 const steps = [
   {
     icon: LayoutGrid,
@@ -230,6 +238,23 @@ export default function Landing() {
               ))}
             </ol>
           </div>
+        </section>
+        <section className="ip-industries ip-wrap" aria-labelledby="industries-title">
+          <div className="ip-section-heading">
+            <h2 id="industries-title">See your kind of counter.</h2>
+            <p>Restaurant workflows are available online. Retail samples are demo configurations; service and wholesale workflows need review before launch.</p>
+          </div>
+          <div className="ip-industry-grid">
+            {industryPreviews.map((item) => (
+              <figure key={item.image} className="ip-industry-card">
+                <a href={`/product-previews/${item.image}.webp`} target="_blank" rel="noreferrer" aria-label={`Open a larger ${item.title} sample interface`}>
+                  <img src={`/product-previews/${item.image}.webp`} alt={`Sample Internext POS checkout for ${item.title}, with an industry catalogue, current order and checkout controls`} width={800} height={520} loading="lazy" decoding="async" />
+                </a>
+                <figcaption><div><h3>{item.title}</h3><em>{item.status}</em></div><span>{item.text}</span><small>Open full-size preview (new tab).</small></figcaption>
+              </figure>
+            ))}
+          </div>
+          <p className="ip-industry-boundary">Medical and pharmacy use needs a suitability review. Batch, expiry and regulated-medicine controls are not currently presented as released features.</p>
         </section>
         <section id="features" className="ip-availability ip-wrap" aria-labelledby="features-title">
           <div className="ip-availability-copy">

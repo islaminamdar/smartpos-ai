@@ -135,6 +135,11 @@ export function publicReleaseAccess(
     ].includes(path)
   )
     return 'allow'
-  if (path.startsWith('/_next/static/') || path.startsWith('/pos-assets/')) return 'allow'
+  if (
+    path.startsWith('/_next/static/') ||
+    path.startsWith('/pos-assets/') ||
+    /^\/product-previews\/[a-z0-9-]+\.webp$/.test(path)
+  )
+    return 'allow'
   return 'not_found'
 }
