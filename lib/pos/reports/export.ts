@@ -70,7 +70,11 @@ export function reportCsv(report: BranchReport) {
       ...prefix,
       'Payment',
       row.method,
-      row.method === 'card' ? 'Recorded card' : 'Cash',
+      row.method === 'cash'
+        ? 'Cash'
+        : row.method === 'bank_transfer'
+          ? 'Bank transfer'
+          : 'Recorded card',
       '',
       '',
       '',

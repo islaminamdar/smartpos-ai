@@ -260,7 +260,11 @@ export default function BranchReports({
               title="Recorded payments"
               headers={['Method', 'Sales', 'Refunds', 'Net']}
               rows={current.payments.map((payment) => [
-                payment.method === 'cash' ? 'Cash' : 'Recorded card',
+                payment.method === 'cash'
+                  ? 'Cash'
+                  : payment.method === 'bank_transfer'
+                    ? 'Bank transfer'
+                    : 'Recorded card',
                 money(payment.salesFils),
                 money(payment.refundsFils),
                 money(payment.netFils),

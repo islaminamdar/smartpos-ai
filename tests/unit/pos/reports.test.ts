@@ -83,6 +83,7 @@ describe('authoritative branch reports', () => {
     expect(result.headers.get('content-type')).toContain('text/csv')
     expect(result.headers.get('content-disposition')).toContain('2026-10-16-to-2026-10-16.csv')
     expect(await result.text()).toContain('Recorded card')
+    expect(await (await GET(request('&format=csv'))).text()).toContain('Bank transfer')
     const csv = reportCsv({
       ...branchReport,
       branchName: '=HYPERLINK("evil")',

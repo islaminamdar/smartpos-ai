@@ -24,6 +24,7 @@ export const branchReport: BranchReport = {
   payments: [
     { method: 'cash', salesFils: 600, refundsFils: 0, netFils: 600 },
     { method: 'card', salesFils: 450, refundsFils: 0, netFils: 450 },
+    { method: 'bank_transfer', salesFils: 0, refundsFils: 0, netFils: 0 },
   ],
   vatRates: [{ taxRateBps: 500, ...amounts }],
   products: [

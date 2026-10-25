@@ -28,6 +28,7 @@ it('loads real scoped results and links export to the verified dates', async () 
     `branchId=${reportBranch}&start=2026-10-16&end=2026-10-16&format=csv`
   )
   expect(screen.getByText('Recorded card')).toBeInTheDocument()
+  expect(screen.getByText('Bank transfer')).toBeInTheDocument()
   expect(screen.getByText('Sweet')).toBeInTheDocument()
   fireEvent.change(screen.getByLabelText('Find a product'), { target: { value: 'unmatched' } })
   expect(screen.queryByText('Sweet')).toBeNull()

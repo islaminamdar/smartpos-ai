@@ -221,7 +221,13 @@ function Board(props: Props) {
             <dl className={styles.values}>
               {current.sales.payments.map((payment) => (
                 <div key={payment.method}>
-                  <dt>{payment.method === 'cash' ? 'Recorded net cash' : 'Recorded net card'}</dt>
+                  <dt>
+                    {payment.method === 'cash'
+                      ? 'Recorded net cash'
+                      : payment.method === 'bank_transfer'
+                        ? 'Recorded net bank transfer'
+                        : 'Recorded net card'}
+                  </dt>
                   <dd>{money(payment.netFils)}</dd>
                 </div>
               ))}
