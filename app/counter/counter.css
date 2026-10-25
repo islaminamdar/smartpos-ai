@@ -1474,3 +1474,40 @@
     border-top-width: 5px;
   }
 }
+
+.lc-customer-lookup {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--lc-line, #d8dee9);
+}
+.lc-customer-lookup h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+.lc-customer-lookup > label {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.65rem;
+  font-weight: 600;
+}
+.lc-customer-lookup ul {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0;
+  margin: 0.75rem 0 0;
+  list-style: none;
+}
+.lc-customer-lookup li {
+  margin: 0;
+}
+.lc-customer-lookup li button {
+  width: 100%;
+  display: grid;
+  gap: 0.18rem;
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+}
+.lc-customer-lookup li button span,
+.lc-customer-lookup li button small {
+  display: block;
+}

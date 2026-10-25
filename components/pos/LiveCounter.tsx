@@ -22,6 +22,7 @@ import {
   type PendingOnlineRequest,
 } from '@/lib/pos/online-journal'
 import FiscalReceipt from './FiscalReceipt'
+import CustomerReceiptLookup from './customer/CustomerReceiptLookup'
 import TapChoices from './TapChoices'
 import MerchantIdentity from './branding/MerchantIdentity'
 import { matchingMerchantBranding } from '@/lib/pos/branding'
@@ -2327,6 +2328,18 @@ export default function LiveCounter({
                       </button>
                     )}
                   </div>
+                  <CustomerReceiptLookup
+                    documents={documents}
+                    onUseCustomer={(customer) => {
+                      setBuyerName(customer.name)
+                      setBuyerAddress(customer.address)
+                      setBuyerTrn(customer.trn ?? '')
+                      setNotice(
+                        'Customer details copied from the selected invoice. Review them before payment.'
+                      )
+                      setView('sell')
+                    }}
+                  />
                 </div>
                 {selected && (
                   <div className="lc-document-detail">
