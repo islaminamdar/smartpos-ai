@@ -30,6 +30,7 @@ type Props = {
   onBusyChange?: (busy: boolean) => void
 }
 type MovementType = 'stock.receive' | 'stock.waste' | 'stock.count' | 'stock.adjust'
+type InventoryFilter = 'all' | 'low' | 'uncounted' | 'inactive'
 const names: Record<MovementType, string> = {
   'stock.receive': 'Receive',
   'stock.waste': 'Waste',
@@ -102,7 +103,7 @@ function Manager({ actorId, branchId, branchName, deviceId, disabled, onBusyChan
   const [list, setList] = useState<InventoryList | null>(null)
   const [items, setItems] = useState<StockItem[]>([])
   const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState('all')
+  const [filter, setFilter] = useState<InventoryFilter>('all')
   const [listBusy, setListBusy] = useState(false)
   const [listFresh, setListFresh] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -439,6 +440,10 @@ function Manager({ actorId, branchId, branchName, deviceId, disabled, onBusyChan
   }
 
   const blocked = disabled || busy || !!pending || !ready
+  function showStock(filterValue: InventoryFilter) {
+    setSearch('')
+    setFilter(filterValue)
+  }
   function saveItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (blocked || lock.current || (!adding && (!item || !historyFresh)) || !listFresh) return
@@ -603,10 +608,56 @@ function Manager({ actorId, branchId, branchName, deviceId, disabled, onBusyChan
         </section>
       )}
       {list && (
-        <p className={styles.help}>
-          {list.counts.activeItems} active items · {list.counts.lowStockItems} low stock ·{' '}
-          {list.counts.uncountedItems} not counted{!listFresh ? ' · Refresh needed' : ''}
-        </p>
+        <section className={styles.overview} aria-label="Stock overview">
+          <button
+            type="button"
+            className={styles.overviewCard}
+            aria-pressed={filter === 'all'}
+            disabled={busy || listBusy}
+            onClick={() => showStock('all')}
+          >
+            <span>All stock items</span>
+            <strong>{list.counts.totalItems}</strong>
+            <small>{list.counts.activeItems} active</small>
+          </button>
+          <button
+            type="button"
+            className={styles.overviewCard}
+            aria-pressed={filter === 'low'}
+            disabled={busy || listBusy}
+            onClick={() => showStock('low')}
+          >
+            <span>Low stock</span>
+            <strong>{list.counts.lowStockItems}</strong>
+            <small>At or below reorder level</small>
+          </button>
+          <button
+            type="button"
+            className={styles.overviewCard}
+            aria-pressed={filter === 'uncounted'}
+            disabled={busy || listBusy}
+            onClick={() => showStock('uncounted')}
+          >
+            <span>Needs a count</span>
+            <strong>{list.counts.uncountedItems}</strong>
+            <small>Quantity has not been verified</small>
+          </button>
+          <button
+            type="button"
+            className={styles.overviewCard}
+            aria-pressed={filter === 'inactive'}
+            disabled={busy || listBusy}
+            onClick={() => showStock('inactive')}
+          >
+            <span>Paused stock</span>
+            <strong>{list.counts.inactiveItems}</strong>
+            <small>Not available for movements</small>
+          </button>
+          <p className={styles.overviewHelp}>
+            Select a card to filter the list. Figures are from recorded stock movements only
+            {!listFresh ? ' · Refresh needed' : ''}.
+          </p>
+        </section>
       )}
       <div className={styles.layout}>
         <div>
@@ -626,7 +677,7 @@ function Manager({ actorId, branchId, branchName, deviceId, disabled, onBusyChan
               <select
                 value={filter}
                 disabled={busy}
-                onChange={(event) => setFilter(event.target.value)}
+                onChange={(event) => setFilter(event.target.value as InventoryFilter)}
               >
                 <option value="all">All stock</option>
                 <option value="low">Low stock</option>

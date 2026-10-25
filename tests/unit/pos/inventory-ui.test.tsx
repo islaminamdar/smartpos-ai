@@ -239,6 +239,45 @@ const fillMovement = (quantity: string, reason = 'Manager checked stock') => {
 }
 
 describe('stock manager quantities and movements', () => {
+  it('shows recorded stock status at a glance and filters the list from its cards', async () => {
+    items = [
+      { ...base, id: id(4), name: 'Flour', onHandMilli: 2000, movementCount: 1, revision: 2 },
+      {
+        ...base,
+        id: id(5),
+        name: 'Milk',
+        sku: 'MILK',
+        onHandMilli: null,
+        movementCount: 0,
+      },
+      {
+        ...base,
+        id: id(6),
+        name: 'Old packaging',
+        sku: 'OLD-PACK',
+        active: false,
+        onHandMilli: null,
+        movementCount: 0,
+      },
+    ]
+    render(<StockManager {...props} />)
+    const overview = await screen.findByRole('region', { name: 'Stock overview' })
+    expect(overview).toHaveTextContent('All stock items3')
+    expect(overview).toHaveTextContent('Low stock1')
+    expect(overview).toHaveTextContent('Needs a count1')
+    expect(overview).toHaveTextContent('Paused stock1')
+    fireEvent.click(screen.getByRole('button', { name: /Needs a count1/ }))
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /FlourFLOUR/ })).not.toBeInTheDocument()
+    )
+    expect(screen.getByRole('button', { name: /MilkMILK/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Needs a count1/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    expect(screen.getByLabelText('Show stock')).toHaveValue('uncounted')
+  })
+
   it('loads stock pages without losing prior items and resets the page on a search change', async () => {
     items = Array.from({ length: 52 }, (_, index) => ({
       ...base,
