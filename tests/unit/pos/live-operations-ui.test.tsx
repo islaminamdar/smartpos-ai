@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import LiveCounter from '@/components/pos/LiveCounter'
 import type { LiveBootstrap } from '@/lib/pos/server/live-contracts'
 vi.mock('@/components/pos/offline-payments/journal', () => ({
@@ -25,14 +25,20 @@ vi.mock('@/lib/pos/open-order-journal', () => ({
   savePendingOpenOrderRequest: vi.fn(),
   acknowledgeOpenOrderRequest: vi.fn(),
 }))
+type OperationsMockProps = {
+  branchId: string
+  branches: Array<{ role: string; name: string }>
+  disabled: boolean
+  onNavigate: (destination: 'reports') => void
+}
 vi.mock('@/components/pos/operations/BranchOperations', () => ({
-  default: ({ branchId, branches, disabled, onNavigate }: any) => (
+  default: ({ branchId, branches, disabled, onNavigate }: OperationsMockProps) => (
     <section aria-label="Operations integration">
       <p>Bound branch: {branchId}</p>
       <p>
         {branches
-          .filter((b: any) => b.role !== 'cashier')
-          .map((b: any) => b.name)
+          .filter((branch) => branch.role !== 'cashier')
+          .map((branch) => branch.name)
           .join(', ')}
       </p>
       <button disabled={disabled} onClick={() => onNavigate('reports')}>
@@ -112,6 +118,7 @@ let boot: LiveBootstrap
 let fetchMock: ReturnType<typeof vi.fn>
 beforeEach(() => {
   boot = structuredClone(initialBoot)
+  localStorage.clear()
   Element.prototype.scrollIntoView = vi.fn()
   fetchMock = vi.fn(async (url: string) => {
     if (url === '/api/pos/bootstrap') return new Response(JSON.stringify(boot))
@@ -197,6 +204,37 @@ it('blocks Android update handoff during an open counter shift', async () => {
     'data-counter-update-ready',
     'false'
   )
+})
+
+it('stores favourites on this counter and filters without changing the basket', async () => {
+  const secondProductId = id(9)
+  boot.catalogue.push({
+    ...boot.catalogue[0],
+    id: secondProductId,
+    name: 'Other sweet',
+  })
+  const first = render(<LiveCounter />)
+  const teaCard = (await screen.findByRole('button', { name: /Test tea/ })).closest('article')!
+  fireEvent.click(within(teaCard).getByRole('button', { name: 'Add favourite' }))
+  expect(within(teaCard).getByRole('button', { name: 'Remove favourite' })).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  )
+  expect(screen.getByRole('button', { name: /Show favourites/ })).toHaveTextContent('1')
+  expect(screen.getByText('Order · 0')).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: /Show favourites/ }))
+  expect(screen.getByRole('button', { name: /Test tea/ })).toBeVisible()
+  expect(screen.queryByRole('button', { name: /Other sweet/ })).toBeNull()
+  expect(localStorage.getItem(`internext-pos:favourites:${actorId}:${branchId}`)).toBe(
+    JSON.stringify([productId])
+  )
+  first.unmount()
+
+  render(<LiveCounter />)
+  await waitFor(() => expect(screen.getByRole('button', { name: /Show favourites/ })).toBeEnabled())
+  fireEvent.click(screen.getByRole('button', { name: /Show favourites/ }))
+  expect(screen.getByRole('button', { name: /Test tea/ })).toBeVisible()
+  expect(screen.queryByRole('button', { name: /Other sweet/ })).toBeNull()
 })
 
 it('allows a fresh login screen update but blocks the login request in flight', async () => {

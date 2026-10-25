@@ -268,10 +268,48 @@
   padding: 0;
   overflow: hidden;
   text-align: left;
+  min-width: 0;
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: white;
+}
+.lc-app .lc-product-select {
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  text-align: left;
   display: flex;
   flex-direction: column;
   min-width: 0;
+  width: 100%;
+  min-height: 0;
   justify-content: flex-start;
+}
+.lc-favourite-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  min-width: 38px;
+  min-height: 38px !important;
+  padding: 4px !important;
+  border-radius: 50% !important;
+  background: #fffffff2 !important;
+  color: #9b466e !important;
+  font-size: 21px !important;
+  line-height: 1;
+}
+.lc-favourite-toggle[aria-pressed='true'] {
+  color: #d31869 !important;
+  border-color: #f1bad5 !important;
+}
+.lc-favourites-filter[aria-pressed='true'] {
+  border-color: var(--blue);
+  background: #eaf1ff;
+  color: var(--blue);
 }
 .lc-product img,
 .lc-photo-empty {
@@ -300,13 +338,13 @@
   background: #fff6e5;
   text-align: center;
 }
-.lc-product > span:not(.lc-photo-empty) {
+.lc-product-select > span:not(.lc-photo-empty) {
   padding: 12px 12px 4px;
   font-size: 14px;
   line-height: 1.35;
   flex: 1;
 }
-.lc-product > strong {
+.lc-product-select > strong {
   padding: 4px 12px 13px;
   font-size: 14px;
   color: var(--blue);
@@ -613,7 +651,7 @@
     max-height: 58vh;
     gap: 10px;
   }
-  .lc-product > span:not(.lc-photo-empty) {
+  .lc-product-select > span:not(.lc-photo-empty) {
     font-size: 13px;
   }
   .lc-status {
@@ -1029,25 +1067,25 @@
     box-shadow 120ms ease,
     transform 120ms ease;
 }
-.lc-app[data-merchant-theme='mithaiwala'] .lc-product:hover:not(:disabled) {
+.lc-app[data-merchant-theme='mithaiwala'] .lc-product:not([data-unavailable='true']):hover {
   border-color: #b80066;
   box-shadow: 0 8px 20px #b8006620;
   transform: translateY(-1px);
 }
-.lc-app[data-merchant-theme='mithaiwala'] .lc-product:active:not(:disabled) {
+.lc-app[data-merchant-theme='mithaiwala'] .lc-product:not([data-unavailable='true']):active {
   transform: translateY(0);
 }
 .lc-app[data-merchant-theme='mithaiwala'] .lc-product img,
 .lc-app[data-merchant-theme='mithaiwala'] .lc-photo-empty {
   aspect-ratio: 1 / 0.78;
 }
-.lc-app[data-merchant-theme='mithaiwala'] .lc-product > span:not(.lc-photo-empty) {
+.lc-app[data-merchant-theme='mithaiwala'] .lc-product-select > span:not(.lc-photo-empty) {
   padding: 11px 11px 3px;
   font-weight: 700;
   font-size: 13px;
   line-height: 1.3;
 }
-.lc-app[data-merchant-theme='mithaiwala'] .lc-product > strong {
+.lc-app[data-merchant-theme='mithaiwala'] .lc-product-select > strong {
   color: #a5005b;
   font-size: 14px;
   padding: 3px 11px 12px;
@@ -1061,7 +1099,7 @@
   font-weight: 700;
   padding: 6px 9px;
 }
-.lc-app[data-merchant-theme='mithaiwala'] .lc-product:disabled {
+.lc-app[data-merchant-theme='mithaiwala'] .lc-product[data-unavailable='true'] {
   cursor: not-allowed;
   opacity: 0.7;
   filter: grayscale(0.25);
@@ -1263,7 +1301,9 @@
 }
 .lc-app[data-merchant-theme='mithaiwala'] .lc-merchant-identity img {
   border-radius: 50%;
-  box-shadow: 0 0 0 3px #fff, 0 0 0 5px #f03576;
+  box-shadow:
+    0 0 0 3px #fff,
+    0 0 0 5px #f03576;
 }
 .lc-app[data-merchant-theme='mithaiwala'] .lc-merchant-name strong {
   color: #6725c6;
@@ -1349,7 +1389,12 @@
     font-size: 12px;
     font-weight: 700;
   }
-  .lc-app[data-merchant-theme='mithaiwala'] .lc-filters > .lc-tap-choices .lc-tap-choice input:checked + span {
+  .lc-app[data-merchant-theme='mithaiwala']
+    .lc-filters
+    > .lc-tap-choices
+    .lc-tap-choice
+    input:checked
+    + span {
     border-color: #ffd3e5;
     background: #ffe2ef;
     box-shadow: none;
@@ -1375,11 +1420,11 @@
   border-radius: 16px;
   box-shadow: 0 5px 14px #3f1c4a12;
 }
-.lc-app[data-merchant-theme='mithaiwala'] .lc-product:hover:not(:disabled) {
+.lc-app[data-merchant-theme='mithaiwala'] .lc-product:not([data-unavailable='true']):hover {
   border-color: #f03576;
   box-shadow: 0 10px 24px #f035762c;
 }
-.lc-app[data-merchant-theme='mithaiwala'] .lc-product > strong {
+.lc-app[data-merchant-theme='mithaiwala'] .lc-product-select > strong {
   color: #e61d6b;
 }
 .lc-app[data-merchant-theme='mithaiwala'] .lc-illustration-label {
@@ -1422,7 +1467,7 @@
   .lc-app[data-merchant-theme='mithaiwala'] .lc-product {
     border-radius: 13px;
   }
-  .lc-app[data-merchant-theme='mithaiwala'] .lc-product > span:not(.lc-photo-empty) {
+  .lc-app[data-merchant-theme='mithaiwala'] .lc-product-select > span:not(.lc-photo-empty) {
     font-size: 12px;
   }
   .lc-app[data-merchant-theme='mithaiwala'] .lc-order {

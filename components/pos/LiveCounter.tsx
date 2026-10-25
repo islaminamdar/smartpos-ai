@@ -102,6 +102,24 @@ class ApiError extends Error {
   }
 }
 const currency = (value: number) => `AED ${formatFils(value)}`
+function favouritesStorageKey(userId: string | undefined, branchId: string) {
+  return userId && branchId ? `internext-pos:favourites:${userId}:${branchId}` : null
+}
+
+function storedFavourites(key: string | null, productIds: string[]) {
+  if (!key || typeof window === 'undefined') return []
+  try {
+    const raw: unknown = JSON.parse(window.localStorage.getItem(key) ?? '[]')
+    if (!Array.isArray(raw)) return []
+    const available = new Set(productIds)
+    return Array.from(new Set(raw.filter((value): value is string => typeof value === 'string')))
+      .filter((id) => available.has(id))
+      .slice(0, 100)
+  } catch {
+    return []
+  }
+}
+
 const humanError = (error: unknown) => {
   if (error instanceof ApiError) {
     if (error.code === 'invalid_credentials')
@@ -214,6 +232,8 @@ export default function LiveCounter({
   const [view, setView] = useState<View>('sell')
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('All')
+  const [favouriteIds, setFavouriteIds] = useState<string[]>([])
+  const [favouritesOnly, setFavouritesOnly] = useState(false)
   const [basket, setBasket] = useState<BasketLine[]>([])
   const [serviceType, setServiceType] = useState<LiveOrder['serviceType']>('takeaway')
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'split'>('cash')
@@ -260,12 +280,27 @@ export default function LiveCounter({
     pendingCommand?.success &&
     ['refund.full', 'refund.items'].includes(pendingCommand.data.command.type)
   const products = boot?.catalogue.filter((item) => item.branchId === branchId) ?? []
+  const favouritesKey = favouritesStorageKey(boot?.userId, branchId)
+  const catalogueProductIds = useMemo(
+    () =>
+      (boot?.catalogue ?? [])
+        .filter((product) => product.branchId === branchId)
+        .map((product) => product.id),
+    [boot?.catalogue, branchId]
+  )
+  const activeFavouriteIds = favouriteIds.filter((id) => catalogueProductIds.includes(id))
   const visibleProducts = products.filter(
     (item) =>
       (category === 'All' || item.category === category) &&
+      (!favouritesOnly || activeFavouriteIds.includes(item.id)) &&
       item.name.toLowerCase().includes(search.toLowerCase().trim())
   )
   const categories = Array.from(new Set(products.map((item) => item.category)))
+
+  useEffect(() => {
+    setFavouriteIds(storedFavourites(favouritesKey, catalogueProductIds))
+    setFavouritesOnly(false)
+  }, [favouritesKey, catalogueProductIds])
   const counterLabels: Record<View, string> = {
     sell: 'Sell',
     kitchen: 'Kitchen',
@@ -957,6 +992,18 @@ export default function LiveCounter({
           )
         : [...current, { product, quantityMilli: product.unit === 'kg' ? 250 : 1000 }]
     })
+  }
+  function toggleFavourite(productId: string) {
+    if (!favouritesKey) return
+    const next = activeFavouriteIds.includes(productId)
+      ? activeFavouriteIds.filter((id) => id !== productId)
+      : [...activeFavouriteIds, productId]
+    try {
+      window.localStorage.setItem(favouritesKey, JSON.stringify(next))
+      setFavouriteIds(next)
+    } catch {
+      setError('This browser could not save favourites. Your order has not changed.')
+    }
   }
   function resolvedOpenOrderElsewhere(
     command: OpenOrderCommand,
@@ -1827,47 +1874,87 @@ export default function LiveCounter({
                       onChange={setCategory}
                       options={['All', ...categories].map((item) => ({ value: item, label: item }))}
                     />
+                    <button
+                      type="button"
+                      className="lc-favourites-filter"
+                      aria-pressed={favouritesOnly}
+                      disabled={!activeFavouriteIds.length}
+                      onClick={() => setFavouritesOnly((current) => !current)}
+                    >
+                      {favouritesOnly ? 'Showing favourites' : 'Show favourites'} ·{' '}
+                      {activeFavouriteIds.length}
+                    </button>
                   </div>
                   <div className="lc-products">
                     {visibleProducts.map((product) => {
                       const illustration = temporaryMenuIllustration(product)
+                      const favourite = activeFavouriteIds.includes(product.id)
                       return (
-                        <button
+                        <article
                           key={product.id}
                           className="lc-product"
-                          disabled={basketLocked || product.unitPriceFils <= 0}
-                          onClick={() => add(product)}
+                          data-unavailable={product.unitPriceFils <= 0 || undefined}
                         >
-                          {product.imageUrl?.startsWith('/pos-assets/') ? (
-                            <img src={product.imageUrl} alt="" loading="lazy" />
-                          ) : illustration ? (
-                            <>
-                              <img
-                                src={illustration.src}
-                                alt=""
-                                loading="lazy"
-                                className="lc-illustration"
-                              />
-                              <small className="lc-illustration-label">{illustration.label}</small>
-                            </>
-                          ) : (
-                            <span className="lc-photo-empty">Photo pending</span>
-                          )}
-                          <span>{product.name}</span>
-                          <strong>
-                            {currency(product.unitPriceFils)}
-                            {product.unit === 'kg' ? ' / kg' : ''}
-                          </strong>
-                          {product.unitPriceFils <= 0 && (
-                            <small className="lc-product-unavailable">
-                              Price pending · unavailable
-                            </small>
-                          )}
-                        </button>
+                          <button
+                            type="button"
+                            className="lc-product-select"
+                            disabled={basketLocked || product.unitPriceFils <= 0}
+                            onClick={() => add(product)}
+                          >
+                            {product.imageUrl?.startsWith('/pos-assets/') ? (
+                              <img src={product.imageUrl} alt="" loading="lazy" />
+                            ) : illustration ? (
+                              <>
+                                <img
+                                  src={illustration.src}
+                                  alt=""
+                                  loading="lazy"
+                                  className="lc-illustration"
+                                />
+                                <small className="lc-illustration-label">
+                                  {illustration.label}
+                                </small>
+                              </>
+                            ) : (
+                              <span className="lc-photo-empty">Photo pending</span>
+                            )}
+                            <span id={`product-name-${product.id}`}>{product.name}</span>
+                            <strong>
+                              {currency(product.unitPriceFils)}
+                              {product.unit === 'kg' ? ' / kg' : ''}
+                            </strong>
+                            {product.unitPriceFils <= 0 && (
+                              <small className="lc-product-unavailable">
+                                Price pending · unavailable
+                              </small>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            className="lc-favourite-toggle"
+                            aria-pressed={favourite}
+                            aria-label={favourite ? 'Remove favourite' : 'Add favourite'}
+                            aria-describedby={`product-name-${product.id}`}
+                            title={
+                              favourite
+                                ? `Remove ${product.name} from favourites`
+                                : `Add ${product.name} to favourites`
+                            }
+                            onClick={() => toggleFavourite(product.id)}
+                          >
+                            {favourite ? '★' : '☆'}
+                          </button>
+                        </article>
                       )
                     })}
                   </div>
-                  {!visibleProducts.length && <p>No available items match your search.</p>}
+                  {!visibleProducts.length && (
+                    <p>
+                      {favouritesOnly
+                        ? 'No favourites match these filters.'
+                        : 'No available items match your search.'}
+                    </p>
+                  )}
                 </section>
                 <aside className="lc-order" ref={orderRef} aria-label="Current order">
                   <h2>{sourceTab ? sourceTab.label : 'Current order'}</h2>
