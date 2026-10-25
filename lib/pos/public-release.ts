@@ -132,6 +132,8 @@ export function publicReleaseAccess(
       '/pos-icon.svg',
       '/pos-share.png',
       '/pos-share.svg',
+      '/robots.txt',
+      '/sitemap.xml',
     ].includes(path)
   )
     return 'allow'

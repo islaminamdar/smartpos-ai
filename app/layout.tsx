@@ -4,13 +4,43 @@ import BrowserCompatibility from './BrowserCompatibility'
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://pos.internext.info'),
-  title: 'Internext POS · Point of sale for restaurants and retail',
+  title: {
+    default: 'Restaurant POS Dubai | Retail POS Demos | Internext',
+    template: '%s | Internext POS',
+  },
   description:
-    'POS software for restaurants, grocery stores, pet shops and retail counters. Sales, stock, receipts and shifts for US$100 per branch per month.',
+    'Online restaurant POS software in Dubai, with configured retail demos. Sales, stock, receipt details and shifts for US$100 per branch per month.',
+  applicationName: 'Internext POS',
+  authors: [{ name: 'Internext Information Technology', url: 'https://internext.info/' }],
+  creator: 'Internext Information Technology',
+  publisher: 'Internext Information Technology',
+  keywords: [
+    'POS software Dubai',
+    'restaurant POS Dubai',
+    'retail POS UAE',
+    'point of sale software Dubai',
+    'grocery POS Dubai',
+    'cloud POS UAE',
+  ],
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+      'max-video-preview': -1,
+    },
+  },
   icons: { icon: '/pos-icon.svg' },
+  other: { 'geo.region': 'AE-DU', 'geo.placename': 'Dubai' },
   openGraph: {
-    title: 'Internext POS · Your counter, in order',
-    description: 'Explore the POS training preview for restaurants and retail. US$100 per branch per month.',
+    title: 'Restaurant POS Dubai & Configured Retail Demos | Internext',
+    description:
+      'Explore online restaurant POS software and configured retail demos in Dubai, with sales, stock, receipt details and shift control.',
+    url: 'https://pos.internext.info/',
+    siteName: 'Internext POS',
     type: 'website',
     images: [
       {
@@ -20,6 +50,13 @@ export const metadata: Metadata = {
         alt: 'Internext POS — sales and stock workspace',
       },
     ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Restaurant POS Dubai | Internext',
+    description:
+      'Online restaurant POS with configured retail demos in Dubai, from sales to shift closing.',
+    images: ['/pos-share.png'],
   },
 }
 

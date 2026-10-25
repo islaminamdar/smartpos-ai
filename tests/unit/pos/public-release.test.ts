@@ -5,25 +5,40 @@ import { middleware } from '@/middleware'
 
 it('exposes only exact manager review reads and keeps candidate payment decisions unreachable', () => {
   for (const pilot of [true, false]) {
-    for (const path of ['/api/pos/manager/offline-payments', '/api/pos/manager/offline-payments/case']) {
+    for (const path of [
+      '/api/pos/manager/offline-payments',
+      '/api/pos/manager/offline-payments/case',
+    ]) {
       expect(publicReleaseAccess(path, 'GET', pilot)).toBe('allow')
       expect(publicReleaseAccess(path, 'POST', pilot)).not.toBe('allow')
       expect(publicReleaseAccess(path + '/other', 'GET', pilot)).not.toBe('allow')
     }
     for (const method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
-      expect(publicReleaseAccess('/api/pos/manager/offline-payments/resolve', method, pilot)).not.toBe('allow')
+      expect(
+        publicReleaseAccess('/api/pos/manager/offline-payments/resolve', method, pilot)
+      ).not.toBe('allow')
   }
 })
 
 it('keeps signed historical offline recovery reachable when new selling is paused', () => {
   for (const enabled of [false, true]) {
-    for (const suffix of ['import', 'seal', 'bundle-recovery', 'payment-freeze', 'payment-resolution']) {
+    for (const suffix of [
+      'import',
+      'seal',
+      'bundle-recovery',
+      'payment-freeze',
+      'payment-resolution',
+    ]) {
       const path = '/api/pos/offline/' + suffix
       expect(publicReleaseAccess(path, 'POST', enabled)).toBe('allow')
-      for (const method of ['GET', 'PUT', 'DELETE', 'OPTIONS']) expect(publicReleaseAccess(path, method, enabled)).not.toBe('allow')
+      for (const method of ['GET', 'PUT', 'DELETE', 'OPTIONS'])
+        expect(publicReleaseAccess(path, method, enabled)).not.toBe('allow')
       expect(publicReleaseAccess(path + '/extra', 'POST', enabled)).not.toBe('allow')
     }
-    for (const suffix of ['enroll', 'authority']) expect(publicReleaseAccess('/api/pos/offline/' + suffix, 'POST', enabled) === 'allow').toBe(enabled)
+    for (const suffix of ['enroll', 'authority'])
+      expect(publicReleaseAccess('/api/pos/offline/' + suffix, 'POST', enabled) === 'allow').toBe(
+        enabled
+      )
   }
 })
 
@@ -38,6 +53,8 @@ describe('training-only hosted release', () => {
       '/_next/static/app.js',
       '/pos-assets/menu/photo.webp',
       '/product-previews/restaurant.webp',
+      '/robots.txt',
+      '/sitemap.xml',
       '/api/pos/health',
     ])
       expect(publicReleaseAccess(path, 'GET')).toBe('allow')
@@ -170,7 +187,9 @@ it('passes kitchen dispatch through middleware only in the online pilot', () => 
         ['/api/pos/tab-kitchen', 'POST'],
         ['/api/pos/tab-kitchen/recovery', 'POST'],
       ]) {
-        const response = middleware(new NextRequest('https://pos.internext.info' + path, { method }))
+        const response = middleware(
+          new NextRequest('https://pos.internext.info' + path, { method })
+        )
         expect(response.status).toBe(enabled ? 200 : 503)
       }
     }
@@ -179,27 +198,35 @@ it('passes kitchen dispatch through middleware only in the online pilot', () => 
   }
 })
 
-
-it('keeps only exact native drawer-close POST reachable for historical recovery',()=>{
- for(const pilot of [true,false]){
-  expect(publicReleaseAccess('/api/pos/native/shift-close','POST',pilot)).toBe('allow')
-  for(const method of ['GET','PUT','PATCH','DELETE','OPTIONS'])expect(publicReleaseAccess('/api/pos/native/shift-close',method,pilot)).not.toBe('allow')
-  expect(publicReleaseAccess('/api/pos/native/shift-close/extra','POST',pilot)).not.toBe('allow')
- }
+it('keeps only exact native drawer-close POST reachable for historical recovery', () => {
+  for (const pilot of [true, false]) {
+    expect(publicReleaseAccess('/api/pos/native/shift-close', 'POST', pilot)).toBe('allow')
+    for (const method of ['GET', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
+      expect(publicReleaseAccess('/api/pos/native/shift-close', method, pilot)).not.toBe('allow')
+    expect(publicReleaseAccess('/api/pos/native/shift-close/extra', 'POST', pilot)).not.toBe(
+      'allow'
+    )
+  }
 })
 
-it('exposes only exact native PIN recovery POST even when new selling is paused',()=>{
- for(const pilot of [true,false]){
-  expect(publicReleaseAccess('/api/pos/native/pin-recovery','POST',pilot)).toBe('allow')
-  for(const method of ['GET','PUT','PATCH','DELETE','OPTIONS'])expect(publicReleaseAccess('/api/pos/native/pin-recovery',method,pilot)).not.toBe('allow')
-  expect(publicReleaseAccess('/api/pos/native/pin-recovery/extra','POST',pilot)).not.toBe('allow')
- }
+it('exposes only exact native PIN recovery POST even when new selling is paused', () => {
+  for (const pilot of [true, false]) {
+    expect(publicReleaseAccess('/api/pos/native/pin-recovery', 'POST', pilot)).toBe('allow')
+    for (const method of ['GET', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
+      expect(publicReleaseAccess('/api/pos/native/pin-recovery', method, pilot)).not.toBe('allow')
+    expect(publicReleaseAccess('/api/pos/native/pin-recovery/extra', 'POST', pilot)).not.toBe(
+      'allow'
+    )
+  }
 })
 
-it('exposes only exact clock recovery POST while selling is paused',()=>{
- for(const pilot of [true,false]){
-  expect(publicReleaseAccess('/api/pos/native/clock-recovery','POST',pilot)).toBe('allow')
-  for(const method of ['GET','HEAD','PUT','PATCH','DELETE','OPTIONS'])expect(publicReleaseAccess('/api/pos/native/clock-recovery',method,pilot)).not.toBe('allow')
-  expect(publicReleaseAccess('/api/pos/native/clock-recovery/extra','POST',pilot)).not.toBe('allow')
- }
+it('exposes only exact clock recovery POST while selling is paused', () => {
+  for (const pilot of [true, false]) {
+    expect(publicReleaseAccess('/api/pos/native/clock-recovery', 'POST', pilot)).toBe('allow')
+    for (const method of ['GET', 'HEAD', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
+      expect(publicReleaseAccess('/api/pos/native/clock-recovery', method, pilot)).not.toBe('allow')
+    expect(publicReleaseAccess('/api/pos/native/clock-recovery/extra', 'POST', pilot)).not.toBe(
+      'allow'
+    )
+  }
 })

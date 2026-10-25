@@ -22,14 +22,123 @@ import './marketing.css'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/' },
-  title: 'Internext POS · From first sale to final cash count',
+  title: { absolute: 'Restaurant POS Dubai & Retail Demos | Internext' },
   description:
-    'POS software for restaurants, grocery stores, pet shops and retail counters, with sales, stock, receipts and reports. US$100 per branch per month.',
+    'Online restaurant POS software in Dubai, with configured retail demos. Sales, stock, receipt details and shifts for US$100 per branch per month.',
   openGraph: {
-    title: 'Internext POS · Your counter, in order',
+    title: 'Restaurant POS Dubai with Configured Retail Demos | Internext',
     description:
-      'Explore the online restaurant POS and isolated training workspace. US$100 per branch per month. Android offline use is in development.',
+      'Explore the online restaurant POS and configured retail demos. US$100 per branch per month. Android offline use is in development.',
+    type: 'website',
+    url: 'https://pos.internext.info/',
+    siteName: 'Internext POS',
+    images: [
+      {
+        url: '/pos-share.png',
+        width: 1200,
+        height: 630,
+        alt: 'Internext POS sales and stock workspace',
+      },
+    ],
   },
+}
+
+const faqItems = [
+  {
+    question: 'What is Internext POS?',
+    answer:
+      'Internext POS is online point-of-sale software from Internext Information Technology in Dubai. It brings counter sales, stock records, receipts, offers, refunds and shift closing into one workspace.',
+  },
+  {
+    question: 'How much does the POS software cost?',
+    answer:
+      'Internext POS costs US$100 per branch per month. Multiple staff and counter devices are included. POS hardware, payment-terminal fees, custom integrations and agreed setup work are separate.',
+  },
+  {
+    question: 'Which businesses can use Internext POS?',
+    answer:
+      'The released online workflow is built around restaurants and cafés. Grocery, convenience, pet-shop and general retail configurations can be reviewed and configured for the business. Salon, wholesale, medical and pharmacy workflows require a suitability review.',
+  },
+  {
+    question: 'Does Internext POS support UAE VAT receipts?',
+    answer:
+      'The online pilot records sales and issues numbered receipts with VAT details configured for the branch. The business remains responsible for confirming its tax setup and receipt requirements.',
+  },
+  {
+    question: 'Can I use the counter without internet?',
+    answer:
+      'No. The current live counter requires an internet connection. Offline live billing and the production Android APK are still in development.',
+  },
+  {
+    question: 'Does recording a card payment charge the customer?',
+    answer:
+      'No. A card payment is recorded in the POS after it is taken through the business’s separate card terminal. Internext POS does not currently process the customer’s card.',
+  },
+  {
+    question: 'Can I try the POS before subscribing?',
+    answer:
+      'Yes. The training workspace lets you explore a sample menu and sample transactions without creating a real sale, charging a card or issuing a valid tax invoice.',
+  },
+]
+
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Organization',
+      '@id': 'https://internext.info/#organization',
+      name: 'Internext Information Technology',
+      url: 'https://internext.info/',
+      telephone: '+971557133786',
+      address: { '@type': 'PostalAddress', addressLocality: 'Dubai', addressCountry: 'AE' },
+      areaServed: [
+        { '@type': 'City', name: 'Dubai' },
+        { '@type': 'Country', name: 'United Arab Emirates' },
+      ],
+    },
+    {
+      '@type': 'SoftwareApplication',
+      '@id': 'https://pos.internext.info/#software',
+      name: 'Internext POS',
+      url: 'https://pos.internext.info/',
+      applicationCategory: 'BusinessApplication',
+      applicationSubCategory: 'Point of Sale Software',
+      operatingSystem: 'Web browser',
+      description:
+        'Online point-of-sale software released for restaurant counters in Dubai, with configured retail demos and workflow review.',
+      provider: { '@id': 'https://internext.info/#organization' },
+      areaServed: 'United Arab Emirates',
+      offers: {
+        '@type': 'Offer',
+        price: '100',
+        priceCurrency: 'USD',
+        priceSpecification: {
+          '@type': 'UnitPriceSpecification',
+          price: '100',
+          priceCurrency: 'USD',
+          unitText: 'branch per month',
+        },
+        url: 'https://pos.internext.info/#pricing',
+      },
+      featureList: [
+        'Counter sales',
+        'Stock records',
+        'VAT receipt details',
+        'Offers and refunds',
+        'Shift closing',
+        'Multiple devices per branch',
+      ],
+    },
+    {
+      '@type': 'FAQPage',
+      '@id': 'https://pos.internext.info/#faq',
+      mainEntity: faqItems.map((item) => ({
+        '@type': 'Question',
+        name: item.question,
+        acceptedAnswer: { '@type': 'Answer', text: item.answer },
+      })),
+    },
+  ],
 }
 
 const dishes = [
@@ -38,12 +147,42 @@ const dishes = [
   { image: 'I034443848A', name: 'Malpua with Rabdi', category: 'Sweets & bakery' },
 ]
 const industryPreviews = [
-  { image: 'restaurant', title: 'Restaurants & cafés', text: 'Menus, tables, open orders and kitchen dispatch.', status: 'Available online' },
-  { image: 'grocery', title: 'Grocery & convenience', text: 'Piece, pack, kilogram and litre-based sales.', status: 'Demo configuration' },
-  { image: 'pet-shop', title: 'Pet shops', text: 'Products, stock levels, offers and receipt history.', status: 'Demo configuration' },
-  { image: 'fashion', title: 'Fashion & retail', text: 'Collections, product options, offers and returns.', status: 'Demo configuration' },
-  { image: 'salon', title: 'Salons & services', text: 'Services and retail products in one checkout.', status: 'Workflow review' },
-  { image: 'wholesale', title: 'Wholesale', text: 'Bulk quantities, receiving, adjustments and reports.', status: 'Workflow review' },
+  {
+    image: 'restaurant',
+    title: 'Restaurants & cafés',
+    text: 'Menus, tables, open orders and kitchen dispatch.',
+    status: 'Available online',
+  },
+  {
+    image: 'grocery',
+    title: 'Grocery & convenience',
+    text: 'Piece, pack, kilogram and litre-based sales.',
+    status: 'Demo configuration',
+  },
+  {
+    image: 'pet-shop',
+    title: 'Pet shops',
+    text: 'Products, stock levels, offers and receipt history.',
+    status: 'Demo configuration',
+  },
+  {
+    image: 'fashion',
+    title: 'Fashion & retail',
+    text: 'Collections, product options, offers and returns.',
+    status: 'Demo configuration',
+  },
+  {
+    image: 'salon',
+    title: 'Salons & services',
+    text: 'Services and retail products in one checkout.',
+    status: 'Workflow review',
+  },
+  {
+    image: 'wholesale',
+    title: 'Wholesale',
+    text: 'Bulk quantities, receiving, adjustments and reports.',
+    status: 'Workflow review',
+  },
 ]
 const steps = [
   {
@@ -109,6 +248,12 @@ function Wordmark() {
 export default function Landing() {
   return (
     <div className="ip-site">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(structuredData).replace(/</g, '\\u003c'),
+        }}
+      />
       <a href="#main-content" className="ip-skip">
         Skip to content
       </a>
@@ -129,10 +274,11 @@ export default function Landing() {
             <p className="ip-release">
               <Store size={16} aria-hidden="true" /> Smart POS · Restaurants &amp; retail
             </p>
-            <h1 id="hero-title">From first sale to final cash count.</h1>
+            <h1 id="hero-title">Run your Dubai restaurant counter with clarity.</h1>
             <p className="ip-intro">
-              Bring products, payments, stock and shift records into one clear workspace. Configure
-              it for a restaurant, grocery store, pet shop or retail counter.
+              Internext POS is online restaurant POS software that brings counter sales, stock,
+              receipt details and shift records into one workspace. Retail businesses can request a
+              configured demo and workflow review.
             </p>
             <div className="ip-actions">
               <a
@@ -219,6 +365,24 @@ export default function Landing() {
             </figcaption>
           </figure>
         </section>
+        <section className="ip-answer ip-wrap" aria-labelledby="pos-answer-title">
+          <span>Point of sale, explained</span>
+          <div>
+            <h2 id="pos-answer-title">What does Internext POS do?</h2>
+            <p>
+              It records what you sell, how the customer paid, what stock changed and what the cash
+              drawer should contain at closing. Restaurant teams can also manage tables, open orders
+              and kitchen dispatch in the released online workflow.
+            </p>
+          </div>
+          <div>
+            <h3>Who is it for?</h3>
+            <p>
+              Restaurants and cafés can use the online pilot. Grocery, convenience, pet-shop and
+              retail counters can request a configured demo and workflow review.
+            </p>
+          </div>
+        </section>
         <section id="workflow" className="ip-workflow" aria-labelledby="workflow-title">
           <div className="ip-wrap">
             <div className="ip-section-heading">
@@ -242,19 +406,44 @@ export default function Landing() {
         <section className="ip-industries ip-wrap" aria-labelledby="industries-title">
           <div className="ip-section-heading">
             <h2 id="industries-title">See your kind of counter.</h2>
-            <p>Restaurant workflows are available online. Retail samples are demo configurations; service and wholesale workflows need review before launch.</p>
+            <p>
+              Restaurant workflows are available online. Retail samples are demo configurations;
+              service and wholesale workflows need review before launch.
+            </p>
           </div>
           <div className="ip-industry-grid">
             {industryPreviews.map((item) => (
               <figure key={item.image} className="ip-industry-card">
-                <a href={`/product-previews/${item.image}.webp`} target="_blank" rel="noreferrer" aria-label={`Open a larger ${item.title} sample interface`}>
-                  <img src={`/product-previews/${item.image}.webp`} alt={`Sample Internext POS checkout for ${item.title}, with an industry catalogue, current order and checkout controls`} width={800} height={520} loading="lazy" decoding="async" />
+                <a
+                  href={`/product-previews/${item.image}.webp`}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`Open a larger ${item.title} sample interface`}
+                >
+                  <img
+                    src={`/product-previews/${item.image}.webp`}
+                    alt={`Sample Internext POS checkout for ${item.title}, with an industry catalogue, current order and checkout controls`}
+                    width={800}
+                    height={520}
+                    loading="lazy"
+                    decoding="async"
+                  />
                 </a>
-                <figcaption><div><h3>{item.title}</h3><em>{item.status}</em></div><span>{item.text}</span><small>Open full-size preview (new tab).</small></figcaption>
+                <figcaption>
+                  <div>
+                    <h3>{item.title}</h3>
+                    <em>{item.status}</em>
+                  </div>
+                  <span>{item.text}</span>
+                  <small>Open full-size preview (new tab).</small>
+                </figcaption>
               </figure>
             ))}
           </div>
-          <p className="ip-industry-boundary">Medical and pharmacy use needs a suitability review. Batch, expiry and regulated-medicine controls are not currently presented as released features.</p>
+          <p className="ip-industry-boundary">
+            Medical and pharmacy use needs a suitability review. Batch, expiry and
+            regulated-medicine controls are not currently presented as released features.
+          </p>
         </section>
         <section id="features" className="ip-availability ip-wrap" aria-labelledby="features-title">
           <div className="ip-availability-copy">
@@ -432,38 +621,25 @@ export default function Landing() {
             </p>
           </div>
         </section>
-        <section className="ip-faq ip-wrap" aria-label="Common questions">
+        <section className="ip-faq ip-wrap" aria-labelledby="faq-title" id="faq">
           <div>
             <CircleHelp size={22} aria-hidden="true" />
-            <h2>Before you get started</h2>
+            <h2 id="faq-title">POS software questions</h2>
           </div>
-          <details>
-            <summary>Can I use the counter without internet?</summary>
-            <p>
-              The current live counter needs an internet connection. The separate training workspace
-              stores sample records on your device. Offline live billing in the Android APK is
-              planned.
-            </p>
-          </details>
-          <details>
-            <summary>Does recording a card payment charge the customer?</summary>
-            <p>
-              No. Card payments are recorded in the POS after payment is taken through your card
-              terminal. The POS does not process the customer’s card.
-            </p>
-          </details>
-          <details>
-            <summary>Can I try the workflow before setting up my restaurant?</summary>
-            <p>
-              Yes. Open the training workspace to explore the menu and sample transactions. Training
-              records stay separate from live branch sales.
-            </p>
-          </details>
+          {faqItems.map((item) => (
+            <details key={item.question}>
+              <summary>{item.question}</summary>
+              <p>{item.answer}</p>
+            </details>
+          ))}
         </section>
       </main>
       <footer className="ip-footer ip-wrap">
         <Wordmark />
-        <p>Restaurant software for everyday service.</p>
+        <p>
+          Dubai POS software by{' '}
+          <a href="https://internext.info/">Internext Information Technology</a>.
+        </p>
         <nav aria-label="Footer navigation">
           <Link href="/counter">Staff sign in</Link>
           <Link href="/pos">Training</Link>
