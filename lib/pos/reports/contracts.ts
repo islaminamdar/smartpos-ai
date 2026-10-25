@@ -78,6 +78,22 @@ export const branchReportSchema = z
         })
       )
       .max(5000),
+    categoryAnalytics: z.object({
+      documentCount: positive.max(50000),
+      excludedDocumentCount: positive.max(50000),
+      ...amounts,
+    }),
+    categories: z
+      .array(
+        z.object({
+          category: z.string().trim().min(1).max(120),
+          soldQuantityMilli: positive,
+          refundedQuantityMilli: positive,
+          netQuantityMilli: integer,
+          ...amounts,
+        })
+      )
+      .max(5000),
   })
   .superRefine((report, ctx) => {
     const fail = () =>
@@ -129,6 +145,18 @@ export const branchReportSchema = z
       report.products.some(
         (p) => p.soldQuantityMilli - p.refundedQuantityMilli !== p.netQuantityMilli
       )
+    )
+      fail()
+    const category = report.categoryAnalytics
+    if (category.documentCount + category.excludedDocumentCount !== report.documentCount) fail()
+    for (const key of metrics)
+      if (report.categories.reduce((sum, row) => sum + row[key], 0) !== category[key]) fail()
+    if (
+      report.categories.some(
+        (row) => row.soldQuantityMilli - row.refundedQuantityMilli !== row.netQuantityMilli
+      ) ||
+      category.salesGrossFils - category.refundGrossFils !== category.netGrossFils ||
+      category.netExVatFils + category.vatFils !== category.netGrossFils
     )
       fail()
   })

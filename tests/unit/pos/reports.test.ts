@@ -40,6 +40,11 @@ describe('authoritative branch reports', () => {
       { ...branchReport, payments: [branchReport.payments[0], branchReport.payments[0]] },
       { ...branchReport, days: [] },
       { ...branchReport, summary: { ...branchReport.summary, netExVatFils: 999 } },
+      {
+        ...branchReport,
+        categoryAnalytics: { ...branchReport.categoryAnalytics, netGrossFils: 999 },
+      },
+      { ...branchReport, categories: [] },
     ])
       expect(branchReportSchema.safeParse(changed).success).toBe(false)
   })

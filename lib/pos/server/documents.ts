@@ -49,6 +49,8 @@ const lineSchema = z
     lineNumber: z.number().int().min(1).max(200),
     productId: uuid,
     name: text(240),
+    // Present only on new online fiscal snapshots. Older documents deliberately omit it.
+    category: text(120).optional(),
     unit: z.enum(['piece', 'pack', 'kg']),
     quantityMilli: z.number().int().min(1).max(1_000_000),
     unitPriceFils: fils,

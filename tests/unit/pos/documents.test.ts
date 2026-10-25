@@ -15,6 +15,12 @@ const invoice: ReceiptDocument = {
 describe('immutable live fiscal document response contract', () => {
   it('accepts confirmed server profile and reconciled mixed-tender receipt with per-line VAT', () => {
     expect(fiscalDocumentSchema.parse(invoice)).toEqual(invoice)
+    expect(
+      fiscalDocumentSchema.parse({
+        ...invoice,
+        lines: invoice.lines.map((line) => ({ ...line, category: 'Mithai' })),
+      }).lines[0]?.category
+    ).toBe('Mithai')
     expect(merchantProfileSchema.safeParse({ ...invoice.merchant, taxInclusive: false }).success).toBe(false)
     expect(merchantProfileSchema.safeParse({ ...invoice.merchant, trn: 'unconfirmed' }).success).toBe(false)
     expect(merchantProfileSchema.safeParse({ ...invoice.merchant, password: 'must not be present' }).success).toBe(false)

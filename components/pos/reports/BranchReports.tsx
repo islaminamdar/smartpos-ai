@@ -172,6 +172,17 @@ export default function BranchReports({
       )
       .slice(0, 10)
   }, [current])
+  const topCategories = useMemo(() => {
+    if (!current) return []
+    return [...current.categories]
+      .sort(
+        (left, right) =>
+          right.netGrossFils - left.netGrossFils ||
+          right.netQuantityMilli - left.netQuantityMilli ||
+          left.category.localeCompare(right.category, 'en')
+      )
+      .slice(0, 10)
+  }, [current])
   return (
     <section className={styles.reports} aria-label="Branch reports">
       <header className={styles.header}>
@@ -357,11 +368,28 @@ export default function BranchReports({
               money(product.netGrossFils),
             ])}
           />
-          <p className={styles.help}>
-            Ranked from issued invoices less credit notes in this date range. Product categories are
-            not ranked yet because older fiscal snapshots do not preserve the category at the time
-            of sale.
-          </p>
+          <ReportTable
+            title="Top categories by net sales"
+            headers={['Rank', 'Category', 'Net sold', 'Net incl. VAT']}
+            rows={topCategories.map((category, index) => [
+              String(index + 1),
+              category.category,
+              quantity(category.netQuantityMilli),
+              money(category.netGrossFils),
+            ])}
+          />
+          {current.categoryAnalytics.excludedDocumentCount > 0 ? (
+            <p className={styles.warning}>
+              Category totals cover {current.categoryAnalytics.documentCount} newer fiscal
+              document(s).
+              {` ${current.categoryAnalytics.excludedDocumentCount}`} older document(s) have no
+              saved category and are deliberately excluded rather than matched to today&apos;s menu.
+            </p>
+          ) : (
+            <p className={styles.help}>
+              Category totals use the category saved on each fiscal line when it was issued.
+            </p>
+          )}
           <div className={styles.productsHeader}>
             <h3>Product totals</h3>
             <label>

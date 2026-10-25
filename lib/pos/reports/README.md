@@ -17,7 +17,7 @@ The inclusive date range is limited to 93 days, with Dubai midnight boundaries c
 - Net including VAT equals invoice gross less credit-note gross. Net excluding VAT and net VAT use the corresponding saved amounts.
 - Cash/card totals use recorded fiscal payments. Cash tender/change and drawer cash movements are excluded. Recorded card payments do not establish bank settlement.
 - Products are grouped by saved product ID, name and unit. Historical renames remain separate rows. Quantities preserve thousandths of the sold unit. The top-products table ranks those groups by net sales including VAT.
-- Category totals are deliberately not shown. The immutable fiscal line removes the live product category before saving, so joining a document to the current menu would misstate past sales after a category edit. A future category report needs a versioned line `category` field retained in every newly issued fiscal snapshot, a report version that aggregates only those snapshots, and a clear separate coverage label for older documents. Existing fiscal documents must never be rewritten to add a category.
+- Category totals use only category values saved on each newly issued fiscal line. A credit note inherits that saved category from its original line. Older fiscal documents and signed offline imports without a saved category are explicitly excluded from category analytics; they are never joined to the current menu and are shown in the coverage count. Existing fiscal documents are never rewritten.
 - Days without documents appear as zero after a successful query. Older orders without issued fiscal invoices are excluded and counted in a visible coverage warning.
 - Customer details, customer TRNs and staff identities are not returned by the report.
 

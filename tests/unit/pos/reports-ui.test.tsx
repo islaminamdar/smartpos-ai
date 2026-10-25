@@ -190,5 +190,7 @@ it('loads a quick range and ranks recorded products by net sales', async () => {
   expect(table.textContent?.indexOf('Top sweet')).toBeLessThan(
     table.textContent?.indexOf('Sweet') ?? 0
   )
-  expect(screen.getByText(/Product categories are not ranked yet/)).toBeVisible()
+  expect(screen.getByRole('region', { name: 'Top categories by net sales' })).toHaveTextContent(
+    'Mithai'
+  )
 })

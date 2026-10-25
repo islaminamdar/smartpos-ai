@@ -115,6 +115,26 @@ export function reportCsv(report: BranchReport) {
       (row.netQuantityMilli / 1000).toFixed(3),
       ...amountCells(row),
     ])
+  for (const row of report.categories)
+    rows.push([
+      ...prefix,
+      'Category',
+      row.category,
+      row.category,
+      '',
+      '',
+      '',
+      (row.soldQuantityMilli / 1000).toFixed(3),
+      (row.refundedQuantityMilli / 1000).toFixed(3),
+      (row.netQuantityMilli / 1000).toFixed(3),
+      ...amountCells(row),
+    ])
+  rows.push([
+    ...prefix,
+    'Category coverage',
+    String(report.categoryAnalytics.documentCount),
+    `${report.categoryAnalytics.excludedDocumentCount} historic document(s) excluded; categories are never inferred from the current menu.`,
+  ])
   rows.push([
     ...prefix,
     'Coverage',

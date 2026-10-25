@@ -38,4 +38,14 @@ export const branchReport: BranchReport = {
       ...amounts,
     },
   ],
+  categoryAnalytics: { documentCount: 1, excludedDocumentCount: 0, ...amounts },
+  categories: [
+    {
+      category: 'Mithai',
+      soldQuantityMilli: 500,
+      refundedQuantityMilli: 0,
+      netQuantityMilli: 500,
+      ...amounts,
+    },
+  ],
 }
