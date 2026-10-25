@@ -693,6 +693,7 @@ function Board(props: Props) {
                       ? `Watch · ${age(ticket.issuedAt, now)}`
                       : age(ticket.issuedAt, now)}
               </p>
+              {ticket.orderNote && <p className={styles.notes}>Note: {ticket.orderNote}</p>}
               <ul className={styles.lines}>
                 {ticket.lines.map((line) => (
                   <li key={line.lineNumber}>

@@ -50,3 +50,23 @@ describe('new buyer input versus immutable historical records', () => {
     }
   )
 })
+
+describe('direct paid-order notes', () => {
+  it('keeps a valid note in a new recoverable sale request', () => {
+    const noted = { ...order, orderNote: 'No chilli, please' }
+    expect(newLiveOrderSchema.parse({ order: noted }).order.orderNote).toBe('No chilli, please')
+    expect(liveRecoverySchema.parse({ kind: 'sale', request: noted }).request).toEqual(noted)
+  })
+  it('rejects hidden characters and notes added after an unpaid order was saved', () => {
+    expect(newLiveOrderSchema.safeParse({ order: { ...order, orderNote: 'A\u0000B' } }).success).toBe(false)
+    expect(
+      newLiveOrderSchema.safeParse({
+        order: {
+          ...order,
+          orderNote: 'No chilli',
+          sourceTab: { id: id(26), expectedRevision: 1 },
+        },
+      }).success
+    ).toBe(false)
+  })
+})

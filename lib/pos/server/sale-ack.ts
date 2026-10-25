@@ -36,7 +36,8 @@ export function invoiceMatchesSale(
     !same(document.merchant.id, order.profileId) ||
     document.serviceType !== order.serviceType ||
     document.totals.grossFils !== order.expectedTotalFils ||
-    document.cashTenderedFils !== order.cashTenderedFils
+    document.cashTenderedFils !== order.cashTenderedFils ||
+    (document.orderNote ?? undefined) !== (order.orderNote ?? undefined)
   )
     return false
   const expectedLines = order.lines

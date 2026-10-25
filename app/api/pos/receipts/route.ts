@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     if (parsed.data.cursor) {
       try { cursor = decodeReceiptCursor(parsed.data.cursor) } catch { throw new PosServerError('invalid_cursor', 422) }
     }
-    let query = client.from('pos_documents').select('id,issued_at,snapshot').eq('branch_id', parsed.data.branchId).order('issued_at', { ascending: false }).order('id', { ascending: false }).limit(100)
+    let query = client.from('pos_documents').select('id,order_id,issued_at,snapshot').eq('branch_id', parsed.data.branchId).order('issued_at', { ascending: false }).order('id', { ascending: false }).limit(100)
     if (parsed.data.orderId) query = query.eq('order_id', parsed.data.orderId)
     if (cursor) query = query.or(receiptCursorFilter(cursor))
     // Compatibility only. New clients must use nextCursor to preserve timestamp ties.
@@ -24,7 +24,21 @@ export async function GET(request: Request) {
     const { data, error } = await query
     if (error) throw new PosServerError('storage_unavailable', 503)
     const rows = data ?? []
-    const receipts = rows.map(row => fiscalDocumentSchema.parse(row.snapshot))
+    const orderIds = rows
+      .map((row) => row.order_id)
+      .filter((value): value is string => typeof value === 'string')
+    const { data: noteRows, error: noteError } = orderIds.length
+      ? await client.rpc('pos_list_order_notes', { p_branch: parsed.data.branchId, p_order_ids: orderIds })
+      : { data: [], error: null }
+    if (noteError) throw new PosServerError('storage_unavailable', 503)
+    const notes = new Map(
+      (noteRows ?? []).map((row: { order_id: string; note: string }) => [row.order_id, row.note])
+    )
+    const receipts = rows.map(row =>
+      fiscalDocumentSchema.parse(
+        notes.has(row.order_id) ? { ...row.snapshot, orderNote: notes.get(row.order_id) } : row.snapshot
+      )
+    )
     const last = rows.length === 100 ? rows[rows.length - 1] : null
     return NextResponse.json({ status: 'ready', receipts, nextCursor: last ? encodeReceiptCursor({ issuedAt: last.issued_at, id: last.id }) : null, nextBefore: last?.issued_at ?? null }, { headers: privateHeaders })
   } catch (error) { return posFailure(error) }

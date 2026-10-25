@@ -64,7 +64,10 @@ const paymentSchema = z
   .object({ method: z.enum(['cash', 'card']), amountFils: fils.refine((value) => value > 0) })
   .strict()
 const refundPaymentSchema = z
-  .object({ method: z.enum(['cash', 'card', 'bank_transfer']), amountFils: fils.refine((value) => value > 0) })
+  .object({
+    method: z.enum(['cash', 'card', 'bank_transfer']),
+    amountFils: fils.refine((value) => value > 0),
+  })
   .strict()
 const common = {
   schemaVersion: z.literal(1),
@@ -85,7 +88,15 @@ const common = {
   paymentSettlement: z.literal('recorded'),
 }
 const invoice = z
-  .object({ ...common, kind: z.literal('tax_invoice'), cashTenderedFils: fils, changeFils: fils })
+  .object({
+    ...common,
+    kind: z.literal('tax_invoice'),
+    // Optional so historic immutable invoices continue to validate. New direct
+    // sale notes are retained beside the invoice and projected into this view.
+    orderNote: z.string().trim().min(1).max(240).optional(),
+    cashTenderedFils: fils,
+    changeFils: fils,
+  })
   .strict()
 const credit = z
   .object({

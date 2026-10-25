@@ -29,6 +29,9 @@ export const liveOrderSchema = z
           .strict()
           .optional(),
         profileId: z.string().uuid(),
+        // A short operational instruction for a direct paid order. It is deliberately
+        // part of the saved/recoverable sale request, never browser-only state.
+        orderNote: z.string().trim().min(1).max(240).optional(),
         customer: receiptCustomerSchema.nullable(),
         cashTenderedFils: z.number().int().min(0).max(100_000_000),
         payments: z
@@ -74,6 +77,18 @@ export const newLiveOrderSchema = liveOrderSchema.superRefine(({ order }, ctx) =
         message: 'Remove the unsupported hidden character or retype this customer field.',
       })
   }
+  if (order.orderNote?.includes('\u0000'))
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['order', 'orderNote'],
+      message: 'Remove the unsupported hidden character or retype the order note.',
+    })
+  if (order.orderNote && order.sourceTab)
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['order', 'orderNote'],
+      message: 'Save a kitchen instruction with the unpaid order before taking payment.',
+    })
 })
 const uuid = z.string().uuid()
 const device = { id: uuid, branchId: uuid, deviceId: uuid, shiftId: uuid }

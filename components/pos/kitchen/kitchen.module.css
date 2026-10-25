@@ -160,6 +160,15 @@
   font-size: 1rem;
   font-weight: 600;
 }
+.notes {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff5d8;
+  color: #674400;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
 .lines {
   margin: 16px 0 20px;
   padding: 0;

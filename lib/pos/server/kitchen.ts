@@ -28,6 +28,9 @@ export const kitchenTicketSchema = z
     invoiceNumber: z.string().min(1).max(80),
     issuedAt: timestamp,
     serviceType: z.enum(['dine_in', 'takeaway', 'delivery']),
+    // Optional keeps historic cached ticket views readable during the rollout;
+    // the server always supplies null or the saved note after migration.
+    orderNote: z.string().trim().min(1).max(240).nullable().optional(),
     lines: z
       .array(
         z

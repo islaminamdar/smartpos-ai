@@ -66,6 +66,12 @@ export default function FiscalReceipt({
           {bill.customer.trn && <p>Customer TRN: {bill.customer.trn}</p>}
         </section>
       )}
+      {!credit && bill.orderNote && (
+        <section className="lc-receipt-customer">
+          <strong>Order note</strong>
+          <p>{bill.orderNote}</p>
+        </section>
+      )}
       {credit && (
         <section>
           <p>Reason: {bill.reason}</p>

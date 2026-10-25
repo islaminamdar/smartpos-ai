@@ -248,6 +248,7 @@ export default function LiveCounter({
   const [buyerName, setBuyerName] = useState('')
   const [buyerAddress, setBuyerAddress] = useState('')
   const [buyerTrn, setBuyerTrn] = useState('')
+  const [orderNote, setOrderNote] = useState('')
   const invalidBuyerInput = [buyerName, buyerAddress, buyerTrn].some((value) =>
     value.includes('\u0000')
   )
@@ -619,6 +620,7 @@ export default function LiveCounter({
       setBuyerName('')
       setBuyerAddress('')
       setBuyerTrn('')
+      setOrderNote('')
       setSearch('')
       setCategory('All')
       setView('sell')
@@ -832,6 +834,7 @@ export default function LiveCounter({
       setBuyerName('')
       setBuyerAddress('')
       setBuyerTrn('')
+      setOrderNote('')
     }
     setNotice(
       receipt
@@ -950,6 +953,10 @@ export default function LiveCounter({
         throw new Error('Customer TRN must have 15 digits.')
       if (total > 1_000_000 && !hasCustomer)
         throw new Error('Customer name and address are required above AED 10,000.')
+      if (orderNote.includes('\u0000'))
+        throw new Error('Order note contains an unsupported hidden character. Retype it before payment.')
+      if (sourceTab && orderNote.trim())
+        throw new Error('Save this kitchen instruction with the unpaid order before taking payment.')
       const order: LiveOrder = {
         id: browserUuid(),
         branchId,
@@ -958,6 +965,7 @@ export default function LiveCounter({
         createdAt: new Date().toISOString(),
         serviceType,
         profileId: branch.profile.id,
+        ...(orderNote.trim() ? { orderNote: orderNote.trim() } : {}),
         customer: hasCustomer
           ? { name: buyerName.trim(), address: buyerAddress.trim(), trn: buyerTrn.trim() || null }
           : null,
@@ -1032,6 +1040,7 @@ export default function LiveCounter({
       setBuyerName('')
       setBuyerAddress('')
       setBuyerTrn('')
+      setOrderNote('')
       setNotice('The unpaid order was voided. Its counter basket has been cleared.')
     }
   }
@@ -1044,6 +1053,7 @@ export default function LiveCounter({
     setBuyerName('')
     setBuyerAddress('')
     setBuyerTrn('')
+    setOrderNote('')
     setOpenOrderMetadataDirty(false)
     if (selection !== 'new' && 'status' in selection) {
       if (
@@ -2216,6 +2226,25 @@ export default function LiveCounter({
                       does not charge a card.
                     </p>
                   )}
+                  <label>
+                    Kitchen / order note
+                    <textarea
+                      maxLength={240}
+                      value={orderNote}
+                      disabled={basketLocked || !!sourceTab}
+                      placeholder={
+                        sourceTab
+                          ? 'Save notes with the unpaid order before payment'
+                          : 'Example: No chilli · prepare after 7 pm'
+                      }
+                      onChange={(event) => setOrderNote(event.target.value)}
+                    />
+                    <small>
+                      {sourceTab
+                        ? 'Saved unpaid orders keep their kitchen instructions with the order.'
+                        : 'Shown on the kitchen ticket and saved with this invoice.'}
+                    </small>
+                  </label>
                   <details>
                     <summary>Customer details for the invoice</summary>
                     <label>
