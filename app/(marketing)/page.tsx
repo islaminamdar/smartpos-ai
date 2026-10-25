@@ -22,11 +22,11 @@ import './marketing.css'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/' },
-  title: 'Internext POS · From first order to final cash count',
+  title: 'Internext POS · From first sale to final cash count',
   description:
-    'Restaurant POS with an online counter, kitchen workflow, receipts, reports and a separate training workspace. US$100 per branch per month, multiple devices included.',
+    'POS software for restaurants, grocery stores, pet shops and retail counters, with sales, stock, receipts and reports. US$100 per branch per month.',
   openGraph: {
-    title: 'Internext POS · Your restaurant, in order',
+    title: 'Internext POS · Your counter, in order',
     description:
       'Explore the online restaurant POS and isolated training workspace. US$100 per branch per month. Android offline use is in development.',
   },
@@ -119,12 +119,12 @@ export default function Landing() {
         <section className="ip-hero ip-wrap" aria-labelledby="hero-title">
           <div className="ip-hero-copy">
             <p className="ip-release">
-              <Store size={16} aria-hidden="true" /> Restaurant POS · Online pilot
+              <Store size={16} aria-hidden="true" /> Smart POS · Restaurants &amp; retail
             </p>
-            <h1 id="hero-title">From first order to final cash count.</h1>
+            <h1 id="hero-title">From first sale to final cash count.</h1>
             <p className="ip-intro">
-              Bring your menu, payments and shift records into one clear workspace. Built for the
-              people behind a busy restaurant counter.
+              Bring products, payments, stock and shift records into one clear workspace. Configure
+              it for a restaurant, grocery store, pet shop or retail counter.
             </p>
             <div className="ip-actions">
               <a

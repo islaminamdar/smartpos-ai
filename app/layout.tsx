@@ -4,20 +4,20 @@ import BrowserCompatibility from './BrowserCompatibility'
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://pos.internext.info'),
-  title: 'Internext POS · Your restaurant, in order',
+  title: 'Internext POS · Point of sale for restaurants and retail',
   description:
-    'Restaurant POS for ordering, kitchen workflow, receipts and shifts. US$100 per branch per month, multiple devices included.',
+    'POS software for restaurants, grocery stores, pet shops and retail counters. Sales, stock, receipts and shifts for US$100 per branch per month.',
   icons: { icon: '/pos-icon.svg' },
   openGraph: {
-    title: 'Internext POS · Your restaurant, in order',
-    description: 'Explore the restaurant POS training preview. US$100 per branch per month.',
+    title: 'Internext POS · Your counter, in order',
+    description: 'Explore the POS training preview for restaurants and retail. US$100 per branch per month.',
     type: 'website',
     images: [
       {
         url: '/pos-share.png',
         width: 1200,
         height: 630,
-        alt: 'Internext POS — restaurant workspace',
+        alt: 'Internext POS — sales and stock workspace',
       },
     ],
   },
