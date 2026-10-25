@@ -16,7 +16,8 @@ The inclusive date range is limited to 93 days, with Dubai midnight boundaries c
 - Credit notes subtract on their issue date, even if the original invoice predates the selected range. Refund-only days can have negative net sales and VAT.
 - Net including VAT equals invoice gross less credit-note gross. Net excluding VAT and net VAT use the corresponding saved amounts.
 - Cash/card totals use recorded fiscal payments. Cash tender/change and drawer cash movements are excluded. Recorded card payments do not establish bank settlement.
-- Products are grouped by saved product ID, name and unit. Historical renames remain separate rows. Quantities preserve thousandths of the sold unit.
+- Products are grouped by saved product ID, name and unit. Historical renames remain separate rows. Quantities preserve thousandths of the sold unit. The top-products table ranks those groups by net sales including VAT.
+- Category totals are deliberately not shown. The immutable fiscal line removes the live product category before saving, so joining a document to the current menu would misstate past sales after a category edit. A future category report needs a versioned line `category` field retained in every newly issued fiscal snapshot, a report version that aggregates only those snapshots, and a clear separate coverage label for older documents. Existing fiscal documents must never be rewritten to add a category.
 - Days without documents appear as zero after a successful query. Older orders without issued fiscal invoices are excluded and counted in a visible coverage warning.
 - Customer details, customer TRNs and staff identities are not returned by the report.
 
@@ -32,4 +33,4 @@ pnpm typecheck
 
 The integration fixture applies migrations 001, 002, 003 and 011 independently of offers migration 010. It checks actual PostgreSQL authorization, Dubai date/microsecond boundaries, weighted quantities, split tenders, earlier-period refunds, negative days, immutable final amounts, legacy exclusions and empty ranges. The optional third argument writes a synthetic browser fixture to a private output path.
 
-API/UI tests cover schema reconciliation, failed and mismatched results, CSV escaping, date changes and an old branch's late response. Rendered review is recorded in `docs/design/2026-10-16-reports-review.md`. Maximum-volume rendering has not been load-tested.
+API/UI tests cover schema reconciliation, failed and mismatched results, CSV escaping, Dubai-based quick-date ranges, product ranking, date changes and an old branch's late response. Rendered review is recorded in `docs/design/2026-10-16-reports-review.md`. Maximum-volume rendering has not been load-tested.

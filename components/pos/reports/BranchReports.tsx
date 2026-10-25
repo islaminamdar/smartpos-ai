@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
   branchReportSchema,
   dubaiToday,
@@ -11,6 +11,48 @@ import styles from './reports.module.css'
 const money = (value: number) => formatFils(value)
 const quantity = (value: number) =>
   new Intl.NumberFormat('en-AE', { maximumFractionDigits: 3 }).format(value / 1000)
+export const reportPresets = [
+  ['today', 'Today'],
+  ['yesterday', 'Yesterday'],
+  ['this_week', 'This week'],
+  ['last_week', 'Last week'],
+  ['this_month', 'This month'],
+  ['last_month', 'Last month'],
+] as const
+
+export type ReportPreset = (typeof reportPresets)[number][0]
+
+const isoDate = (date: Date) => date.toISOString().slice(0, 10)
+const dateAtUtcMidnight = (value: string) => new Date(`${value}T00:00:00.000Z`)
+const addDays = (value: string, days: number) => {
+  const date = dateAtUtcMidnight(value)
+  date.setUTCDate(date.getUTCDate() + days)
+  return isoDate(date)
+}
+
+/** Calendar ranges are based on the current Dubai calendar date, never the browser's timezone. */
+export function rangeForReportPreset(preset: ReportPreset, today = dubaiToday()) {
+  const date = dateAtUtcMidnight(today)
+  if (preset === 'today') return { start: today, end: today }
+  if (preset === 'yesterday') {
+    const yesterday = addDays(today, -1)
+    return { start: yesterday, end: yesterday }
+  }
+  if (preset === 'this_week' || preset === 'last_week') {
+    // getUTCDay is used only for calendar arithmetic after anchoring the Dubai date above.
+    const mondayOffset = (date.getUTCDay() + 6) % 7
+    const thisMonday = addDays(today, -mondayOffset)
+    if (preset === 'this_week') return { start: thisMonday, end: today }
+    const lastMonday = addDays(thisMonday, -7)
+    return { start: lastMonday, end: addDays(lastMonday, 6) }
+  }
+  if (preset === 'this_month') return { start: `${today.slice(0, 7)}-01`, end: today }
+  const firstThisMonth = dateAtUtcMidnight(`${today.slice(0, 7)}-01`)
+  firstThisMonth.setUTCMonth(firstThisMonth.getUTCMonth() - 1)
+  const start = isoDate(firstThisMonth)
+  return { start, end: addDays(`${today.slice(0, 7)}-01`, -1) }
+}
+
 const errors: Record<string, string> = {
   report_manager_required: 'Only a manager or owner can view this branch report.',
   invalid_report_range:
@@ -45,9 +87,8 @@ export default function BranchReports({
       controller.current?.abort()
     }
   }, [branchId])
-  async function load(event: FormEvent) {
-    event.preventDefault()
-    const query = reportQuerySchema.safeParse({ branchId, start, end })
+  async function loadRange(nextStart: string, nextEnd: string) {
+    const query = reportQuerySchema.safeParse({ branchId, start: nextStart, end: nextEnd })
     if (!query.success) {
       setError(errors.invalid_report_range)
       return
@@ -60,7 +101,7 @@ export default function BranchReports({
     setReport(null)
     try {
       const response = await fetch(
-        '/api/pos/reports?' + new URLSearchParams({ branchId, start, end }),
+        '/api/pos/reports?' + new URLSearchParams({ branchId, start: nextStart, end: nextEnd }),
         {
           credentials: 'same-origin',
           cache: 'no-store',
@@ -80,8 +121,8 @@ export default function BranchReports({
       const verified = branchReportSchema.parse(data)
       if (
         verified.branchId !== branchId ||
-        verified.startDate !== start ||
-        verified.endDate !== end
+        verified.startDate !== nextStart ||
+        verified.endDate !== nextEnd
       )
         throw new Error('The report did not match the selected branch and dates. Please reload it.')
       if (current === generation.current) setReport(verified)
@@ -101,6 +142,16 @@ export default function BranchReports({
       if (current === generation.current) setLoading(false)
     }
   }
+  async function load(event: FormEvent) {
+    event.preventDefault()
+    await loadRange(start, end)
+  }
+  function applyPreset(preset: ReportPreset) {
+    const range = rangeForReportPreset(preset)
+    setStart(range.start)
+    setEnd(range.end)
+    void loadRange(range.start, range.end)
+  }
   const current =
     report?.branchId === branchId && report.startDate === start && report.endDate === end
       ? report
@@ -109,6 +160,18 @@ export default function BranchReports({
     current?.products.filter((item) =>
       item.name.toLowerCase().includes(search.toLowerCase().trim())
     ) ?? []
+  const topProducts = useMemo(() => {
+    if (!current) return []
+    return [...current.products]
+      .sort(
+        (left, right) =>
+          right.netGrossFils - left.netGrossFils ||
+          right.netQuantityMilli - left.netQuantityMilli ||
+          left.name.localeCompare(right.name, 'en') ||
+          left.productId.localeCompare(right.productId)
+      )
+      .slice(0, 10)
+  }, [current])
   return (
     <section className={styles.reports} aria-label="Branch reports">
       <header className={styles.header}>
@@ -142,21 +205,23 @@ export default function BranchReports({
         <button type="submit" disabled={loading}>
           {loading ? 'Loading report…' : 'Load report'}
         </button>
-        <button
-          type="button"
-          className={styles.secondary}
-          disabled={loading}
-          onClick={() => {
-            const today = dubaiToday()
-            setStart(today)
-            setEnd(today)
-          }}
-        >
-          Today
-        </button>
       </form>
+      <div className={styles.presets} aria-label="Quick date ranges">
+        {reportPresets.map(([preset, label]) => (
+          <button
+            key={preset}
+            type="button"
+            className={styles.secondary}
+            disabled={loading}
+            onClick={() => applyPreset(preset)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <p className={styles.help}>
-        Dates include the whole day in Dubai (UTC+4). Select up to 93 days.
+        Quick ranges load immediately. Dates include the whole day in Dubai (UTC+4); weeks run
+        Monday through Sunday and ranges can be up to 93 days.
       </p>
       {error && (
         <p role="alert" className={styles.error}>
@@ -281,6 +346,22 @@ export default function BranchReports({
               ])}
             />
           </div>
+          <ReportTable
+            title="Top products by net sales"
+            headers={['Rank', 'Product', 'Unit', 'Net sold', 'Net incl. VAT']}
+            rows={topProducts.map((product, index) => [
+              String(index + 1),
+              product.name,
+              product.unit,
+              quantity(product.netQuantityMilli),
+              money(product.netGrossFils),
+            ])}
+          />
+          <p className={styles.help}>
+            Ranked from issued invoices less credit notes in this date range. Product categories are
+            not ranked yet because older fiscal snapshots do not preserve the category at the time
+            of sale.
+          </p>
           <div className={styles.productsHeader}>
             <h3>Product totals</h3>
             <label>

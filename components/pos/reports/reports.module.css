@@ -51,6 +51,7 @@
   max-width: 100%;
 }
 .filters button,
+.presets button,
 .reportMeta a {
   border: 1px solid #1859c8;
   border-radius: 8px;
@@ -63,13 +64,24 @@
   text-decoration: none;
   cursor: pointer;
 }
-.filters button:disabled {
+.filters button:disabled,
+.presets button:disabled {
   opacity: 0.6;
   cursor: wait;
 }
-.filters .secondary {
+.secondary {
   background: #fff;
   color: #1859c8;
+}
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+.presets button {
+  min-height: 38px;
+  padding: 8px 12px;
 }
 .help {
   font-size: 12px;
@@ -233,6 +245,13 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px;
+  }
+  .presets {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .presets button {
+    width: 100%;
   }
   .filters input {
     width: 100%;
