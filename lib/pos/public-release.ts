@@ -8,6 +8,7 @@ const reservedTopLevelPaths = new Set([
   'downloads',
   'kds',
   'login',
+  'menu',
   'onboarding',
   'order',
   'pos',
@@ -36,6 +37,10 @@ export function publicReleaseAccess(
     validCounterPortalSlug(path.slice(1))
   )
     return 'allow'
+  // A menu is intentionally a separate, display-only public surface. Nested
+  // paths remain rejected so a QR scan cannot discover an order or payment API.
+  const menuMatch = /^\/menu\/([a-z0-9-]+)$/.exec(path)
+  if (read && menuMatch && validCounterPortalSlug(menuMatch[1])) return 'allow'
   // Current authenticated manager reads have their own server-side feature gate and
   // permissions. The candidate decision writer is intentionally NOT exposed yet.
   if (

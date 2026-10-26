@@ -15,4 +15,11 @@ describe('customer counter portals', () => {
     expect(publicReleaseAccess('/agsum/orders', 'GET', true)).toBe('not_found')
     expect(publicReleaseAccess('/Agsum', 'GET', true)).toBe('not_found')
   })
+
+  it('permits a QR menu display route without opening a public checkout surface', () => {
+    expect(publicReleaseAccess('/menu/agsum', 'GET', true)).toBe('allow')
+    expect(publicReleaseAccess('/menu/agsum', 'POST', true)).toBe('not_found')
+    expect(publicReleaseAccess('/menu/agsum/checkout', 'GET', true)).toBe('not_found')
+    expect(publicReleaseAccess('/menu/Agsum', 'GET', true)).toBe('not_found')
+  })
 })
