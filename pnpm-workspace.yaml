@@ -1,6 +1,10 @@
 packages:
   - "."
 
+# Supply-chain policy: do not accept exotic dependency sources or freshly published packages.
+blockExoticSubdeps: true
+minimumReleaseAge: 10080
+
 allowBuilds:
   '@parcel/watcher': true
   '@sentry/cli': true
