@@ -93,7 +93,14 @@ export const newLiveOrderSchema = liveOrderSchema.superRefine(({ order }, ctx) =
       path: ['order', 'lines'],
       message: 'Retype the item modifier without the unsupported hidden character.',
     })
-  if (order.lines.some((line) => line.modifiers && new Set(line.modifiers.map((modifier) => modifier.toLocaleLowerCase())).size !== line.modifiers.length))
+  if (
+    order.lines.some(
+      (line) =>
+        line.modifiers &&
+        new Set(line.modifiers.map((modifier) => modifier.toLocaleLowerCase())).size !==
+          line.modifiers.length
+    )
+  )
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['order', 'lines'],
@@ -103,7 +110,8 @@ export const newLiveOrderSchema = liveOrderSchema.superRefine(({ order }, ctx) =
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['order', 'lines'],
-      message: 'Item modifiers are available for direct paid orders only. Save the kitchen order without them first.',
+      message:
+        'Item modifiers are available for direct paid orders only. Save the kitchen order without them first.',
     })
   if (order.orderNote && order.sourceTab)
     ctx.addIssue({
@@ -185,6 +193,7 @@ export const liveBootstrapSchema = z.object({
       name: z.string(),
       category: z.string(),
       imageUrl: z.string().nullable(),
+      barcode: z.string().nullable().optional(),
       unit: z.enum(['piece', 'pack', 'kg']),
       unitPriceFils: fils,
       taxRateBps: z.number().int(),

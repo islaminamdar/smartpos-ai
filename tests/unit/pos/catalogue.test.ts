@@ -25,6 +25,7 @@ const command = {
     name: 'Sweets',
     category: 'Sweets',
     imageUrl: null,
+    barcode: null,
     unit: 'kg',
     unitPriceFils: 2400,
     taxRateBps: 500,
@@ -74,6 +75,7 @@ describe('manager catalogue boundary', () => {
       { taxRateBps: 0 },
       { revision: 7 },
       { unit: 'each' },
+      { barcode: 'spaces are not a scanner code' },
     ]) {
       expect(
         (await POST(request({ ...command, product: { ...command.product, ...patch } }))).status
@@ -84,6 +86,12 @@ describe('manager catalogue boundary', () => {
         ...command,
         expectedRevision: 0,
         product: { ...command.product, unitPriceFils: 0, active: false },
+      }).success
+    ).toBe(true)
+    expect(
+      catalogueUpdateSchema.safeParse({
+        ...command,
+        product: { ...command.product, barcode: '6291100000012' },
       }).success
     ).toBe(true)
     expect(mocks.rpc).not.toHaveBeenCalled()

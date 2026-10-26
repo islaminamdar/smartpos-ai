@@ -47,7 +47,7 @@ export async function GET(request: Request) {
       const page = await client
         .from('pos_products')
         .select(
-          'id,branch_id,name,category,image_url,unit,unit_price_fils,tax_rate_bps,active,revision'
+          'id,branch_id,name,category,image_url,barcode,unit,unit_price_fils,tax_rate_bps,active,revision'
         )
         .eq('branch_id', query.data.branchId)
         .order('id')
@@ -61,6 +61,7 @@ export async function GET(request: Request) {
             name: p.name,
             category: p.category,
             imageUrl: p.image_url,
+            barcode: p.barcode,
             unit: p.unit,
             unitPriceFils: p.unit_price_fils,
             taxRateBps: p.tax_rate_bps,
@@ -101,7 +102,10 @@ export async function POST(request: Request) {
         error.message.includes('POS_DEVICE_INVALID')
       )
         throw new PosServerError('manager_access_required', 403)
-      if (error.message.includes('POS_INVALID_COMMAND') || error.message.includes('POS_MEDIA_INVALID'))
+      if (
+        error.message.includes('POS_INVALID_COMMAND') ||
+        error.message.includes('POS_MEDIA_INVALID')
+      )
         throw new PosServerError('invalid_catalogue_update', 422)
       throw new PosServerError('storage_unavailable', 503)
     }

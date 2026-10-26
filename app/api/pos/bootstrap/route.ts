@@ -41,12 +41,17 @@ export async function GET(request: NextRequest) {
       !Array.isArray(configs) ||
       !Array.isArray(profiles)
     )
-      throw new PosServerError(portal ? 'portal_access_denied' : 'setup_required', portal ? 403 : 503)
+      throw new PosServerError(
+        portal ? 'portal_access_denied' : 'setup_required',
+        portal ? 403 : 503
+      )
     const catalogue = []
     for (let offset = 0; ; offset += 500) {
       let query = client
         .from('pos_products')
-        .select('id,branch_id,name,category,image_url,unit,unit_price_fils,tax_rate_bps,revision')
+        .select(
+          'id,branch_id,name,category,image_url,barcode,unit,unit_price_fils,tax_rate_bps,revision'
+        )
         .eq('active', true)
         .gt('unit_price_fils', 0)
         .order('id')
@@ -60,6 +65,7 @@ export async function GET(request: NextRequest) {
           name: p.name,
           category: p.category,
           imageUrl: p.image_url,
+          barcode: p.barcode,
           unit: p.unit,
           unitPriceFils: p.unit_price_fils,
           taxRateBps: p.tax_rate_bps,
@@ -121,7 +127,9 @@ export async function GET(request: NextRequest) {
       catalogue,
       device: binding?.device ?? null,
       shifts: portal
-        ? (results[4].data ?? []).filter((shift: { branchId: string }) => shift.branchId === portal.branchId)
+        ? (results[4].data ?? []).filter(
+            (shift: { branchId: string }) => shift.branchId === portal.branchId
+          )
         : (results[4].data ?? []),
       capabilities: {
         onlineSales: process.env.POS_LIVE_SALES_ENABLED === 'true',

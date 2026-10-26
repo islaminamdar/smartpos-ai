@@ -1524,3 +1524,15 @@
 .lc-line-modifiers > div { display: flex; flex-wrap: wrap; gap: 6px; }
 .lc-line-modifiers button[aria-pressed='true'] { background: var(--accent); color: white; border-color: var(--accent); }
 .lc-line-modifiers small { color: var(--muted); }
+
+.lc-barcode-scan {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+.lc-barcode-scan button { min-height: 44px; }
+@media (max-width: 480px) {
+  .lc-barcode-scan { grid-template-columns: 1fr; }
+  .lc-barcode-scan button { width: 100%; }
+}

@@ -10,6 +10,14 @@ export const catalogueProductSchema = z
       .string()
       .regex(/^\/pos-assets\/menu\/[A-Za-z0-9_-]+\.webp$/)
       .nullable(),
+    // Scanner IDs are deliberately limited to a conservative, printable form.
+    // A branch owns each non-empty barcode, so scanning can never select another branch's item.
+    barcode: z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/)
+      .nullable()
+      .optional(),
     unit: z.enum(['piece', 'pack', 'kg']),
     unitPriceFils: z.number().int().min(0).max(100_000_000),
     taxRateBps: z.literal(500),

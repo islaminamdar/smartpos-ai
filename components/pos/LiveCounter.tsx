@@ -78,7 +78,16 @@ import { browserUuid } from '@/lib/pos/browser-uuid'
 
 type Product = LiveBootstrap['catalogue'][number]
 type BasketLine = { product: Product; quantityMilli: number; modifiers?: string[] }
-const modifierOptions = ['No sugar', 'Less sugar', 'No onion', 'No chilli', 'Mild', 'Extra spicy', 'Well done', 'Separate packing']
+const modifierOptions = [
+  'No sugar',
+  'Less sugar',
+  'No onion',
+  'No chilli',
+  'Mild',
+  'Extra spicy',
+  'Well done',
+  'Separate packing',
+]
 type View =
   | 'sell'
   | 'receipts'
@@ -233,6 +242,8 @@ export default function LiveCounter({
   const [branchId, setBranchId] = useState('')
   const [view, setView] = useState<View>('sell')
   const [search, setSearch] = useState('')
+  const [barcodeInput, setBarcodeInput] = useState('')
+  const barcodeInputRef = useRef<HTMLInputElement>(null)
   const [category, setCategory] = useState('All')
   const [favouriteIds, setFavouriteIds] = useState<string[]>([])
   const [favouritesOnly, setFavouritesOnly] = useState(false)
@@ -299,6 +310,8 @@ export default function LiveCounter({
       item.name.toLowerCase().includes(search.toLowerCase().trim())
   )
   const categories = Array.from(new Set(products.map((item) => item.category)))
+  const barcodeProduct = (value: string) =>
+    products.find((item) => item.barcode?.toLocaleLowerCase() === value.trim().toLocaleLowerCase())
 
   useEffect(() => {
     setFavouriteIds(storedFavourites(favouritesKey, catalogueProductIds))
@@ -635,6 +648,7 @@ export default function LiveCounter({
       setBuyerTrn('')
       setOrderNote('')
       setSearch('')
+      setBarcodeInput('')
       setCategory('All')
       setView('sell')
       setServiceType('takeaway')
@@ -967,9 +981,13 @@ export default function LiveCounter({
       if (total > 1_000_000 && !hasCustomer)
         throw new Error('Customer name and address are required above AED 10,000.')
       if (orderNote.includes('\u0000'))
-        throw new Error('Order note contains an unsupported hidden character. Retype it before payment.')
+        throw new Error(
+          'Order note contains an unsupported hidden character. Retype it before payment.'
+        )
       if (sourceTab && orderNote.trim())
-        throw new Error('Save this kitchen instruction with the unpaid order before taking payment.')
+        throw new Error(
+          'Save this kitchen instruction with the unpaid order before taking payment.'
+        )
       const order: LiveOrder = {
         id: browserUuid(),
         branchId,
@@ -1014,6 +1032,22 @@ export default function LiveCounter({
           )
         : [...current, { product, quantityMilli: product.unit === 'kg' ? 250 : 1000 }]
     })
+  }
+  function scanBarcode() {
+    const value = barcodeInput.trim()
+    if (!value || basketLocked) return
+    const product = barcodeProduct(value)
+    if (!product) {
+      setError(
+        'No available item has that barcode or PLU. Check the barcode in Menu before trying again.'
+      )
+      return
+    }
+    add(product)
+    setBarcodeInput('')
+    setError('')
+    setNotice(`${product.name} added from barcode.`)
+    window.setTimeout(() => barcodeInputRef.current?.focus(), 0)
   }
   function toggleModifier(productId: string, modifier: string) {
     if (basketLocked || sourceTab || initialTableId) return
@@ -1904,6 +1938,29 @@ export default function LiveCounter({
                         placeholder="Find a dish or sweet"
                       />
                     </label>
+                    <form
+                      className="lc-barcode-scan"
+                      onSubmit={(event) => {
+                        event.preventDefault()
+                        scanBarcode()
+                      }}
+                    >
+                      <label>
+                        Scan barcode / PLU
+                        <input
+                          ref={barcodeInputRef}
+                          value={barcodeInput}
+                          onChange={(event) => setBarcodeInput(event.target.value)}
+                          placeholder="Scan, then Enter"
+                          inputMode="numeric"
+                          autoComplete="off"
+                          disabled={basketLocked}
+                        />
+                      </label>
+                      <button type="submit" disabled={basketLocked || !barcodeInput.trim()}>
+                        Add
+                      </button>
+                    </form>
                     <TapChoices
                       label="Category"
                       scrollable={categories.length > 6}
@@ -2113,7 +2170,8 @@ export default function LiveCounter({
                               aria-pressed={line.modifiers?.includes(modifier) ?? false}
                               onClick={() => toggleModifier(line.product.id, modifier)}
                             >
-                              {line.modifiers?.includes(modifier) ? '✓ ' : ''}{modifier}
+                              {line.modifiers?.includes(modifier) ? '✓ ' : ''}
+                              {modifier}
                             </button>
                           ))}
                         </div>
@@ -2123,7 +2181,10 @@ export default function LiveCounter({
                           <small>Select only what applies to this item.</small>
                         )}
                         {(sourceTab || initialTableId) && (
-                          <small>Item modifiers are recorded for direct paid orders. Add an order note to a saved kitchen order.</small>
+                          <small>
+                            Item modifiers are recorded for direct paid orders. Add an order note to
+                            a saved kitchen order.
+                          </small>
                         )}
                       </div>
                       <button

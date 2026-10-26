@@ -222,6 +222,7 @@ function ScopedCatalogueManager({
           name: String(values.get('name') || ''),
           category: String(values.get('category') || ''),
           imageUrl: draftImage,
+          barcode: String(values.get('barcode') || '').trim() || null,
           unit: String(values.get('unit') || 'piece'),
           unitPriceFils: parseMoney(String(values.get('price') || '')),
           taxRateBps: 500,
@@ -411,6 +412,17 @@ function ScopedCatalogueManager({
                       <option key={c} value={c} />
                     ))}
                   </datalist>
+                </label>
+                <label>
+                  Barcode / PLU <small>(optional)</small>
+                  <input
+                    name="barcode"
+                    inputMode="numeric"
+                    maxLength={64}
+                    pattern="[A-Za-z0-9._-]+"
+                    defaultValue={selected?.barcode ?? ''}
+                    placeholder="Scan or enter barcode"
+                  />
                 </label>
                 <label>
                   Sell by

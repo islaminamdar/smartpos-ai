@@ -9,6 +9,7 @@ const product = {
   name: 'Test sweets',
   category: 'Sweets',
   imageUrl: null,
+  barcode: null,
   unit: 'kg',
   unitPriceFils: 1000,
   taxRateBps: 500,
