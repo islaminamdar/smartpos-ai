@@ -107,6 +107,7 @@ export default function FiscalReceipt({
             <tr key={line.lineNumber}>
               <td>
                 {line.name}
+                {line.modifiers?.length ? <small>Kitchen: {line.modifiers.join(' · ')}</small> : null}
                 <small>
                   {line.quantityMilli / 1000}
                   {line.unit === 'kg' ? ' kg' : ` ${line.unit}`}

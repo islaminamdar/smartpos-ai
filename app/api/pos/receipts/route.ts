@@ -31,12 +31,32 @@ export async function GET(request: Request) {
       ? await client.rpc('pos_list_order_notes', { p_branch: parsed.data.branchId, p_order_ids: orderIds })
       : { data: [], error: null }
     if (noteError) throw new PosServerError('storage_unavailable', 503)
+    const { data: modifierRows, error: modifierError } = orderIds.length
+      ? await client.rpc('pos_list_order_line_modifiers', { p_branch: parsed.data.branchId, p_order_ids: orderIds })
+      : { data: [], error: null }
+    if (modifierError) throw new PosServerError('storage_unavailable', 503)
     const notes = new Map(
       (noteRows ?? []).map((row: { order_id: string; note: string }) => [row.order_id, row.note])
     )
+    const modifiers = new Map(
+      (modifierRows ?? []).map((row: { order_id: string; modifiers: unknown }) => [row.order_id, row.modifiers])
+    )
+    const withModifiers = (snapshot: unknown, modifiers: unknown) => {
+      if (!snapshot || typeof snapshot !== 'object' || !Array.isArray((snapshot as { lines?: unknown }).lines) || !modifiers || typeof modifiers !== 'object' || Array.isArray(modifiers)) return snapshot
+      const map = modifiers as Record<string, unknown>
+      return {
+        ...(snapshot as Record<string, unknown>),
+        lines: (snapshot as { lines: unknown[] }).lines.map((line, index) =>
+          map[String(index + 1)] ? { ...(line as Record<string, unknown>), modifiers: map[String(index + 1)] } : line
+        ),
+      }
+    }
     const receipts = rows.map(row =>
       fiscalDocumentSchema.parse(
-        notes.has(row.order_id) ? { ...row.snapshot, orderNote: notes.get(row.order_id) } : row.snapshot
+        withModifiers(
+          notes.has(row.order_id) ? { ...row.snapshot, orderNote: notes.get(row.order_id) } : row.snapshot,
+          modifiers.get(row.order_id)
+        )
       )
     )
     const last = rows.length === 100 ? rows[rows.length - 1] : null

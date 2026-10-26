@@ -70,3 +70,40 @@ describe('direct paid-order notes', () => {
     ).toBe(false)
   })
 })
+
+describe('direct paid item modifiers', () => {
+  it('keeps selected preparation modifiers in the exact recoverable request', () => {
+    const modified = {
+      ...order,
+      lines: [{ ...order.lines[0], modifiers: ['No sugar', 'Separate packing'] }],
+    }
+    expect(newLiveOrderSchema.parse({ order: modified }).order.lines[0].modifiers).toEqual([
+      'No sugar',
+      'Separate packing',
+    ])
+    expect(liveRecoverySchema.parse({ kind: 'sale', request: modified }).request).toEqual(modified)
+  })
+
+  it('rejects duplicate, hidden-character, and saved-order modifiers before payment', () => {
+    const line = order.lines[0]
+    expect(
+      newLiveOrderSchema.safeParse({
+        order: { ...order, lines: [{ ...line, modifiers: ['No sugar', 'no sugar'] }] },
+      }).success
+    ).toBe(false)
+    expect(
+      newLiveOrderSchema.safeParse({
+        order: { ...order, lines: [{ ...line, modifiers: ['No\u0000sugar'] }] },
+      }).success
+    ).toBe(false)
+    expect(
+      newLiveOrderSchema.safeParse({
+        order: {
+          ...order,
+          lines: [{ ...line, modifiers: ['Mild'] }],
+          sourceTab: { id: id(26), expectedRevision: 1 },
+        },
+      }).success
+    ).toBe(false)
+  })
+})

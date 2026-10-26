@@ -703,7 +703,7 @@ function Board(props: Props) {
                       )}{' '}
                       <span>{line.unit}</span>
                     </strong>
-                    <span>{line.name}</span>
+                    <span>{line.name}{line.modifiers?.length ? ` · ${line.modifiers.join(' · ')}` : ''}</span>
                   </li>
                 ))}
               </ul>

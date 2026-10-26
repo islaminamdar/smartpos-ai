@@ -38,6 +38,7 @@ export const kitchenTicketSchema = z
             lineNumber: z.number().int().min(1).max(200),
             productId: uuid,
             name: z.string().min(1).max(200),
+            modifiers: z.array(z.string().trim().min(1).max(80)).min(1).max(8).optional(),
             unit: z.enum(['piece', 'pack', 'kg']),
             quantityMilli: z.number().int().min(1).max(1_000_000),
           })

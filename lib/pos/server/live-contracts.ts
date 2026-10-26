@@ -12,7 +12,11 @@ export const liveOrderSchema = z
         lines: z
           .array(
             syncOrderSchema.shape.order.shape.lines.element
-              .extend({ expectedRevision: z.number().int().min(1).max(2_147_483_647).optional() })
+              .extend({
+                expectedRevision: z.number().int().min(1).max(2_147_483_647).optional(),
+                // Non-financial kitchen selections. Pricing remains the menu item's immutable price.
+                modifiers: z.array(z.string().trim().min(1).max(80)).max(8).optional(),
+              })
               .strict()
           )
           .min(1)
@@ -82,6 +86,24 @@ export const newLiveOrderSchema = liveOrderSchema.superRefine(({ order }, ctx) =
       code: z.ZodIssueCode.custom,
       path: ['order', 'orderNote'],
       message: 'Remove the unsupported hidden character or retype the order note.',
+    })
+  if (order.lines.some((line) => line.modifiers?.some((modifier) => modifier.includes('\u0000'))))
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['order', 'lines'],
+      message: 'Retype the item modifier without the unsupported hidden character.',
+    })
+  if (order.lines.some((line) => line.modifiers && new Set(line.modifiers.map((modifier) => modifier.toLocaleLowerCase())).size !== line.modifiers.length))
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['order', 'lines'],
+      message: 'Use each modifier only once per menu item.',
+    })
+  if (order.lines.some((line) => line.modifiers?.length) && order.sourceTab)
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['order', 'lines'],
+      message: 'Item modifiers are available for direct paid orders only. Save the kitchen order without them first.',
     })
   if (order.orderNote && order.sourceTab)
     ctx.addIssue({

@@ -77,7 +77,8 @@ import type { CounterPortal } from '@/lib/pos/counter-portal'
 import { browserUuid } from '@/lib/pos/browser-uuid'
 
 type Product = LiveBootstrap['catalogue'][number]
-type BasketLine = { product: Product; quantityMilli: number }
+type BasketLine = { product: Product; quantityMilli: number; modifiers?: string[] }
+const modifierOptions = ['No sugar', 'Less sugar', 'No onion', 'No chilli', 'Mild', 'Extra spicy', 'Well done', 'Separate packing']
 type View =
   | 'sell'
   | 'receipts'
@@ -360,6 +361,18 @@ export default function LiveCounter({
         expectedUnitPriceFils: product.unitPriceFils,
         expectedTaxRateBps: product.taxRateBps,
         expectedRevision: product.revision,
+      })),
+    [basket]
+  )
+  const saleLines = useMemo(
+    () =>
+      basket.map(({ product, quantityMilli, modifiers }) => ({
+        productId: product.id,
+        quantityMilli,
+        expectedUnitPriceFils: product.unitPriceFils,
+        expectedTaxRateBps: product.taxRateBps,
+        expectedRevision: product.revision,
+        ...(modifiers?.length ? { modifiers } : {}),
       })),
     [basket]
   )
@@ -971,7 +984,7 @@ export default function LiveCounter({
           : null,
         cashTenderedFils,
         expectedTotalFils: total,
-        lines: offerLines,
+        lines: saleLines,
         ...(activeOffer ? { offerSelection: activeOffer.selection } : {}),
         ...(sourceTab
           ? { sourceTab: { id: sourceTab.id, expectedRevision: sourceTab.revision } }
@@ -1001,6 +1014,19 @@ export default function LiveCounter({
           )
         : [...current, { product, quantityMilli: product.unit === 'kg' ? 250 : 1000 }]
     })
+  }
+  function toggleModifier(productId: string, modifier: string) {
+    if (basketLocked || sourceTab || initialTableId) return
+    setBasket((current) =>
+      current.map((line) => {
+        if (line.product.id !== productId) return line
+        const currentModifiers = line.modifiers ?? []
+        const modifiers = currentModifiers.includes(modifier)
+          ? currentModifiers.filter((value) => value !== modifier)
+          : [...currentModifiers, modifier]
+        return { ...line, ...(modifiers.length ? { modifiers } : { modifiers: undefined }) }
+      })
+    )
   }
   function toggleFavourite(productId: string) {
     if (!favouritesKey) return
@@ -2076,6 +2102,30 @@ export default function LiveCounter({
                           }}
                         />
                       </label>
+                      <div className="lc-line-modifiers">
+                        <span>Kitchen modifiers</span>
+                        <div>
+                          {modifierOptions.map((modifier) => (
+                            <button
+                              type="button"
+                              key={modifier}
+                              disabled={basketLocked || !!sourceTab || !!initialTableId}
+                              aria-pressed={line.modifiers?.includes(modifier) ?? false}
+                              onClick={() => toggleModifier(line.product.id, modifier)}
+                            >
+                              {line.modifiers?.includes(modifier) ? '✓ ' : ''}{modifier}
+                            </button>
+                          ))}
+                        </div>
+                        {line.modifiers?.length ? (
+                          <small>Kitchen: {line.modifiers.join(' · ')}</small>
+                        ) : (
+                          <small>Select only what applies to this item.</small>
+                        )}
+                        {(sourceTab || initialTableId) && (
+                          <small>Item modifiers are recorded for direct paid orders. Add an order note to a saved kitchen order.</small>
+                        )}
+                      </div>
                       <button
                         disabled={basketLocked}
                         aria-label={`Remove ${line.product.name}`}

@@ -1511,3 +1511,16 @@
 .lc-customer-lookup li button small {
   display: block;
 }
+.lc-line-modifiers {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--card) 88%, var(--accent) 12%);
+  font-size: 12px;
+}
+.lc-line-modifiers > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.lc-line-modifiers button[aria-pressed='true'] { background: var(--accent); color: white; border-color: var(--accent); }
+.lc-line-modifiers small { color: var(--muted); }

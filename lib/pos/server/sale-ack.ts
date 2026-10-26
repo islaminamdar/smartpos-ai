@@ -47,6 +47,7 @@ export function invoiceMatchesSale(
         line.quantityMilli,
         line.expectedUnitPriceFils,
         line.expectedTaxRateBps,
+        line.modifiers ?? [],
       ])
     )
     .sort()
@@ -57,6 +58,7 @@ export function invoiceMatchesSale(
         line.quantityMilli,
         line.unitPriceFils,
         line.taxRateBps,
+        line.modifiers ?? [],
       ])
     )
     .sort()
