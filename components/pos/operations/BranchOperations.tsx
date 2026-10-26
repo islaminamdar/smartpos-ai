@@ -41,6 +41,40 @@ const errors: Record<string, string> = {
 export default function BranchOperations(props: Props) {
   return <Board key={`${props.actorId}:${props.branchId}`} {...props} />
 }
+type LatestCloseProps = {
+  close: Snapshot['closedShifts']['items'][number] | null
+}
+function LatestClose({ close }: LatestCloseProps) {
+  return (
+    <div className={styles.latestClose}>
+      <h4>Latest recorded drawer close</h4>
+      {!close ? (
+        <p>No drawer close is recorded in the last 30 Dubai days.</p>
+      ) : (
+        <>
+          <p>
+            {close.deviceName} · {time(close.closedAt)}
+          </p>
+          <dl className={styles.closeoutPayments}>
+            <div>
+              <dt>Expected cash</dt>
+              <dd>{money(close.expectedCashFils)}</dd>
+            </div>
+            <div>
+              <dt>Counted cash</dt>
+              <dd>{money(close.countedCashFils)}</dd>
+            </div>
+            <div>
+              <dt>Difference</dt>
+              <dd>{money(close.cashDifferenceFils)}</dd>
+            </div>
+          </dl>
+        </>
+      )}
+    </div>
+  )
+}
+
 function Board(props: Props) {
   const eligible = props.branches.filter(
     (branch) => branch.role === 'manager' || branch.role === 'owner'
@@ -195,6 +229,61 @@ function Board(props: Props) {
           <p className={styles.coverage}>
             Offline-device activity may be missing. Server-recorded activity only.
           </p>
+          <section className={`${styles.section} ${styles.closeout}`} aria-label="Owner close-out">
+            <div className={styles.sectionHeading}>
+              <div>
+                <p className={styles.eyebrow}>Owner view</p>
+                <h3>Close-out at a glance</h3>
+              </div>
+              <strong className={styles.businessDay}>Dubai {current.businessDate}</strong>
+            </div>
+            <div className={styles.closeoutCards}>
+              <article>
+                <span>Net sales today</span>
+                <strong>{money(current.sales.summary.netGrossFils)}</strong>
+                <small>Issued documents, including VAT</small>
+              </article>
+              <article>
+                <span>Refunds today</span>
+                <strong>{money(current.sales.summary.refundGrossFils)}</strong>
+                <small>{counted(current.sales.summary.creditNoteCount, 'credit note')}</small>
+              </article>
+              <article>
+                <span>Open counters</span>
+                <strong>{current.openShifts.totalCount}</strong>
+                <small>Counter shifts still open</small>
+              </article>
+              <article>
+                <span>Unpaid baskets</span>
+                <strong>{money(current.unpaidOrders.totalFils)}</strong>
+                <small>{counted(current.unpaidOrders.totalCount, 'saved order')}</small>
+              </article>
+            </div>
+            <div className={styles.closeoutDetails}>
+              <div>
+                <h4>Recorded payments today</h4>
+                <dl className={styles.closeoutPayments}>
+                  {current.sales.payments.map((payment) => (
+                    <div key={payment.method}>
+                      <dt>
+                        {payment.method === 'cash'
+                          ? 'Cash'
+                          : payment.method === 'bank_transfer'
+                            ? 'Bank transfer'
+                            : 'Card'}
+                      </dt>
+                      <dd>{money(payment.netFils)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+              <LatestClose close={current.closedShifts.items[0] ?? null} />
+            </div>
+            <p className={styles.help}>
+              This close-out is server-recorded activity. Discounts, voids and bank settlement are
+              not inferred here because this snapshot does not carry those verified totals.
+            </p>
+          </section>
           <section className={styles.section} aria-label="Today’s recorded sales">
             <div className={styles.sectionHeading}>
               <h3>Today’s recorded sales</h3>

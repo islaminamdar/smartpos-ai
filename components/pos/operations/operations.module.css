@@ -294,3 +294,95 @@
     min-width: 0;
   }
 }
+
+.operations .closeout {
+  border-top: 0;
+  padding-top: 4px;
+}
+.operations .eyebrow {
+  margin: 0 0 4px;
+  color: #165dcc;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.operations .businessDay {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  border-radius: 999px;
+  background: #edf3fa;
+  color: #194d8c;
+  padding: 5px 10px;
+  font-size: 13px;
+}
+.operations .closeoutCards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.operations .closeoutCards article,
+.operations .closeoutDetails > div {
+  min-width: 0;
+  border: 1px solid #cbd9e8;
+  border-radius: 12px;
+  background: linear-gradient(140deg, #f8fbff, #ffffff);
+  padding: 15px;
+}
+.operations .closeoutCards span,
+.operations .closeoutCards small {
+  display: block;
+  color: #526176;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.operations .closeoutCards strong {
+  display: block;
+  margin: 5px 0;
+  color: #123963;
+  font-size: 23px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.operations .closeoutDetails {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+.operations .closeoutDetails h4,
+.operations .latestClose p {
+  margin: 0 0 8px;
+}
+.operations .closeoutPayments {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+.operations .closeoutPayments dt {
+  color: #526176;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.operations .closeoutPayments dd {
+  margin: 3px 0 0;
+  color: #123963;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 900px) {
+  .operations .closeoutCards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 520px) {
+  .operations .closeoutDetails {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .operations .closeoutPayments {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
